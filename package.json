@@ -1,6 +1,7 @@
 {
   "name": "knap",
   "private": true,
+  "license": "0BSD",
   "version": "0.0.0",
   "type": "module",
   "engines": {
