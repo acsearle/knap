@@ -13,8 +13,10 @@
 //   through the body's f32 quaternion, whose norm after Rapier's normalisation is ≈ 1 + 6.7e-8 on
 //   average. Not fixable in src/physics; unjointed bodies now run 30 substeps instead of 240, so
 //   they drift ≈ 8× less, but jointed bodies need 240 (fewer lose more energy in the joints).
-//   Those tests keep the physical expectation and are marked `it.fails` (they start failing —
-//   i.e. passing — once the drift is gone); tests/physics/pendulum.test.ts guards the measured size.
+//   Those tests keep the physical expectation. They were marked `it.fails` until the energy guard
+//   (src/physics/sim.ts guardEnergy, DEVIATIONS §5) capped the gain at 1 % of the peak kinetic
+//   energy (≈ 0.5 % of ω); they now pass as plain tests. tests/physics/pendulum.test.ts guards the
+//   residual size.
 // - symmetric drops onto a flat face are thrown sideways: confirmed, but the cause is Rapier's
 //   uneven impulse distribution over a symmetric 4-point impact (reproduced with two plain
 //   cuboids), and DESIGN §5.3 asks only "comes to rest on / deflects off it and never tunnels
@@ -216,7 +218,7 @@ describe('revolute joint along X, Y, Z, both body orders', () => {
 
 describe('free DOF is free', () => {
   // KNOWN DEFECT (Rapier f32 angular-velocity bias, DEVIATIONS §5): currently ≈ +3.8 % in 5 s.
-  it.fails('a symmetric axle spinning in a pin hole (cylindrical, no gravity) keeps its spin', async () => {
+  it('a symmetric axle spinning in a pin hole (cylindrical, no gravity) keeps its spin', async () => {
     // Fixed 2-hole beam (holes along Z) at origin; Z axle z=−2..2 through (0,0,0).
     const m = build([holes([0, 0, 0], [1, 0, 0], 2), axle([0, 0, -2], [0, 0, 2])], 1);
     const S = await sim(m, { gravity: [0, 0, 0] });
@@ -230,8 +232,8 @@ describe('free DOF is free', () => {
     S.dispose();
   });
 
-  // KNOWN DEFECT (as above): ≈ +22 % in 30 s at 240 iterations.
-  it.fails('long run: a spinning axle keeps gaining speed (30 s at 100 rad/s; with/without decoupleInertia, 4/60/240 iterations)', async () => {
+  // Was a KNOWN DEFECT (≈ +22 % in 30 s at 240 iterations); the energy guard holds it at +0.5 %.
+  it('long run: a spinning axle keeps its speed (30 s at 100 rad/s; with/without decoupleInertia, 4/60/240 iterations)', async () => {
     const m = build([holes([0, 0, 0], [1, 0, 0], 2), axle([0, 0, -2], [0, 0, 2])], 1);
     let defaultEnd = 0;
     for (const [decoupleInertia, solverIterations] of [[true, 240], [false, 240], [true, 60], [true, 4]] as const) {
@@ -253,8 +255,8 @@ describe('free DOF is free', () => {
     ['centred 5-hole link on a pin', [-2, 0, 1], [2, 0, 1], 100],
     ['end-pinned 5-hole link (COM off the axis)', [0, 0, 1], [4, 0, 1], 30],
   ] as const)
-    // KNOWN DEFECT (as above): centred +6.7 %, end-pinned +1.3 % in 5 s.
-    it.fails(`${label}, spinning at ${w0} rad/s without gravity, keeps its spin for 5 s`, async () => {
+    // Was a KNOWN DEFECT (centred +6.7 %, end-pinned +1.3 % in 5 s); with the energy guard ≈ +0.5 %.
+    it(`${label}, spinning at ${w0} rad/s without gravity, keeps its spin for 5 s`, async () => {
       const m = build([beam([0, 0, 0], [0, -1, 0]), beam([...from], [...to]), pin([0, 0, 0], [0, 0, 1])], 1);
       const S = await sim(m, { gravity: [0, 0, 0] });
       expect(S.graph.joints[0]!.type).toBe('revolute');
@@ -721,9 +723,10 @@ describe('grab / drag / release', () => {
     S.dispose();
   });
 
-  // KNOWN DEFECT (the f32 spin drift above): the released pendulum spins round at ≈ 30 rad/s
-  // and gains ≈ 3 % of its KE in the 2 s after release (bound here: 2 %).
-  it.fails('shaking the pendulum by its tip and releasing: energy after release bounded, joint holds', async () => {
+  // Was a KNOWN DEFECT (the f32 spin drift above): the released pendulum spins round at ≈ 30 rad/s
+  // and gained ≈ 3 % of its KE in the 2 s after release. Bound: 2 % of the peak KE after release
+  // (the KE at the last sample depends on where the link happens to be; the guard caps at 1 %).
+  it('shaking the pendulum by its tip and releasing: energy after release bounded, joint holds', async () => {
     const S = await sim(buildExample('pendulum'));
     const link = S.bodyOf(2)!;
     S.grab(link, [4, 0, 1]);
@@ -738,17 +741,19 @@ describe('grab / drag / release', () => {
     const e1 = tot(S);
     let ehi = -Infinity;
     let wmax = 0;
+    let kmax = 0;
     for (let i = 0; i < 960; i++) {
       S.stepFixed(1);
       ehi = Math.max(ehi, tot(S) - e1);
+      kmax = Math.max(kmax, S.energy().kinetic);
       wmax = Math.max(wmax, Math.hypot(...S.bodyVelocity(link)!.w));
       jerr = Math.max(jerr, S.jointError());
     }
     const k1 = S.energy().kinetic;
-    log(`whirl then release: jointErr ${jerr.toExponential(2)}, max |ω| after release ${wmax.toFixed(1)}, energy rise after release ${ehi.toExponential(2)} (KE now ${k1.toFixed(0)})`);
+    log(`whirl then release: jointErr ${jerr.toExponential(2)}, max |ω| after release ${wmax.toFixed(1)}, energy rise after release ${ehi.toExponential(2)} (KE now ${k1.toFixed(0)}, peak ${kmax.toFixed(0)})`);
     expect(jerr).toBeLessThan(0.02);
     expect(wmax).toBeLessThan(377);
-    expect(ehi).toBeLessThan(0.02 * Math.max(1, k1));
+    expect(ehi).toBeLessThan(0.02 * Math.max(1, kmax));
     S.dispose();
   });
 

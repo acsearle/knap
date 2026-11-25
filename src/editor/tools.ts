@@ -27,9 +27,6 @@ import type { Axis, Cell, Dir, Kind, Model, Vec3i } from '../core';
 
 export type Tool = 'select' | 'erase' | Kind;
 
-/** Toolbar order. */
-export const TOOLS: readonly Tool[] = ['select', 'pinHole', 'axleHole', 'axle', 'pin', 'frictionPin', 'erase'];
-
 /** Keyboard shortcuts (§7.2), lower-case `KeyboardEvent.key` → tool. `Escape` also selects 'select'. */
 export const TOOL_KEYS: Readonly<Record<string, Tool>> = {
   v: 'select',
@@ -44,14 +41,6 @@ export const TOOL_KEYS: Readonly<Record<string, Tool>> = {
 
 export function isBuildTool(t: Tool): t is Kind {
   return t !== 'select' && t !== 'erase';
-}
-
-/** Toolbar label. */
-export function toolLabel(t: Tool): string {
-  if (t === 'select') return 'Select';
-  if (t === 'erase') return 'Erase';
-  const s = kindLabel(t);
-  return s[0]!.toUpperCase() + s.slice(1);
 }
 
 export interface ToolState {
@@ -170,6 +159,11 @@ export interface Proposal {
   /** The ghost: the cell a click would add, including the chosen axis. null for 'none'. */
   cell: Cell | null;
   /**
+   * Further cells of the same new part (same kind and axis), [] normally. Only a deep insert has
+   * them: the male continues through the empty coaxial holes stacked behind the hovered one.
+   */
+  extraCells: readonly Cell[];
+  /**
    * The existing part that receives the cell: the extended part ('extend'), or the male part an
    * 'insert' joins (see `joins`). Absent when the click creates a new part.
    */
@@ -218,6 +212,7 @@ function noProposal(m: Model): Proposal {
     action: 'none',
     valid: false,
     cell: null,
+    extraCells: [],
     joins: false,
     createsPart: false,
     color: null,
@@ -283,6 +278,9 @@ interface Attempt {
   reasons: Map<Axis, string>;
   /** Overrides per-axis reasons (precondition failure). */
   reason?: string;
+  /** Deep insert: positions of the further male cells (behind `pos`), and the parts of their holes. */
+  extra?: Vec3i[];
+  throughParts?: number[];
 }
 
 function attempt(
@@ -326,9 +324,13 @@ function describe(a: Attempt, ctx: Ctx, axis: Axis): string {
     case 'extend':
       return `Extend part ${a.partId} · ${what}`;
     case 'insert':
-      return a.joins
-        ? `Extend part ${a.partId} · insert ${what} into part ${ctx.hoverPartId}`
-        : `New part · insert ${what} into part ${ctx.hoverPartId}`;
+      if (a.joins) return `Extend part ${a.partId} · insert ${what} into part ${ctx.hoverPartId}`;
+      if (a.extra?.length) {
+        const through = [...new Set(a.throughParts)].filter((id) => id !== ctx.hoverPartId);
+        const tail = through.length ? `, through part${through.length > 1 ? 's' : ''} ${through.join(', ')}` : '';
+        return `New part · insert ${what} into part ${ctx.hoverPartId} · ${a.extra.length + 1} long${tail}`;
+      }
+      return `New part · insert ${what} into part ${ctx.hoverPartId}`;
     case 'sleeve':
       return `New part · sleeve ${what} onto part ${ctx.hoverPartId}`;
     case 'newAdjacent':
@@ -338,16 +340,21 @@ function describe(a: Attempt, ctx: Ctx, axis: Axis): string {
   }
 }
 
-function toProposal(a: Attempt, ctx: Ctx): Proposal {
+/**
+ * @param optionsOverride the [R] options to show instead of a.valid (sleeve-or-extend hover, see
+ *   resolveCellHover); must contain the chosen axis.
+ */
+function toProposal(a: Attempt, ctx: Ctx, optionsOverride?: readonly Axis[]): Proposal {
   const axis = chosenAxis(a, ctx.state.axisPref);
   const cell = makeCell(a.pos[0], a.pos[1], a.pos[2], ctx.kind, axis);
+  const extraCells = (a.extra ?? []).map((q) => makeCell(q[0], q[1], q[2], ctx.kind, axis));
   const valid = a.valid.length > 0;
   const reason = valid ? undefined : (a.reason ?? a.reasons.get(axis) ?? 'not possible here');
   const createsPart = a.partId === null;
   const color = createsPart ? newPartColor(ctx.state, ctx.kind) : null;
   const ghostColor = color ?? partById(ctx.m, a.partId!)?.color ?? newPartColor(ctx.state, ctx.kind);
   const base = describe(a, ctx, axis);
-  const options = valid ? a.valid : [];
+  const options = valid ? (optionsOverride ?? a.valid) : [];
   const idx = options.indexOf(axis);
   const m = ctx.m;
   const p: Proposal = {
@@ -355,6 +362,7 @@ function toProposal(a: Attempt, ctx: Ctx): Proposal {
     action: a.action,
     valid,
     cell,
+    extraCells,
     joins: a.joins,
     createsPart,
     color,
@@ -367,7 +375,7 @@ function toProposal(a: Attempt, ctx: Ctx): Proposal {
     apply(current: Model): ApplyResult {
       if (!valid) throw new Error(reason);
       if (current !== m) throw new Error(STALE_PROPOSAL);
-      if (a.partId === null) return addPart(m, [cell], color!);
+      if (a.partId === null) return addPart(m, [cell, ...extraCells], color!);
       return { model: addCell(m, a.partId, cell), partId: a.partId };
     },
   };
@@ -395,17 +403,48 @@ export function resolveBuild(model: Model, pick: CellPick | null, grid: GridPick
     const p = resolveCellHover(model, kind, part.id, C, pick.dir, state);
     if (!state.newPart) {
       const alt = resolveCellHover(model, kind, part.id, C, pick.dir, { ...state, newPart: true });
-      if (alt.valid && (!p.valid || alt.action !== p.action || alt.joins !== p.joins)) p.shiftHint = `Shift: ${alt.description}`;
+      const differs = !p.valid || alt.action !== p.action || alt.joins !== p.joins || alt.extraCells.length !== p.extraCells.length;
+      if (alt.valid && differs) p.shiftHint = `Shift: ${alt.description}`;
     }
     return p;
   }
   if (grid) {
     const pos: Vec3i = [grid.pos[0], 0, grid.pos[2]];
-    const order = preferFirst(cyclicFrom(1), occupantAxis(model, pos, kind, null));
+    // Z first for every kind (DEVIATIONS §7): beams stand upright like every example, so a joint
+    // built with the defaults turns about a horizontal axis and swings under gravity.
+    const order = preferFirst(cyclicFrom(2), occupantAxis(model, pos, kind, null));
     const a = attempt(model, 'newOnGrid', kind, pos, null, order);
     return toProposal(a, { m: model, kind, state, highlight: { pos, dir: 3 } });
   }
   return noProposal(model);
+}
+
+/**
+ * Deep insert of a `kind` male into hole C entered through face n: the run of cells C − n, C − 2n, …
+ * that each hold exactly one cell, a hole coaxial with C that `kind` mates with (any part). null if
+ * there is none or the resulting new part would be invalid.
+ */
+function deepInsert(m: Model, kind: Kind, C: Cell, n: Vec3i): Attempt | null {
+  const cpos: Vec3i = [C.x, C.y, C.z];
+  const extra: Vec3i[] = [];
+  const throughParts: number[] = [];
+  for (let k = 1; ; k++) {
+    const q = add3(cpos, n, -k);
+    const at = cellsAt(m, q);
+    if (at.length !== 1) break;
+    const h = at[0]!;
+    if (!isHole(h.cell.kind) || h.cell.axis !== C.axis || mateType(kind, h.cell.kind) === null) break;
+    extra.push(q);
+    throughParts.push(h.partId);
+  }
+  if (!extra.length) return null;
+  const cells = [cpos, ...extra].map((q) => makeCell(q[0], q[1], q[2], kind, C.axis));
+  try {
+    addPart(m, cells);
+  } catch {
+    return null;
+  }
+  return { action: 'insert', pos: cpos, partId: null, joins: false, order: [C.axis], valid: [C.axis], reasons: new Map(), extra, throughParts };
 }
 
 function resolveCellHover(m: Model, kind: Kind, P: number, C: Cell, dir: Dir, state: ToolState): Proposal {
@@ -443,6 +482,10 @@ function resolveCellHover(m: Model, kind: Kind, P: number, C: Cell, dir: Dir, st
         const j = attempt(m, 'insert', kind, cpos, q.partId, order, true);
         if (j.valid.length) return j;
       }
+      // Deep insert: push the male on through the empty, compatible coaxial holes stacked right
+      // behind (see index.ts), so two stacked beams get pinned together.
+      const deep = deepInsert(m, kind, C, n);
+      if (deep) return deep;
     }
     return attempt(m, 'insert', kind, cpos, null, order);
   };
@@ -464,6 +507,22 @@ function resolveCellHover(m: Model, kind: Kind, P: number, C: Cell, dir: Dir, st
 
   const doExtend = (): Attempt => attempt(m, 'extend', kind, T, P, adjacentOrder(P));
   const doNewAdjacent = (): Attempt => attempt(m, 'newAdjacent', kind, T, null, adjacentOrder(null));
+
+  // Hole tool on the axial end face of a rod (DEVIATIONS §7): sleeving a beam onto the rod is the
+  // default, ahead of Extend (which would fuse a perpendicular hole onto the rod's end and turn a
+  // loose pin into a liftarm-with-pin). Extend's orientations follow in the same [R] cycle; they
+  // are perpendicular to the rod, so the axis alone tells which action is shown.
+  if (!state.newPart && sleeveRelevant && nAxis === C.axis) {
+    const sl = doSleeve();
+    if (sl.valid.length) {
+      const ex = doExtend();
+      const exAxes = ex.valid.filter((ax) => ax !== C.axis);
+      const options = [...sl.valid, ...exAxes];
+      const pref = state.axisPref;
+      if (pref !== null && exAxes.includes(pref)) return toProposal({ ...ex, valid: exAxes }, ctx, options);
+      return toProposal(sl, ctx, options);
+    }
+  }
 
   type Step = { run: () => Attempt; special: boolean; relevant: boolean };
   const steps: Step[] = state.newPart

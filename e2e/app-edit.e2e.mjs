@@ -34,8 +34,7 @@ export default async function ({ page, url, shot, assert, step }) {
   await step('build a 5-hole beam', async () => {
     await press(page, '[data-action=new]');
     await page.keyboard.press('1');
-    await hover(page, await gridPos(page, 0, 0));
-    await page.keyboard.press('r');
+    await hover(page, await gridPos(page, 0, 0)); // New on grid: ∥ Z by default
     await oneEntry('place on grid', async () => clickAt(page, await gridPos(page, 0, 0)));
     for (let x = 0; x < 4; x++) await oneEntry(`extend ${x}`, () => clickFace(page, 1, [x, 0, 0], 0));
     const m = await model(page);
@@ -146,6 +145,17 @@ export default async function ({ page, url, shot, assert, step }) {
     await oneEntry('move PageUp', () => page.keyboard.press('PageUp'));
     await oneEntry('rotate ]', () => page.keyboard.press(']'));
     await oneEntry('rotate [', () => page.keyboard.press('['));
+    // Layouts where [ / ] need Option (Mac) or AltGr (Windows: Ctrl+Alt): matched by the character.
+    const altKey = (k, extra) =>
+      page.evaluate(([k, extra]) => window.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true, ...extra })), [k, extra]);
+    await oneEntry('rotate [ with Option', () => altKey('[', { code: 'Digit5', altKey: true }));
+    await oneEntry('rotate ] with AltGr', () => altKey(']', { code: 'Digit9', altKey: true, ctrlKey: true }));
+    const hCmd = await hist();
+    await altKey('[', { code: 'BracketLeft', metaKey: true }); // Cmd+[ is the browser's Back
+    assert((await hist()) === hCmd, 'Cmd+[ is left to the browser');
+    // …and buttons in the inspector
+    await oneEntry('rotate button ↻', () => press(page, '[data-action=rotate-cw]'));
+    await oneEntry('rotate button ↺', () => press(page, '[data-action=rotate-ccw]'));
     await oneEntry('colour', () => press(page, '[data-role=inspector] [data-color="#c8433a"]'));
     assert((await model(page)).parts.find((p) => p.id === 1).color === '#c8433a', 'recoloured red');
     const dup = await oneEntry('duplicate', () => press(page, '[data-action=duplicate]'));

@@ -6,6 +6,7 @@ import {
   connects,
   isAxis,
   isKind,
+  isMale,
   kindLabel,
   shareResult,
 } from './rules';
@@ -349,6 +350,13 @@ export function validateModel(m: Model): ValidationError[] {
 // ---------------------------------------------------------------------------------------------
 // Editing
 
+/** Why two adjacent cells of one part do not connect (§2.2), as a short clause for messages. */
+function whyNoConnection(a: Cell, b: Cell): string {
+  const along = a.x !== b.x ? 0 : a.y !== b.y ? 1 : 2;
+  if ((isMale(a.kind) && a.axis !== along) || (isMale(b.kind) && b.axis !== along)) return 'a rod’s side holds nothing';
+  return 'a rod’s end on the mouth of a coaxial hole does not hold';
+}
+
 /**
  * Could `cell` be added to part `partId` (or, with partId null, start a new part)?
  * Checks: well-formed cell; position free within the part; >= 1 in-part connection; world
@@ -363,21 +371,21 @@ export function canAddCell(m: Model, partId: number | null, cell: Cell): CanResu
     if (part.cells.some((c) => c.x === cell.x && c.y === cell.y && c.z === cell.z)) {
       return { ok: false, reason: `part ${partId} already has a cell at ${fmtPos(cell)}` };
     }
-    let adjacent = false;
+    let neighbour: Cell | null = null;
     let connected = false;
     for (const c of part.cells) {
       if (Math.abs(c.x - cell.x) + Math.abs(c.y - cell.y) + Math.abs(c.z - cell.z) !== 1) continue;
-      adjacent = true;
+      neighbour ??= c;
       if (connects(c, cell)) {
         connected = true;
         break;
       }
     }
-    if (!adjacent) return { ok: false, reason: `${fmtPos(cell)} is not adjacent to part ${partId}` };
+    if (!neighbour) return { ok: false, reason: `${fmtPos(cell)} is not adjacent to part ${partId}` };
     if (!connected) {
       return {
         ok: false,
-        reason: `a ${kindLabel(cell.kind)} along ${'XYZ'[cell.axis]} at ${fmtPos(cell)} would not attach to part ${partId}`,
+        reason: `${/^[aeiou]/.test(kindLabel(cell.kind)) ? 'an' : 'a'} ${kindLabel(cell.kind)} along ${'XYZ'[cell.axis]} at ${fmtPos(cell)} would not attach to part ${partId} (${whyNoConnection(neighbour, cell)})`,
       };
     }
   }
@@ -634,7 +642,10 @@ export function deserialize(json: string): Model {
     const ids = (o.parts as unknown[])
       .map((p) => (typeof p === 'object' && p !== null ? (p as Record<string, unknown>).id : undefined))
       .filter((id): id is number => typeof id === 'number' && Number.isFinite(id));
-    (candidate as { nextPartId: number }).nextPartId = ids.length ? Math.max(...ids) + 1 : 1;
+    // A loop, not Math.max(...ids): spreading 150 000 ids overflows the call stack.
+    let max = -Infinity;
+    for (const id of ids) if (id > max) max = id;
+    (candidate as { nextPartId: number }).nextPartId = ids.length ? max + 1 : 1;
   }
   const errs = validateModel(candidate);
   if (errs.length) return fail(errs);

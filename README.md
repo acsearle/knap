@@ -25,15 +25,22 @@ frames the selection or everything.
 **Building.** Pick a tool — Select `V`/`Esc`, Pin hole `1`, Axle hole `2`, Axle `3`, Pin `4`,
 Friction pin `5`, Erase `E`. A translucent ghost shows what a click would add and the status bar
 says it in words ("Extend part 3 · pin hole ∥ Z"); red means not possible, with the reason.
-- Click the grid to start a new part. Click a face of a part to *extend* it; a pin tool on the
-  mouth of an empty hole *inserts* a pin; a hole tool on a rod *sleeves* a new beam onto it.
+- Click the grid to start a new part (its holes run along Z, so a beam stands upright). Click a
+  face of a part to *extend* it; a pin tool on the mouth of an empty hole *inserts* a pin, pushing
+  it on through any empty holes stacked right behind (two stacked beams get pinned together); a
+  hole tool on a rod *sleeves* a new beam onto it — on the rod's end too, where `R` offers fusing
+  a perpendicular hole onto the rod instead.
 - `R` cycles the ghost through its other valid orientations.
 - Hold `Shift` (or toggle **New part** with `N`) to start a separate part instead of extending the
   clicked one.
-- Erase removes one sub-part; a part that falls apart is split in two.
-- Select a part to recolour it, make it the fixed root, duplicate (`D`) or delete it
+- Erase removes one sub-part; a part that falls apart is split into separate parts.
+- To close a loop (a four-bar), build the two links so that their end holes are stacked, then
+  push one pin into the front hole: it goes on through the hole behind and pins them together.
+- Select a part to recolour it (the inspector's swatches; the top-bar palette is the colour for
+  *new* parts), make it the fixed root, rotate, duplicate (`D`) or delete it
   (`Delete`/`Backspace`). Arrow keys move it one cell along the screen-aligned axes,
-  `PageUp`/`PageDown` toward / away from you, `[` / `]` rotate it 90° about the view axis.
+  `PageUp`/`PageDown` toward / away from you, `[` / `]` (or the inspector's ↺ / ↻) rotate it 90°
+  about the view axis.
 - `⌘Z` / `Ctrl+Z` undo, `⇧⌘Z` / `Ctrl+Y` redo — every action, including New, Open and loading an
   example.
 
@@ -53,7 +60,8 @@ While simulating, editing is disabled (tools, palette, undo, New / Open / Exampl
 out; keys say "Stop the simulation to edit"). Stop (`Esc`) returns to exactly the model you
 edited; the camera stays where it is. A "can't keep up" badge appears when the computer cannot
 simulate (or draw) fast enough for the chosen speed. If the solver fails (NaN, blow-up) the
-simulation stops with a message.
+simulation stops with a message. If every joint turns about a vertical axis, Play says that gravity
+cannot turn the mechanism (drag it instead).
 
 ## How the model works (one page)
 
@@ -94,7 +102,12 @@ Everything, WASM included, is bundled: no network access at runtime.
 From `docs/DEVIATIONS.md` §5 (physics):
 - Fixed step 1/480 s with 240 solver substeps; no damping by default (angular damping 0). Rapier's
   joint solver still loses some energy in fast motion (triple pendulum ≈ −4 % over 10 s), while
-  its f32 integration slowly *adds* speed to free rotation (up to a few % per 10 s).
+  its f32 integration slowly *adds* speed to rotation (up to +50 % of the peak kinetic energy in
+  30 s for an arm on an axle or a spatial chain). An *energy guard* stops that: per group of
+  connected moving parts, energy may rise at most 1 % of the group's peak kinetic energy above
+  its lowest value, beyond which the group's velocities are scaled down uniformly (it never adds
+  energy and keeps the work done by dragging). So a frictionless pendulum can end up to 1 % of its
+  swing energy above where it started, and a spinning part keeps its speed only to within ≈ 0.5 %.
 - Rapier clamps linear speed to 400 units/s (3.2 m/s) and angular speed to 377 rad/s, so falling
   parts fall slower than free fall once they are fast.
 - A flat face landing squarely on another at high speed can be thrown sideways; parts never pass
@@ -103,22 +116,35 @@ From `docs/DEVIATIONS.md` §5 (physics):
 - Products of inertia are dropped for planar mechanisms (motion unchanged); a spatial mechanism
   rotating about a non-principal axis could still become unstable (not tested).
 - Contacts between directly jointed bodies are off; slide stops come from joint limits.
-- The collision example costs ≈ 6 ms of physics per frame at 1×; slower machines show "can't keep
-  up" and run slower than real time instead of stalling.
+- The collision example costs ≈ 4 ms of physics per frame at 1× (estimated; DEVIATIONS §5);
+  slower machines show "can't keep up" and run slower than real time instead of stalling.
+- **Size limit of the simulation.** Every body with a joint runs 240 solver substeps per step, so
+  the cost grows with the number of jointed bodies: ≈ 55–60 ms of stepping per jointed body per
+  simulated second (pinned chains of 3 / 6 / 12 / 24 links: 315 / 427 / 745 / 1410 ms, Node, dev
+  machine). With the per-frame budget of 8 ms that is about 8 jointed bodies at 1× and about 30 at
+  the default ¼×; larger mechanisms run slower than the chosen speed and show "can't keep up".
 
 Editor and app:
 - Picking is against cell cubes, so a part hidden behind another can only be reached by orbiting.
+- A part's solid is rebuilt (CSG) on the main thread whenever its cells change, so each click on
+  a large part waits for that rebuild: ≈ 0.16 s for a 16×16 plate of pin holes, 0.5 s when holes
+  run along two axes, 0.7–2.3 s at 32×32 (1024 cells; Node, dev machine). Many small parts stay
+  fast (only changed parts are rebuilt). Building in a worker is not done.
+- Building rules depart from the specification's strict order in two places (sleeve before extend
+  on a rod's end; deep insert through stacked holes) — see `docs/DEVIATIONS.md` §7.
 - Duplicate places the copy at the nearest spot where it touches nothing.
 - The UI targets mouse/trackpad on desktop at 1280×720 and up; touch is not supported.
 - An autosaved *empty* model is treated as "nothing saved", so after New + reload knap shows the
-  four-bar again.
+  four-bar again. The file name Save suggests is not autosaved: after a reload Save uses a dated
+  name. When the browser blocks storage, or a write fails (quota), the status bar shows
+  "Not autosaved" until a write succeeds.
 
 ## Run, build, test
 
 Requires Node 20.11+.
 
 ```sh
-npm install
+npm ci             # install exactly the locked dependencies
 npx playwright install chromium   # only needed for npm run e2e
 npm run dev        # development server (http://localhost:5173)
 npm run build      # typecheck + production build into dist/
@@ -154,4 +180,6 @@ docs/          DESIGN.md (specification), DEVIATIONS.md (decisions)
 
 ## License
 
-TBD.
+The project's own licence is not chosen yet (TBD by the owner). The build writes the licences of
+the bundled third-party code (three.js — MIT; Rapier and manifold-3d — Apache-2.0) to
+`dist/THIRD_PARTY_LICENSES.txt`; ship that file with `dist/`.

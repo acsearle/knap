@@ -194,8 +194,8 @@ describe('rotation about a non-principal axis (products of inertia)', () => {
       1,
     );
 
-  async function run(decoupleInertia: boolean) {
-    const s = await sim(model(), { decoupleInertia });
+  async function run(decoupleInertia: boolean, energyGuard = true) {
+    const s = await sim(model(), { decoupleInertia, energyGuard });
     expect(s.graph.joints.map((j) => j.type)).toEqual(['revolute']);
     const mi = s.massInfo(1)!;
     const e0 = s.energy();
@@ -214,7 +214,8 @@ describe('rotation about a non-principal axis (products of inertia)', () => {
   }
 
   it('Rapier spins such a body up unless the products with the axis are dropped; mass, COM and I_zz are kept', async () => {
-    const raw = await run(false);
+    // Without the energy guard, to show the instability itself (the guard would also cap it).
+    const raw = await run(false, false);
     const fixed = await run(true);
     report(`non-principal revolute 10 s: true inertia → max |ω| ${raw.wmax.toFixed(0)} rad/s, energy +${(raw.hi * 100).toFixed(0)}%; decoupled → max |ω| ${fixed.wmax.toFixed(1)}, energy +${(fixed.hi * 100).toFixed(2)}% (of the swing's PE range)`);
     expect(raw.mi.inertia[2]).not.toBeCloseTo(0, 3); // I_xz ≠ 0: Z is not principal
@@ -226,6 +227,8 @@ describe('rotation about a non-principal axis (products of inertia)', () => {
     expect(Math.abs(fixed.mi.inertia[2]!)).toBeLessThan(1e-4); // I_xz dropped
     expect(raw.wmax).toBeGreaterThan(100); // the instability being avoided
     expect(fixed.wmax).toBeLessThan(60);
-    expect(fixed.hi).toBeLessThan(0.15); // residual slow gain from f32 round-off over 2.4 M substeps (DEVIATIONS §5)
+    // The f32 spin drift (DEVIATIONS §5) is capped by the energy guard at 2 % of the peak KE,
+    // which is ≤ 1 % of this PE range; without the guard it was +7.5 % in 10 s.
+    expect(fixed.hi).toBeLessThan(0.02);
   }, 60000);
 });

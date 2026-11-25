@@ -60,3 +60,16 @@ export function isTypingTarget(t: EventTarget | null): boolean {
   }
   return false;
 }
+
+/**
+ * True for a focused control that Space / Enter activates by itself (buttons, checkboxes, menu
+ * items): global shortcuts on those keys must leave it to the browser. Text fields are covered by
+ * isTypingTarget.
+ */
+export function isActivationTarget(t: EventTarget | null): boolean {
+  if (!(t instanceof HTMLElement)) return false;
+  if (t instanceof HTMLButtonElement || t instanceof HTMLInputElement || t instanceof HTMLSelectElement) return true;
+  if (t instanceof HTMLAnchorElement && t.hasAttribute('href')) return true;
+  const role = t.getAttribute('role');
+  return role === 'button' || role === 'menuitem' || role === 'checkbox';
+}

@@ -1,5 +1,5 @@
 // Inspector for the selected part (§7.2): id, cell count, kinds, colour swatches, Set as fixed
-// root, Duplicate, Delete, and the move / rotate keys.
+// root, Rotate (also [ / ]), Duplicate, Delete, and the move / rotate keys.
 import { kindLabel } from '../core';
 import type { Kind } from '../core';
 import type { PartInfo } from '../editor';
@@ -11,6 +11,8 @@ export interface InspectorHandlers {
   setRoot(): void;
   duplicate(): void;
   remove(): void;
+  /** Rotate 90° about the view axis: '[' counter-clockwise, ']' clockwise (same as the keys). */
+  rotate(key: '[' | ']'): void;
 }
 
 const KIND_ORDER: readonly Kind[] = ['pinHole', 'axleHole', 'axle', 'pin', 'frictionPin'];
@@ -31,6 +33,7 @@ export class Inspector {
   private readonly rootBtn: HTMLButtonElement;
   private readonly dupBtn: HTMLButtonElement;
   private readonly delBtn: HTMLButtonElement;
+  private readonly rotBtns: HTMLButtonElement[];
 
   constructor(on: InspectorHandlers) {
     this.title = h('span');
@@ -53,10 +56,15 @@ export class Inspector {
     this.rootBtn = button('Set as fixed root', { class: 'btn', 'data-action': 'set-root', title: 'Fix this part in space during simulation', onclick: () => on.setRoot() });
     this.dupBtn = button('Duplicate', { class: 'btn', 'data-action': 'duplicate', title: 'Copy the part to the nearest free spot (D)', onclick: () => on.duplicate() });
     this.delBtn = button('Delete', { class: 'btn danger', 'data-action': 'delete', title: 'Delete the part (Delete / Backspace)', onclick: () => on.remove() });
+    // Buttons as well as keys: on some keyboard layouts [ and ] need Option / AltGr.
+    this.rotBtns = [
+      button('↺ Rotate', { class: 'btn', 'data-action': 'rotate-ccw', title: 'Rotate 90° counter-clockwise about the view axis ([)', onclick: () => on.rotate('[') }),
+      button('↻ Rotate', { class: 'btn', 'data-action': 'rotate-cw', title: 'Rotate 90° clockwise about the view axis (])', onclick: () => on.rotate(']') }),
+    ];
     const hint = h('div', { class: 'hint' });
     hint.innerHTML =
       'Move <kbd>←</kbd><kbd>→</kbd><kbd>↑</kbd><kbd>↓</kbd> <kbd>PgUp</kbd><kbd>PgDn</kbd><br>Rotate 90° <kbd>[</kbd> <kbd>]</kbd> · Fit <kbd>F</kbd>';
-    this.body = h('div', null, h('div', { class: 'label' }, 'Colour'), pal, h('div', { class: 'actions' }, this.rootBtn, this.dupBtn, this.delBtn), hint);
+    this.body = h('div', null, h('div', { class: 'label' }, 'Colour'), pal, h('div', { class: 'actions' }, this.rootBtn, h('div', { class: 'row' }, ...this.rotBtns), this.dupBtn, this.delBtn), hint);
     this.el = h(
       'aside',
       { class: 'inspector', hidden: true, 'aria-label': 'Selected part', 'data-role': 'inspector' },
@@ -81,5 +89,6 @@ export class Inspector {
     this.rootBtn.textContent = info.isRoot ? 'Fixed root' : 'Set as fixed root';
     this.dupBtn.disabled = disabled;
     this.delBtn.disabled = disabled;
+    for (const b of this.rotBtns) b.disabled = disabled;
   }
 }

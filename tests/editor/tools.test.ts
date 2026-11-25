@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_COLORS, KINDS, isHole, isMale, mateType, partById, validateModel } from '../../src/core';
 import type { Axis, Dir, Kind, Model } from '../../src/core';
+import { analyze } from '../../src/core/kinematics';
 import {
   STALE_PROPOSAL,
   cycleOrientation,
@@ -75,7 +76,10 @@ function expected(tool: Kind, clicked: Kind, face: 'axial' | 'lateral', newPart:
     // 1. Extend: hole–hole always; male tool needs male ∥ n and (clicked male ∥ n or clicked hole ⟂ n);
     //    hole tool next to a male needs male ∥ n and the hole ⟂ n.
     if (isHole(tool) && isHole(clicked)) return { action: 'extend', valid: true, options: adjOrder, at: T };
-    if (isHole(tool) && isMale(clicked) && face === 'axial') return { action: 'extend', valid: true, options: [0, 1], at: T };
+    // (DEVIATIONS §7) a hole tool on a rod's axial end: Sleeve first when it fits, with Extend's
+    // perpendicular orientations after it in the same [R] cycle; Extend when it does not fit.
+    if (isHole(tool) && isMale(clicked) && face === 'axial')
+      return fits(clicked, tool) ? { action: 'sleeve', valid: true, options: [2, 0, 1], at: C } : { action: 'extend', valid: true, options: [0, 1], at: T };
     if (isMale(tool) && isHole(clicked) && face === 'lateral') return { action: 'extend', valid: true, options: [0], at: T };
     if (isMale(tool) && isMale(clicked) && face === 'axial') return { action: 'extend', valid: true, options: [2], at: T };
     // 2. Insert: male tool, compatible hole, axial face.
@@ -275,16 +279,16 @@ describe('resolveBuild: occupied targets, preconditions and reasons', () => {
     expect(hover(m2, 1, 0, 4, st('pin')).joins).toBe(false);
   });
 
-  it('grid: New on grid at y = 0, default ∥ Y for every kind, cycling Y → Z → X', () => {
+  it('grid: New on grid at y = 0, default ∥ Z for every kind (DEVIATIONS §7), cycling Z → X → Y', () => {
     for (const kind of KINDS) {
       let s = st(kind);
       const g = resolveBuild(modelOfEmpty(), null, { pos: [2, 0, -3] }, s);
       expect(g.action).toBe('newOnGrid');
       expect(g.valid).toBe(true);
-      expect(g.cell).toEqual(c(2, 0, -3, kind, 1));
-      expect(g.options).toEqual([1, 2, 0]);
+      expect(g.cell).toEqual(c(2, 0, -3, kind, 2));
+      expect(g.options).toEqual([2, 0, 1]);
       expect(g.highlight).toEqual({ pos: [2, 0, -3], dir: 3 });
-      expect(g.description).toBe(`New part on grid · ${kindName(kind)} ∥ Y`);
+      expect(g.description).toBe(`New part on grid · ${kindName(kind)} ∥ Z`);
       expect(g.orientationHint).toBe('[R] 1/3');
       const seen: Axis[] = [];
       for (let i = 0; i < 4; i++) {
@@ -292,7 +296,7 @@ describe('resolveBuild: occupied targets, preconditions and reasons', () => {
         seen.push(p.cell!.axis);
         s = cycleOrientation(s, p);
       }
-      expect(seen).toEqual([1, 2, 0, 1]);
+      expect(seen).toEqual([2, 0, 1, 2]);
     }
   });
 
@@ -338,7 +342,7 @@ describe('descriptions', () => {
     const pm = modelOf([c(0, 0, 0, 'axle', 0)]);
     expect(hover(pm, 1, 0, 2, st('axleHole')).description).toBe('New part · sleeve axle hole ∥ X onto part 1');
     const bad = hover(modelOf([c(0, 0, 0, 'pin', 2)]), 1, 0, 0, st('pin'));
-    expect(bad.description).toBe('Extend part 1 · pin ∥ X — a pin along X at (1, 0, 0) would not attach to part 1');
+    expect(bad.description).toBe('Extend part 1 · pin ∥ X — a pin along X at (1, 0, 0) would not attach to part 1 (a rod’s side holds nothing)');
   });
 });
 
@@ -377,9 +381,9 @@ describe('orientation cycling', () => {
   });
 
   it('cycling from the default when the preference is not valid here', () => {
-    let s = st('pinHole');
+    let s = st('axleHole');
     s = { ...s, axisPref: 2 };
-    const p = hover(mm, 1, 0, 4, s); // options [0, 1]; Z invalid -> default X
+    const p = hover(mm, 1, 0, 4, s); // an axle hole does not fit the pin: Extend, options [0, 1]; Z invalid -> default X
     expect(p.cell!.axis).toBe(0);
     s = cycleOrientation(s, p);
     expect(s.axisPref).toBe(1);
@@ -507,7 +511,7 @@ describe('integration safety and presentation (review fixes)', () => {
 
   it('ghostColor: receiving part colour for extend / join, new part colour otherwise', () => {
     const m = pinPart();
-    const ext = hover(m, 1, 1, 4, st('pinHole'));
+    const ext = hover(m, 1, 1, 4, st('axleHole')); // an axle hole does not fit the pin: Extend
     expect(ext.action).toBe('extend');
     expect(ext.color).toBeNull();
     expect(ext.ghostColor).toBe(partById(m, 1)!.color);
@@ -521,9 +525,14 @@ describe('integration safety and presentation (review fixes)', () => {
 
   it('shiftHint names what Shift would do instead', () => {
     const m = pinPart();
+    // On the rod's end the default is the sleeve (DEVIATIONS §7); Shift sleeves too: no hint.
     const p = hover(m, 1, 1, 4, st('pinHole'));
-    expect(p.action).toBe('extend');
-    expect(p.shiftHint).toBe('Shift: New part · sleeve pin hole ∥ Z onto part 1');
+    expect(p.action).toBe('sleeve');
+    expect(p.shiftHint).toBe('');
+    // [R] to the Extend orientation: Shift would sleeve instead.
+    const ex = hover(m, 1, 1, 4, cycleOrientation(st('pinHole'), p));
+    expect(ex.action).toBe('extend');
+    expect(ex.shiftHint).toBe('Shift: New part · sleeve pin hole ∥ Z onto part 1');
     expect(hover(m, 1, 1, 4, st('pinHole', true)).shiftHint).toBe('');
     // single beam: Extend vs New adjacent
     const b = modelOf([c(0, 0, 0, 'pinHole', 2)]);
@@ -540,3 +549,83 @@ describe('integration safety and presentation (review fixes)', () => {
     expect(describeHover(m, { partId: 9, cellIndex: 0, dir: 0 }, null)).toBe('');
   });
 });
+
+describe('review fixes (ux): sleeve before extend on a rod end; deep insert into stacked holes', () => {
+  it('hole tool on the free end of a rod: Sleeve is the default, Extend\'s orientations follow in the [R] cycle', () => {
+    const m = modelOf([c(0, 0, 0, 'pinHole', 2), c(1, 0, 0, 'pinHole', 2)], [c(0, 0, 0, 'pin', 2), c(0, 0, 1, 'pin', 2)]);
+    let s = st('pinHole');
+    const seen: string[] = [];
+    for (let i = 0; i < 4; i++) {
+      const p = hover(m, 2, 1, 4, s);
+      expect(p.valid).toBe(true);
+      expect(p.options).toEqual([2, 0, 1]);
+      seen.push(`${p.action} ${p.cell!.axis} ${p.orientationHint}`);
+      s = cycleOrientation(s, p);
+    }
+    expect(seen).toEqual(['sleeve 2 [R] 1/3', 'extend 0 [R] 2/3', 'extend 1 [R] 3/3', 'sleeve 2 [R] 1/3']);
+    const p = hover(m, 2, 1, 4, st('pinHole'));
+    expect(p.description).toBe('New part · sleeve pin hole ∥ Z onto part 2');
+    const r = p.apply(m);
+    expect(validateModel(r.model)).toEqual([]);
+    expect(analyze(r.model).joints.map((j) => j.type)).toEqual(['revolute']);
+  });
+
+  it('a rod end that is already sleeved still offers Extend (the only thing left)', () => {
+    const m = modelOf([c(0, 0, 0, 'pinHole', 2)], [c(0, 0, 0, 'pin', 2), c(0, 0, 1, 'pin', 2)], [c(0, 0, 1, 'pinHole', 2)]);
+    const p = hover(m, 2, 1, 4, st('pinHole'));
+    expect(p.action).toBe('extend');
+  });
+
+  const stacked = (n: number) => {
+    const parts = [];
+    for (let z = 0; z < n; z++) parts.push([c(0, 0, z, 'pinHole', 2), c(1, 0, z, 'pinHole', 2)]);
+    return modelOf(...parts);
+  };
+
+  it('pin tool on the front mouth of two stacked beams: a 2-long pin through both (one revolute joint)', () => {
+    const m = stacked(2);
+    const p = hover(m, 2, 0, 4, st('pin'));
+    expect(p.action).toBe('insert');
+    expect(p.valid).toBe(true);
+    expect(p.cell).toEqual(c(0, 0, 1, 'pin', 2));
+    expect(p.extraCells).toEqual([c(0, 0, 0, 'pin', 2)]);
+    expect(p.description).toBe('New part · insert pin ∥ Z into part 2 · 2 long, through part 1');
+    expect(p.shiftHint).toBe('Shift: New part · insert pin ∥ Z into part 2');
+    const r = p.apply(m);
+    expect(validateModel(r.model)).toEqual([]);
+    expect(partById(r.model, r.partId)!.cells.length).toBe(2);
+    const g = analyze(r.model);
+    expect(g.joints.map((j) => j.type)).toEqual(['revolute']);
+    // Shift: the plain 1-cell insert
+    const one = hover(m, 2, 0, 4, st('pin', true));
+    expect(one.extraCells).toEqual([]);
+    expect(one.apply(m).model.parts.at(-1)!.cells.length).toBe(1);
+  });
+
+  it('three stacked beams: a 3-long pin; the same from the back mouth', () => {
+    const m = stacked(3);
+    const front = hover(m, 3, 0, 4, st('pin'));
+    expect(front.extraCells.map((x) => x.z)).toEqual([1, 0]);
+    expect(front.description).toBe('New part · insert pin ∥ Z into part 3 · 3 long, through parts 2, 1');
+    const back = hover(m, 1, 0, 5, st('pin'));
+    expect([back.cell!.z, ...back.extraCells.map((x) => x.z)]).toEqual([0, 1, 2]);
+  });
+
+  it('no deep insert past an occupied, incompatible or non-coaxial hole', () => {
+    // the hole behind already holds a pin of another part: that is the Insert-join case
+    const held = modelOf([c(0, 0, 0, 'pinHole', 2)], [c(0, 0, 1, 'pinHole', 2)], [c(0, 0, 0, 'pin', 2)]);
+    const j = hover(held, 2, 0, 4, st('pin'));
+    expect(j.joins).toBe(true);
+    expect(j.extraCells).toEqual([]);
+    // an axle hole behind does not take a pin
+    const ax = modelOf([c(0, 0, 0, 'axleHole', 2)], [c(0, 0, 1, 'pinHole', 2)]);
+    expect(hover(ax, 2, 0, 4, st('pin')).extraCells).toEqual([]);
+    // …but it does take an axle (welded there, turning in the front beam)
+    const axle = hover(ax, 2, 0, 4, st('axle'));
+    expect(axle.extraCells).toEqual([c(0, 0, 0, 'axle', 2)]);
+    // a perpendicular hole behind
+    const perp = modelOf([c(0, 0, 0, 'pinHole', 0)], [c(0, 0, 1, 'pinHole', 2)]);
+    expect(hover(perp, 2, 0, 4, st('pin')).extraCells).toEqual([]);
+  });
+});
+

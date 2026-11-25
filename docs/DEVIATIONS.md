@@ -165,9 +165,32 @@ had a gap:
   coaxial male of a part other than the hole's, Insert adds the new male to *that* part
   (`joins: true`, "Extend part 8 · insert pin ∥ Z into part 5"). With Shift / [N], Insert always
   makes a new part. `tests/editor/fourbar.test.ts` builds the §8 four-bar this way.
-- **New on grid defaults to ∥ Y for every kind.** Holes lie flat on the reference plane and rods
-  stand on it, so a pin placed on the grid fits a hole placed on the grid. The letter of §7.3
-  ("first valid axis") would give X for holes. The [R] order is Y, Z, X.
+- **New on grid defaults to ∥ Z for every kind (changed after the UX review).** Beams stand
+  upright on the reference plane, as in every example, and rods lie along Z, so a pin placed on the
+  grid still fits a hole placed on the grid. The earlier default ∥ Y laid beams flat: a pendulum
+  built with every default then had a vertical joint axis, parallel to gravity, and did not move
+  when played. The letter of §7.3 ("first valid axis") would give X for holes, which also stands
+  upright but makes the beam extend along Z away from the default view. The [R] order is Z, X, Y.
+  Play also says so when every joint is a revolute about Y ("every joint axis is vertical (∥
+  gravity), so gravity cannot turn it"), since such a model is still easy to build on purpose.
+- **Sleeve before Extend on a rod's end (departs from the §7.3 order; UX review).** With a hole
+  tool, without Shift / [N], on an *axial* face of a male cell: when Sleeve is valid it is the
+  default, and Extend's orientations (necessarily perpendicular to the rod) follow it in the same
+  [R] options, e.g. "[R] 1/3" sleeve ∥ Z, then extend ∥ X, ∥ Y. The axis alone tells which action is
+  shown, so a persisted [R] choice of a perpendicular axis shows Extend. The §7.3 order offered
+  Extend first, fusing a perpendicular hole onto the pin's end (a loose pin silently became a
+  liftarm-with-pin, which changes the kinematics) while the intended action — sliding a beam onto
+  the pin — needed Shift at every joint. When Sleeve is not valid (the rod is already sleeved
+  there, or the hole kind does not fit) the §7.3 order applies unchanged. The fuzz reference in
+  `tests/review/editor.review.test.ts` encodes this rule.
+- **Deep insert (UX review).** Without Shift / [N] and without an Insert-join, a male tool on the
+  mouth of hole C (axial face n) pushes the new male on through every cell C − n, C − 2n, … that
+  holds exactly one cell, an empty hole coaxial with C that the male fits (any part, the hovered
+  one included). Two stacked, unpinned beams are thus pinned together (one revolute joint) with
+  one click; before, only the front hole got a 1-cell pin and the beams stayed unconnected, and the
+  back hole could only be reached by orbiting. The ghost shows the whole new part and the status
+  bar says "New part · insert pin ∥ Z into part 2 · 2 long, through part 1". Shift gives the plain
+  1-cell insert (shown as the Shift hint).
 - **Orientation order.** The natural default comes first, then the remaining axes in cyclic
   order (d, d+1, d+2 mod 3). Exception: a hole tool not clicking a hole uses X, Y, Z ("first
   valid axis"). If the target already holds one cell of another part of the opposite class, its
@@ -178,7 +201,8 @@ had a gap:
   preference is kept). It is reset when the tool changes. So when the set of valid orientations
   changes between hovers, the choice maps by world axis.
 - **R cycles within the chosen action.** The action is the first valid one in §7.3 priority
-  order, and [R] only changes the axis inside it, never the action.
+  order, and [R] only changes the axis inside it, never the action — except on a rod's end with a
+  hole tool (Sleeve before Extend, above), where [R] steps from the sleeve to Extend's axes.
 - **Most relevant invalid proposal.** When nothing is valid, the reason comes from Insert/Sleeve
   if its geometric precondition holds (male tool on an axial face of a hole; hole tool on a
   male). Otherwise it comes from Extend / New adjacent. "Compatible" in §7.3 is treated as part
@@ -203,8 +227,8 @@ had a gap:
 - **Shift cannot latch "New part".** `withShift` marks its per-event state (`shiftHeld`); all state
   functions (`cycleOrientation`, `selectTool`, `setNewPart`, `pickColor`) drop that newPart again.
 - **Presentation extras (§7.4).** `ghostColor` on every proposal, `shiftHint` (what Shift would do
-  instead — e.g. a hole tool on a rod's end extends the rod per §7.3 order, Shift sleeves), and
-  `describeHover` for the status bar's hover info.
+  instead, e.g. "Shift: New part · pin hole ∥ Z"), and `describeHover` for the status bar's hover
+  info.
 - **Coaxial preference is resolver-only in practice.** With cube picking `C + n` never holds another
   part's cell on a real hover (the ray crossed that cube first), so the §7.3 coaxial preference for
   Extend / New adjacent only applies to synthetic picks. Kept as specified; the Insert-join rule
@@ -244,14 +268,42 @@ had a gap:
   deselect if Select is already active), `K` = Show kinematics, `D` = Duplicate, `?` = controls,
   `⌘/Ctrl+S` Save, `⌘/Ctrl+O` Open. All other `Ctrl/⌘/Alt` combinations are left to the browser;
   nothing fires while focus is in a text field. Shift pressed or released re-resolves the hover
-  without a pointer move.
+  without a pointer move. `[`, `]`, `.` and `?` are matched by the character typed even with
+  Option (Mac) or AltGr (Windows, reported as Ctrl+Alt) held, because many layouts (German, French,
+  Nordic) need it for them; Cmd/Meta combinations still go to the browser. The inspector also has
+  Rotate buttons (↺ / ↻), the same as `[` / `]`.
+- **Keyboard focus (review).** F and Home go through the app's key handler (the viewport is
+  created with `keyboard: false`), so they follow the same rules as every other shortcut: ignored
+  while a dialog is open, working while a checkbox has focus. Space / Enter on a *keyboard*-focused
+  button or checkbox activate that control (browser default) instead of Play; buttons and the
+  Show kinematics checkbox clicked with the mouse are blurred, so Space after a click is still
+  Play. The open Examples menu (role=menu) takes ArrowUp / ArrowDown / Home / End, Escape, and
+  Space / Enter on the focused item, and holds other single keys back (no tool change behind it).
+  The Controls / About dialogs keep Tab focus inside. `N` with Select or Erase active only says
+  that New part applies to the build tools (it used to turn the toggle on invisibly).
+- **Status messages (review).** Stop says "Stopped · back to the model as edited" (the simulating
+  message used to stay). Picking a top-bar colour says "Colour for new parts: …", and with a part
+  selected adds that the inspector's swatches recolour it. While autosave fails, or storage is
+  blocked, a lasting "Not autosaved" badge sits in the status bar (the error message itself is
+  shown once and is soon overwritten). A WebGL context loss shows its notice in the banner and,
+  on restore, puts back whatever banner was showing before (e.g. a file error).
+- **Clicks belong to the mode of their press.** A press made while simulating and released after
+  Stop (Esc) is not an edit-mode click (it used to build a part).
+- **Start-up view.** The viewport is created detached (1×1 px); the app measures it once it is in
+  the page and then fits Home, so the start-up view equals Home (it was ≈ 30 % looser).
+- **Input while the simulation starts.** Play first builds the physics world asynchronously (mode
+  `starting`, tens of ms on a cold first Play). Stop / Esc in that window cancels the start (back
+  to edit, "Simulation cancelled"); a speed picked then is applied to the new simulation; a Step
+  waits for the start and then steps, so two quick Steps from edit mode advance 2/60 s.
 - **Hover is re-resolved on camera changes** (wheel zoom, snaps) from the last pointer position, so
   the ghost never lags behind the view.
 - **New's camera.** An empty model cannot be fitted, so New sets the default iso camera with a
   12-unit view (Home / Fit frame a small default box).
 - **Selection vs tools.** Switching to a build or erase tool clears the selection; the inspector
   appears only for a selection. Undo that removes the selected part clears the selection, and redo
-  does not restore it.
+  does not restore it. Undo / redo across a New / Open / example load also clears it (part ids
+  belong to one model: the same id would name an unrelated part), and the file name Save suggests
+  follows the history (it is stored per history entry; it is not autosaved).
 - **Viewport frame-loop fix** (`src/view/viewport.ts`, a bug that blocked simulate mode): a frame
   callback that touched the view (`setPartTransform` → `requestRender`) left a second
   `requestAnimationFrame` pending, so every simulated frame doubled the pending frames and the
@@ -268,7 +320,7 @@ had a gap:
   flat-face-normal angle > 30° when both faces look at the camera (a patch that meets itself across
   a crease, e.g. the inner corner of an L beam's wall). Lines are drawn as a polyline through the
   midpoints of the texel-boundary segments, at a uniform width (1.25 CSS px × DPR) with a 1-px AA
-  ramp. The ID buffer is 2× the drawing buffer below DPR 1.5 (`supersample` option).
+  ramp. The ID buffer is supersampled (`supersample` option; see **Supersampling** below).
 - **Side effect: real gaps are drawn.** Lines follow the geometry exactly. The 0.06 gap between
   stacked parts shows as two close lines with a sliver of the part behind between them. A pin end in
   a hole shows three close concentric circles: end disc, 0.03 chamfer, bore rim. Both are true to
@@ -303,6 +355,12 @@ had a gap:
   end state (orientation for fit, target and zoom for snapTo), as wheel zoom already did.
 - **View-cube presses never reach the host**: a right or middle press on the cube may pan, but its
   click is swallowed (it would otherwise pick hidden scene geometry behind the cube).
+- **Lost releases (review).** A gesture also ends, as cancelled (no click; a host drag gets
+  `end(…, true)`), on `lostpointercapture`, on a mouse move with no button held, and on a new mouse
+  press while it runs. Before, a release lost to a native dialog or a window switch left it
+  running: button-less moves kept orbiting and the next press was swallowed.
+- **`updateSize()`** reads the container size immediately (a container created detached reports
+  1×1 until the ResizeObserver fires, and a resize keeps the framed world rectangle).
 - **Lifetime**: dispose() calls `forceContextLoss()` (browsers keep ~16 live contexts and kill the
   oldest, which may be a viewport still in use) and detaches the DPR media listener. Besides the
   resolution media query, the viewport re-checks devicePixelRatio on window resize and before every
@@ -399,7 +457,8 @@ had a gap:
       0.914–0.916; the exact touching distance is 0.92. The deepest transient penetration of the
       40-cell drop is 0.656 instead of 0.659 (the bound is 0.57).
   - 1 PGS iteration and `lengthUnit` 1.
-  - No damping and no sleeping (`setCanSleep(false)`).
+  - No damping and no sleeping (`setCanSleep(false)`). The energy guard (§5 "Free rotation gains
+    speed") only trims energy a group has gained beyond 1 % of its peak kinetic energy.
   - **Rapier's hard CCD is off (`maxCcdSubsteps = 0`, fix after review); free bodies use soft
     CCD instead.** The hard CCD clamped the motion of a jointed body at a time of impact with its
     own joint partner, although contacts between them are disabled: an axle sliding in its hole
@@ -535,18 +594,55 @@ had a gap:
     - In Rapier it moves the centre-pinned link from +1.35 to −1.9 %/s.
     - It over-corrects by different amounts for different ω and inertias, and it depends on the
       rounding of this exact Rapier/glam build. It would hide the bias, not remove it.
-  - Measured now, % per second of ω, 5 s, no gravity:
+  - Measured without the guard below, % per second of ω, 5 s, no gravity:
     - Jointed bodies (240 substeps): axle in a pin hole +0.76, centre-pinned link +1.35,
       end-pinned link +0.26.
     - Unjointed bodies (30 substeps): 3×3×3 block +0.24 (was +1.97), 5-hole beam +0.17 (was
       +1.35).
-  - Over 30 s the examples rise by at most 9.6 % of their peak KE (pendulum). Guarded in
-    `tests/physics/pendulum.test.ts` at ≈ 1.5× the measured drift.
+  - Without the guard, rise of the total energy as % of the peak KE, measured from a reference
+    after transients (sim review): over 30 s pendulum +9.6, parallelogram +8.2, four-bar +5.4,
+    root-not-first +7.0, light body +6.0, **sliding-axle example from t = 2 s +44**, **arm on an
+    axle with a bush +30.5** (+48.9 at 60 s: released horizontal, its tip climbed 25° above
+    horizontal by 30 s and 68° by 60 s; the sliding-axle arm was vertical at 60 s), **spatial chain
+    with joint axes Y, X, Z +50.3**. The earlier "at most 9.6 % over 30 s" counted from t = 0, where
+    the sliding axle's drop onto its stop hid the gain, and had no axle-carried or spatial case.
+  - **Energy guard (fix after the sim review; `Simulation` option `energyGuard`, default on).**
+    After every fixed step, per *group* of dynamic bodies (joint-connected, not through fixed
+    bodies; groups whose bodies start touching — Rapier collision-start events — merge for good):
+    E = kinetic + potential energy, eRef = the lowest E since the group's reference was set, kPeak =
+    the highest kinetic energy since then. If E > eRef + max(band·kPeak, floor), every velocity of
+    the group is scaled by one factor s < 1 so that E returns to that cap. band =
+    `energyGuardBand` = 1 %; floor = 1e-5·Σ m·|g|·(1 + |com|) sits above the f32 rounding noise of
+    the potential energy, so a mechanism starting from rest, or balanced on an unstable equilibrium,
+    is never held still (with no floor the guard froze a pendulum balanced upright).
+    - A uniform scale keeps every joint's homogeneous velocity constraint and the sign of every
+      contact velocity, so the path is unchanged; only the speed is trimmed. The guard only removes
+      energy: losses (joint solve, impacts, slide stops) lower eRef and stay lost. It does not undo
+      external work: the reference is reset on the first step, every step a body of the group is
+      grabbed, on release, when a body of the group is removed and when groups merge.
+    - This is a correction, not damping: §5.1 asks for no damping by default and the guard does
+      not act on a mechanism that is not gaining (the triple pendulum's 10 s run is bit-identical
+      with and without it; chain6, crank-slider, collision, prismatic sled: nothing removed).
+    - Measured with the guard over 30 s (60 s for axle-arm, spatial chain and sliding axle): every
+      example and review mechanism rises by at most 1.0 % of its peak KE (pendulum, four-bar, parallelogram, axle-arm, spatial chain, light body,
+      root-not-first: exactly the 1 % cap; sliding axle after its drop 0.0 %), and the minimum
+      energy is the same as without the guard to 0.1 % (no extra loss). A spinning axle without
+      gravity settles at +0.5 % of ω (KE +1 %) and stays there (was +22 % in 30 s). Cost:
+      +1–2 % of the stepping time.
+    - Tests: `tests/physics/energyguard.test.ts` (axle-arm, spatial chain and sliding axle over
+      60 s; untouched triple pendulum; grab work kept; collision energy between groups kept; the
+      gain without the guard), `tests/physics/pendulum.test.ts` (ω drift ≤ 0.75 % in 5 s for
+      jointed and free bodies), `tests/review/sim.review.test.ts` and the former `it.fails` spin
+      tests in `tests/review/physics.review.test.ts`, which now pass.
+    - Limits: the guard caps the *total* of a group, so energy gained by one body of a group is
+      taken back from all of them in proportion. A body that is set spinning by code between steps
+      (tests do this through private access) has its new energy accepted only on the next step.
   - `decoupleInertia` is skipped for a body whose products with the joint axis are already
     negligible (< 1e-6 of the trace), so it does not change a symmetric body's representation.
   - The real fix belongs in Rapier: rotate with a matrix, or divide by |q|², or expose
     `enable_gyroscopic_forces`. In a planar mechanism every body spins about a principal axis,
-    so the gyroscopic term is exactly zero there and switching it off would be exact.
+    so the gyroscopic term is exactly zero there and switching it off would be exact. Until then
+    the energy guard (above) bounds the effect.
 - **Symmetric fast impacts on a flat face throw the part sideways (Rapier, found in review).**
   A flat face landing squarely on another at 300–400 units/s gets uneven impulses over its
   4 contact points (264/178/287/161 for two plain cuboids crossed at 311 units/s), so it leaves

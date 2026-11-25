@@ -2,10 +2,17 @@
 // physics into the tool of DESIGN.md §7. One instance per page (see src/main.ts).
 //
 // State that is *not* the model (and therefore not in the undo history): the tool state, the
-// selection, the mode (edit / starting / simulate), the kinematics toggle, the playback speed
-// and the open file's name. Every model change goes through `commit()` → History, and History's
-// change listener is the single place that pushes a model to the view, the overlays, the
-// inspector, the counts and the autosave.
+// selection, the mode (edit / starting / simulate), the kinematics toggle and the playback speed.
+// Every model change goes through History, and History's change listener (`modelChanged`) is the
+// single place that pushes a model to the view, the overlays, the inspector, the counts and the
+// autosave. The file name Save uses, and which "document" (New / Open / example) a model belongs
+// to, are kept per history entry, so undo / redo across a New / Open / example load restores the
+// name and drops a selection whose id would now name an unrelated part.
+//
+// Keyboard: one window listener (`keydown`) handles every shortcut, the viewport's F / Home
+// included (the viewport is created with keyboard: false), after the open dialog and the open
+// Examples menu have had their say. Space on a keyboard-focused button / checkbox activates that
+// control; buttons and the checkbox clicked with the mouse are blurred so Space stays Play.
 import { effectiveRootId, emptyModel, partById, setPartColor, setRoot } from '../core';
 import type { Model } from '../core';
 import { EXAMPLES, buildExample, exampleByName } from '../core/examples';
@@ -47,8 +54,9 @@ import { Viewport, cameraBasis, defaultCamera, jointGlyphsFromGraph } from '../v
 import type { ViewportPointerEvent } from '../view';
 import { Banner, aboutDialog, helpDialog } from '../ui/dialogs';
 import type { Dialog } from '../ui/dialogs';
-import { h, isTypingTarget } from '../ui/dom';
+import { h, isActivationTarget, isTypingTarget } from '../ui/dom';
 import { Inspector } from '../ui/inspector';
+import { PALETTE } from '../ui/palette';
 import { StatusBar } from '../ui/statusbar';
 import { Toolbar } from '../ui/toolbar';
 import { TopBar } from '../ui/topbar';
@@ -63,6 +71,8 @@ export const AUTOSAVE_DELAY_MS = 400;
 export const DEFAULT_EXAMPLE = 'four-bar';
 const RED = '#e0322b';
 const BLOCKED = 'Stop the simulation to edit (Esc)';
+/** Keys matched by the character they type, even with Option / AltGr held (see keydown). */
+const CHAR_KEYS: ReadonlySet<string> = new Set(['[', ']', '.', '?']);
 
 export class App {
   readonly vp: Viewport;
@@ -95,11 +105,20 @@ export class App {
   private autosaveTimer = 0;
   private autosaveFailed = false;
   private starting: Promise<void> | null = null;
+  /** The mode when the last press on the view began: a click is an edit only if that was edit too. */
+  private pressMode: Mode = 'edit';
+  /** Per history entry: the name Save uses and the document it belongs to (see the header). */
+  private readonly entryMeta = new WeakMap<Model, { fileName: string | null; doc: number }>();
+  private doc = 0;
+  private docCount = 0;
+  /** Stop was requested while the simulation was still starting: play() discards it when ready. */
+  private cancelStart = false;
 
   /** Build the DOM inside `root` and start. Throws if WebGL2 is unavailable. */
   static async create(root: HTMLElement): Promise<App> {
     const viewEl = h('main', { class: 'view', 'data-role': 'viewport' });
-    const vp = await Viewport.create(viewEl);
+    // F / Home are handled by App.keydown (after dialogs and menus), not by the viewport.
+    const vp = await Viewport.create(viewEl, { keyboard: false });
     return new App(root, viewEl, vp);
   }
 
@@ -137,6 +156,10 @@ export class App {
       setRoot: () => this.withSelection((id, m) => ({ ok: true, model: setRoot(m, id), partId: id, message: `Part ${id} is now the fixed root` })),
       duplicate: () => this.withSelection((id, m) => duplicateSelection(m, id)),
       remove: () => this.withSelection((id, m) => deleteSelection(m, id)),
+      rotate: (key) => {
+        const cam = this.cameraBasisNow();
+        this.withSelection((id, m) => rotateSelection(m, id, cam, key));
+      },
     });
     this.status = new StatusBar();
     this.banner = new Banner();
@@ -170,15 +193,24 @@ export class App {
       this.refreshHover();
     });
     vp.onClick((e) => this.click(e));
+    vp.canvas.addEventListener('pointerdown', () => (this.pressMode = this.mode), true);
     vp.onCameraChange(() => {
       if (this.lastHover) this.refreshHover();
     });
+    // The context-loss notice replaces the banner only while the context is gone: an earlier
+    // message (a file or simulation error) comes back on restore.
+    let bannerBeforeLoss: ReturnType<Banner['snapshot']> = null;
+    let contextLost = false;
     vp.canvas.addEventListener('webglcontextlost', () => {
+      if (!contextLost) bannerBeforeLoss = this.banner.snapshot();
+      contextLost = true;
       this.banner.show('The graphics context was lost (the GPU was reset or is busy). Waiting for the browser to restore it…');
     });
     vp.canvas.addEventListener('webglcontextrestored', () => {
-      this.banner.hide();
-      this.info('Graphics context restored');
+      contextLost = false;
+      this.banner.restore(bannerBeforeLoss);
+      bannerBeforeLoss = null;
+      if (!this.status.message.error) this.info('Graphics context restored');
     });
 
     window.addEventListener('keydown', (e) => this.keydown(e));
@@ -187,16 +219,30 @@ export class App {
     });
     window.addEventListener('blur', () => this.setShift(false));
     window.addEventListener('pagehide', () => this.flushAutosave());
-    // Buttons clicked with the mouse should not keep keyboard focus (Space would re-click them).
+    // Buttons and the checkbox clicked with the mouse should not keep keyboard focus: Space would
+    // activate them instead of playing (keyboard focus, Tab, is kept: there Space activates).
     document.addEventListener('click', (e) => {
-      const b = (e.target as HTMLElement | null)?.closest?.('button');
-      if (b && (e as MouseEvent).detail > 0) b.blur();
+      if ((e as MouseEvent).detail === 0) return;
+      const c = (e.target as HTMLElement | null)?.closest?.('button, label');
+      if (!c) return;
+      // After the label's forwarded click and focus have happened.
+      window.setTimeout(() => {
+        const a = document.activeElement;
+        const control = a instanceof HTMLButtonElement || (a instanceof HTMLInputElement && a.type === 'checkbox');
+        if (control && (a === c || c.contains(a))) a.blur();
+      }, 0);
     });
 
     this.modelChanged();
+    // The view was created detached (1×1): measure it now, or the fit would be too loose.
+    vp.updateSize();
     vp.home({ animate: false });
+    if (!this.storage) this.status.setWarning('Not autosaved', 'This browser does not allow local storage here, so the model is not autosaved. Use Save to keep it.');
     if (restored.message) this.error(restored.message, true);
-    else this.info(restored.model ? 'Restored the autosaved model' : 'Four-bar linkage example · press Play to simulate');
+    else {
+      const start = restored.model ? 'Restored the autosaved model' : 'Four-bar linkage example · press Play to simulate';
+      this.info(this.storage ? start : `${start} · autosave is off (no browser storage): use Save`);
+    }
   }
 
   // ===========================================================================================
@@ -215,6 +261,15 @@ export class App {
 
   private modelChanged(): void {
     const m = this.history.current;
+    let meta = this.entryMeta.get(m);
+    if (!meta) {
+      meta = { fileName: this.fileName, doc: this.doc };
+      this.entryMeta.set(m, meta);
+    }
+    // Undo / redo across a New / Open / example: part ids now belong to another model.
+    if (meta.doc !== this.doc) this.selection = null;
+    this.doc = meta.doc;
+    this.fileName = meta.fileName;
     this.vp.setModel(m);
     if (this.selection !== null && !partById(m, this.selection)) this.selection = null;
     this.vp.setSelection(this.selection !== null ? [this.selection] : []);
@@ -351,7 +406,7 @@ export class App {
         this.vp.setHoverFace(null);
         this.status.setHint(this.idleHint());
       } else {
-        this.vp.setGhost({ cell: p.cell, valid: p.valid });
+        this.vp.setGhost({ cell: p.cell, extra: p.extraCells, valid: p.valid });
         this.vp.setHoverFace(p.highlight ? { cell: p.highlight.pos, dir: p.highlight.dir, ...(p.valid ? {} : { color: RED }) } : null);
         const aux = [p.orientationHint, p.shiftHint].filter(Boolean).join('   ');
         this.status.setHint(p.description, !p.valid, aux);
@@ -409,7 +464,9 @@ export class App {
 
   private click(e: ViewportPointerEvent): void {
     if (e.button !== 0) return;
-    if (this.mode !== 'edit') return; // the model is frozen; drags grab or orbit
+    // The model is frozen while simulating (drags grab or orbit); a press made then and released
+    // after Stop is not an edit either.
+    if (this.mode !== 'edit' || this.pressMode !== 'edit') return;
     this.lastHover = e;
     const m = this.history.current;
     const ray = e.ray;
@@ -458,6 +515,11 @@ export class App {
 
   toggleNewPart(): void {
     if (!this.editable()) return;
+    if (!isBuildTool(this.tool.tool)) {
+      // It only means something for a build tool (and its button is disabled otherwise).
+      this.info('New part applies to the build tools: pick one (1–5) first, then press N');
+      return;
+    }
     this.tool = setNewPart(this.tool, !this.tool.newPart);
     this.info(this.tool.newPart ? 'New part: on — clicks start separate parts' : 'New part: off');
     this.refreshUI();
@@ -478,6 +540,13 @@ export class App {
   pickColor(c: string): void {
     if (!this.editable()) return;
     this.tool = pickColor(this.tool, c);
+    const name = PALETTE.find((p) => p.color === c)?.name ?? c;
+    // The top palette is the colour for *new* parts; say so when a part is selected.
+    this.info(
+      this.selection !== null
+        ? `Colour for new parts: ${name} · to recolour part ${this.selection}, use the swatches beside it`
+        : `Colour for new parts: ${name}`,
+    );
     this.refreshUI();
     this.refreshHover();
   }
@@ -510,6 +579,8 @@ export class App {
   private replaceModel(m: Model, fileName: string | null, fit: 'home' | 'empty' | 'none'): void {
     this.selection = null;
     this.fileName = fileName;
+    this.doc = ++this.docCount;
+    this.entryMeta.set(m, { fileName, doc: this.doc });
     this.vp.setSelection([]);
     this.history.push(m);
     if (fit === 'home') this.vp.home();
@@ -581,6 +652,9 @@ export class App {
     const r = autosave(this.storage, this.history.current);
     if (!r.ok && !this.autosaveFailed) this.error(r.message);
     this.autosaveFailed = !r.ok;
+    // Lasting indicator while it fails (the message above is overwritten by the next one).
+    if (r.ok) this.status.setWarning('');
+    else this.status.setWarning('Not autosaved', `${r.message}. Use Save to keep the model.`);
   }
 
   // ===========================================================================================
@@ -604,6 +678,7 @@ export class App {
       return;
     }
     this.mode = 'starting';
+    this.cancelStart = false;
     this.clearEditOverlays();
     this.topbar.closeMenus();
     this.refreshUI();
@@ -614,16 +689,30 @@ export class App {
           fail: (msg) => this.simFailed(msg),
           readout: (t, slow) => this.topbar.setSimReadout(t, slow),
         }, opts);
+        if (this.cancelStart) {
+          // Esc / Stop arrived while the world was being built: never show it.
+          s.dispose();
+          this.mode = 'edit';
+          this.info('Simulation cancelled');
+          return;
+        }
+        // The speed may have been changed while starting (start() took the old one).
+        s.setSpeed(this.speed);
         this.session = s;
         this.mode = 'simulate';
         this.vp.setGridVisible(false);
         this.banner.hide();
-        this.info(opts.paused ? 'Simulation ready (paused) · Space to run, Esc to stop' : 'Simulating · Space pauses, Esc stops');
+        const joints = s.sim.graph.joints;
+        if (joints.length > 0 && joints.every((j) => j.type === 'revolute' && j.axis === 1)) {
+          // A turntable mechanism: legitimately still, but it looks broken unless we say why.
+          this.info(`${opts.paused ? 'Simulation ready (paused)' : 'Simulating'} · every joint axis is vertical (∥ gravity), so gravity cannot turn it: drag a part to move it`);
+        } else this.info(opts.paused ? 'Simulation ready (paused) · Space to run, Esc to stop' : 'Simulating · Space pauses, Esc stops');
       } catch (e) {
         this.mode = 'edit';
         this.error(`Could not start the simulation: ${e instanceof Error ? e.message : String(e)}`, true);
       } finally {
         this.starting = null;
+        this.cancelStart = false;
         this.refreshUI();
         this.refreshHover();
       }
@@ -632,8 +721,16 @@ export class App {
     return run;
   }
 
-  /** Stop: dispose the simulation and show the model exactly as edited (camera untouched). */
+  /**
+   * Stop: dispose the simulation and show the model exactly as edited (camera untouched). While the
+   * simulation is still starting, the start is cancelled instead (play() returns to edit mode as
+   * soon as the world is built, without running it).
+   */
   stop(): void {
+    if (this.mode === 'starting') {
+      this.cancelStart = true;
+      return;
+    }
     if (this.mode !== 'simulate') return;
     this.session?.dispose();
     this.session = null;
@@ -641,6 +738,7 @@ export class App {
     this.vp.showAllParts();
     this.vp.setGridVisible(true);
     this.mode = 'edit';
+    this.info('Stopped · back to the model as edited');
     this.refreshUI();
     this.refreshHover();
   }
@@ -665,8 +763,11 @@ export class App {
     if (this.session && this.session.paused !== on) this.togglePause();
   }
 
+  /** Step (`.`): advance 1/60 s, paused. From edit mode it starts the simulation paused first; a Step
+   *  pressed while the simulation is starting waits for it, so no press is lost. */
   async stepButton(): Promise<void> {
     if (this.mode === 'edit') await this.play({ paused: true });
+    else if (this.mode === 'starting') await this.starting;
     const s = this.session;
     if (this.mode !== 'simulate' || !s) return;
     if (!s.paused) {
@@ -705,13 +806,15 @@ export class App {
       }
       return;
     }
-    if (key === 'Escape' && this.topbar.menuOpen) {
-      e.preventDefault();
-      this.topbar.closeMenus();
-      return;
-    }
+    // The open Examples menu takes arrows, Escape, Space / Enter on its items, and holds the other
+    // single keys back (tool keys must not act behind it).
+    if (this.topbar.menuKey(e)) return;
 
-    if (mod && !e.altKey) {
+    // '[', ']', '.' and '?' are matched by the character they produce: on many layouts they need
+    // Option (Mac) or AltGr (Windows: reported as Ctrl+Alt), so such a press is not a browser
+    // shortcut. Cmd/Meta combinations are always left to the browser.
+    const altChar = (e.altKey || e.getModifierState?.('AltGraph') === true) && !e.metaKey && CHAR_KEYS.has(key);
+    if (mod && !e.altKey && !altChar) {
       if (lower === 'z') {
         e.preventDefault();
         if (e.shiftKey) this.redo();
@@ -728,7 +831,10 @@ export class App {
       }
       return; // never steal other browser shortcuts
     }
-    if (e.altKey || mod) return;
+    if ((e.altKey || mod) && !altChar) return;
+
+    // Space on a keyboard-focused button / checkbox activates it (the browser's default).
+    if ((key === ' ' || key === 'Spacebar' || key === 'Enter') && isActivationTarget(e.target)) return;
 
     // Simulation keys.
     if (key === ' ' || key === 'Spacebar') {
@@ -758,7 +864,16 @@ export class App {
       this.setShowKinematics(!this.showKinematics);
       return;
     }
-    if (key === 'f' || key === 'F' || key === 'Home') return; // the viewport's own keys
+    if (key === 'f' || key === 'F') {
+      e.preventDefault();
+      this.vp.fit();
+      return;
+    }
+    if (key === 'Home') {
+      e.preventDefault();
+      this.vp.home();
+      return;
+    }
 
     // Editing keys.
     const toolKey = TOOL_KEYS[lower.toLowerCase()];

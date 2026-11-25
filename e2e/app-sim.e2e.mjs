@@ -97,14 +97,17 @@ export default async function ({ page, url, shot, assert, step }) {
         const tx = 2 * (y * v[2] - z * v[1]), ty = 2 * (z * v[0] - x * v[2]), tz = 2 * (x * v[1] - y * v[0]);
         return [v[0] + w * tx + (y * tz - z * ty) + t.p[0], v[1] + w * ty + (z * tx - x * tz) + t.p[1], v[2] + w * tz + (x * ty - y * tx) + t.p[2]];
       });
-    /** Stop, Play, Pause with the keyboard: the linkage is back near its initial pose. */
+    /**
+     * Stop with the keyboard, then start again paused at t = 0 (stepSim(0) from edit mode), so both
+     * runs below start from exactly the initial pose. (Play + Pause by keys let a wall-clock
+     * dependent number of frames run in between, which made the drag check below flaky.)
+     */
     const restartPaused = async () => {
       await page.keyboard.press('Escape');
-      await page.keyboard.press(' ');
-      await page.waitForFunction(() => window.__knap.getState().mode === 'simulate');
-      await page.keyboard.press(' ');
+      await frames(page, 1);
+      await page.evaluate(() => window.__knap.stepSim(0));
       await frames(page, 2);
-      assert((await state(page)).paused, 'paused');
+      assert((await state(page)).paused && (await page.evaluate(() => window.__knap.simInfo())).time === 0, 'paused at t = 0');
     };
 
     // Baseline: 1 s of simulated time without grabbing — the linkage falls.
@@ -182,6 +185,55 @@ export default async function ({ page, url, shot, assert, step }) {
     assert(deepEqual(await cam(page), c0), 'camera untouched');
     assert(!(await page.locator('[data-tool=pinHole]').isDisabled()), 'tools enabled');
     await shot('app-sim-stopped');
+  });
+
+  await step('input while the simulation is starting is not lost', async () => {
+    const key = (k) => `window.dispatchEvent(new KeyboardEvent('keydown', { key: ${JSON.stringify(k)}, bubbles: true, cancelable: true }));`;
+    const waitNotStarting = () => page.waitForFunction(() => window.__knap.getState().mode !== 'starting', null, { timeout: 60000 });
+    // Esc right after Space cancels the start: back to edit, model untouched.
+    const atEsc = await page.evaluate(`(() => { ${key(' ')} const a = window.__knap.getState().mode; ${key('Escape')} return a; })()`);
+    await waitNotStarting();
+    assert(atEsc === 'starting', `Space then Esc in the same task: Esc arrived while starting (${atEsc})`);
+    assert((await state(page)).mode === 'edit', `Esc while starting cancels the simulation (${(await state(page)).mode})`);
+    assert(deepEqual(await model(page), edited), 'model untouched');
+    // A speed picked while starting is the speed the simulation runs at.
+    const sp0 = (await state(page)).speed;
+    await page.evaluate(`(() => { ${key(' ')} document.querySelector('[data-speed="1"]').click(); })()`);
+    await waitNotStarting();
+    const info = await page.evaluate(() => window.__knap.simInfo());
+    assert((await state(page)).mode === 'simulate' && info.speed === 1 && (await state(page)).speed === 1, `speed set while starting applies (sim ${info.speed}, app ${(await state(page)).speed})`);
+    await page.keyboard.press('Escape');
+    await frames(page, 1);
+    await press(page, `[data-speed="${sp0}"]`);
+    // Two Steps from edit mode step twice.
+    await page.evaluate(`(() => { ${key('.')} ${key('.')} })()`);
+    await waitNotStarting();
+    await page.waitForFunction(() => (window.__knap.simInfo()?.time ?? 0) > 0.03, null, { timeout: 20000 });
+    const t2 = (await page.evaluate(() => window.__knap.simInfo())).time;
+    assert(Math.abs(t2 - 2 / 60) < 1e-9 && (await state(page)).paused, `two Steps from edit = 2/60 s, paused (${t2})`);
+    await page.keyboard.press('Escape');
+    await frames(page, 1);
+    assert((await state(page)).mode === 'edit', 'stopped');
+  });
+
+  await step('Play on a mechanism whose joints are all vertical says why nothing moves', async () => {
+    const flat = {
+      version: 1, rootPartId: 1, nextPartId: 4,
+      parts: [
+        { id: 1, color: '#5f6468', cells: [0, 1, 2].map((x) => ({ x, y: 0, z: 0, kind: 'pinHole', axis: 1 })) },
+        { id: 2, color: '#d9c9a3', cells: [0, 1].map((y) => ({ x: 2, y, z: 0, kind: 'pin', axis: 1 })) },
+        { id: 3, color: '#3b74c4', cells: [2, 3, 4, 5, 6].map((x) => ({ x, y: 1, z: 0, kind: 'pinHole', axis: 1 })) },
+      ],
+    };
+    await page.evaluate((m) => window.__knap.setModel(m), flat);
+    await page.keyboard.press(' ');
+    await page.waitForFunction(() => window.__knap.getState().mode === 'simulate', null, { timeout: 60000 });
+    const msg = (await status(page)).message;
+    assert(/every joint axis is vertical/.test(msg), `status explains the vertical joint axes: "${msg}"`);
+    await page.keyboard.press('Escape');
+    await frames(page, 1);
+    await page.evaluate((m) => window.__knap.setModel(m), edited);
+    assert(deepEqual(await model(page), edited), 'four-bar back');
   });
 
   await step('a failing simulation stops cleanly with a message', async () => {

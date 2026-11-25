@@ -116,7 +116,11 @@ describe('build scenarios (§7.3)', () => {
     const p2 = hover(m, 1, [1, 0, 0], 4, st('pin'));
     expect(p2.action).toBe('insert');
     expect(p2.valid).toBe(true);
-    const r = hover(m, 1, [0, 0, 0], 5, st('pin')).apply(m);
+    // Without Shift the pin would go on through B's hole behind (deep insert, DEVIATIONS §7);
+    // Shift inserts a 1-cell pin into A only, so B's mouth can then join it.
+    const deep = hover(m, 1, [0, 0, 0], 5, st('pin'));
+    expect(deep.extraCells).toMatchObject([{ x: 0, y: 0, z: 1 }]);
+    const r = hover(m, 1, [0, 0, 0], 5, st('pin', true)).apply(m);
     m = r.model;
     const pinId = r.partId;
     // now B's hole from +Z: behind it (z=0) is the pin -> the pin is lengthened
@@ -131,7 +135,7 @@ describe('build scenarios (§7.3)', () => {
     expect(partById(m3, pinId)!.cells.length).toBe(2);
   });
 
-  it('slide a new beam onto a protruding pin: side → Sleeve; end → Extend (spec order), Shift+end → Sleeve', () => {
+  it('slide a new beam onto a protruding pin: side → Sleeve; end → Sleeve (DEVIATIONS §7), [R] → Extend, Shift+end → Sleeve', () => {
     const m = modelOf([C(0, 0, 0, 'pinHole', 2)], [C(0, 0, 0, 'pin', 2), C(0, 0, 1, 'pin', 2)]);
     const side = hover(m, 2, [0, 0, 1], 0, st('pinHole'));
     expect(side.action).toBe('sleeve');
@@ -139,7 +143,10 @@ describe('build scenarios (§7.3)', () => {
     expect(side.cell).toMatchObject({ x: 0, y: 0, z: 1, kind: 'pinHole', axis: 2 });
     expect(side.description).toBe('New part · sleeve pin hole ∥ Z onto part 2');
     expect(validateModel(side.apply(side.baseModel).model)).toEqual([]);
-    const end = hover(m, 2, [0, 0, 1], 4, st('pinHole'));
+    const end0 = hover(m, 2, [0, 0, 1], 4, st('pinHole'));
+    expect(end0.action).toBe('sleeve');
+    expect(end0.cell).toMatchObject({ z: 1, axis: 2 });
+    const end = hover(m, 2, [0, 0, 1], 4, cycleOrientation(st('pinHole'), end0));
     expect(end.action).toBe('extend');
     expect(end.cell).toMatchObject({ z: 2 });
     expect(end.cell!.axis).not.toBe(2);
@@ -208,13 +215,13 @@ describe('build scenarios (§7.3)', () => {
 });
 
 // ---------------------------------------------------------------------------------------------
-// Reference resolver from §7.3 (+ DEVIATIONS §7 insert-join) and a random-walk fuzz
+// Reference resolver from §7.3 (+ DEVIATIONS §7 insert-join, sleeve-first on a rod end) and a random-walk fuzz
 
 function refValid(m: Model, partId: number | null, pos: Vec3i, kind: Kind): Axis[] {
   return ([0, 1, 2] as Axis[]).filter((a) => canAddCell(m, partId, makeCell(pos[0], pos[1], pos[2], kind, a)).ok);
 }
 
-function refAction(m: Model, P: number, Cc: Cell, dir: Dir, kind: Kind, newPart: boolean): { action: string; valid: Axis[]; target: number | null } | null {
+function refAction(m: Model, P: number, Cc: Cell, dir: Dir, kind: Kind, newPart: boolean, axisPref: Axis | null = null): { action: string; valid: Axis[]; target: number | null } | null {
   const n = DIRS[dir]!;
   const T: Vec3i = [Cc.x + n[0], Cc.y + n[1], Cc.z + n[2]];
   const cp: Vec3i = [Cc.x, Cc.y, Cc.z];
@@ -238,6 +245,14 @@ function refAction(m: Model, P: number, Cc: Cell, dir: Dir, kind: Kind, newPart:
   };
   if (!newPart) {
     const v = refValid(m, P, T, kind);
+    // DEVIATIONS §7: a hole tool on a rod's axial end sleeves first; Extend's perpendicular
+    // orientations follow in the same [R] options.
+    if (isHole(kind) && isMale(Cc.kind) && axisOfDir(dir) === Cc.axis) {
+      const sl = sleeve();
+      const ex = v.filter((a) => a !== Cc.axis);
+      // the axis chosen with [R] tells which: a perpendicular one shows Extend
+      if (sl) return axisPref !== null && ex.includes(axisPref) ? { action: 'extend', valid: [Cc.axis, ...ex], target: P } : { action: 'sleeve', valid: [Cc.axis, ...ex], target: null };
+    }
     if (v.length) return { action: 'extend', valid: v, target: P };
     return insert() ?? sleeve();
   }
@@ -280,14 +295,15 @@ describe('fuzz: random walks through resolveBuild / resolveErase', () => {
           const cell = part.cells[ci]!;
           const dir = Math.floor(R() * 6) as Dir;
           p = resolveBuild(m, { partId: part.id, cellIndex: ci, dir }, null, s);
-          const ref = refAction(m, part.id, cell, dir, tool as Kind, s.newPart);
+          const ref = refAction(m, part.id, cell, dir, tool as Kind, s.newPart, s.axisPref);
+          const sleeveOrExtend = !s.newPart && isHole(tool as Kind) && isMale(cell.kind) && axisOfDir(dir) === cell.axis && p.options[0] === cell.axis && p.options.length > 1;
           if (ref) {
             expect(p.valid).toBe(true);
             expect(p.action).toBe(ref.action);
             expect([...p.options].sort()).toEqual([...ref.valid].sort());
             expect(p.targetPartId ?? null).toBe(ref.target);
             // natural default (§7.3) for extend / newAdjacent
-            if (p.action === 'extend' || p.action === 'newAdjacent') {
+            if ((p.action === 'extend' && !sleeveOrExtend) || p.action === 'newAdjacent') {
               const n = DIRS[dir]!;
               const T: Vec3i = [cell.x + n[0], cell.y + n[1], cell.z + n[2]];
               const occ = cellsAt(m, T).filter((e) => p.action === 'newAdjacent' || e.partId !== part.id);
@@ -306,7 +322,8 @@ describe('fuzz: random walks through resolveBuild / resolveErase', () => {
               const p2 = resolveBuild(m, { partId: part.id, cellIndex: ci, dir }, null, s2);
               const i = p.options.indexOf(shown);
               expect(p2.cell!.axis).toBe(p.options[(i + 1) % p.options.length]);
-              expect(p2.action).toBe(p.action);
+              if (sleeveOrExtend) expect(p2.action).toBe(p2.cell!.axis === cell.axis ? 'sleeve' : 'extend');
+              else expect(p2.action).toBe(p.action);
             }
           } else {
             expect(p.valid).toBe(false);

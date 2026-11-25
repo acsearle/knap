@@ -94,8 +94,17 @@ export function restoreAutosave(storage: StorageLike): RestoreResult {
   } catch {
     // best effort
   }
-  const first = r.message.split('\n')[0];
-  return { model: null, message: `The autosaved model could not be restored and was set aside (${first})` };
+  return { model: null, message: `The autosaved model could not be restored and was set aside (${firstProblem(r.message)})` };
+}
+
+/**
+ * One line from a parse message: "Invalid knap model (2 problems):\n  - a\n  - b" → "Invalid knap
+ * model (2 problems): a"; a one-line message is returned as is.
+ */
+export function firstProblem(message: string): string {
+  const [head = '', ...rest] = message.split('\n');
+  const first = rest.map((l) => l.replace(/^\s*-\s*/, '').trim()).find(Boolean);
+  return first ? `${head.replace(/:\s*$/, '')}: ${first}` : head;
 }
 
 /** Remove the autosave (e.g. after File ▸ New, if the app wants a clean slate). Never throws. */

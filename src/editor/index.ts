@@ -77,6 +77,9 @@
 // resolveBuild(model, pick, grid, state) → Proposal. pick (any { partId, cellIndex, dir }) wins
 // over grid. For hover on cell C of part P through face n (T = C + n):
 //   without newPart:  Extend (add to P at T) → Insert → Sleeve
+//                     except a hole tool on a rod's AXIAL end face (DEVIATION): Sleeve first when it
+//                     is valid, and Extend's orientations (all perpendicular to the rod) follow in
+//                     the same [R] options — the axis shown tells which action ([R] may switch it)
 //   with newPart:     Insert → Sleeve → New adjacent (new part at T)
 //   no cell, grid:    New on grid (new part at [x, 0, z])
 // The first action with at least one valid orientation wins. Insert is considered only for a male
@@ -93,10 +96,17 @@
 // already-placed hole and closed loops (four-bars) could not be built. With newPart (Shift / [N])
 // Insert always makes a new part.
 //
+// Deep insert (DEVIATION): without newPart and without a join, if the cells C − n, C − 2n, … each
+// hold exactly one cell, an empty hole coaxial with C that the male fits (any part), the new male
+// part runs through all of them: proposal.cell is the cell at C and proposal.extraCells the rest
+// (same kind and axis; [] otherwise). "New part · insert pin ∥ Z into part 2 · 2 long, through part 1".
+// So two stacked beams are pinned together with one click. Shift / [N] gives the 1-cell insert.
+//
 // Orientation candidates, natural default first (then the remaining axes cyclically):
 //   male tool, Extend / New adjacent: ∥ n;  hole tool: C's axis if C is a hole, else X, Y, Z order;
-//   Insert / Sleeve: the hole's / rod's axis only;  New on grid: Y first (both classes: holes
-//   lying flat on the grid, rods standing on it), then Z, X.
+//   Insert / Sleeve: the hole's / rod's axis only;  New on grid: Z first for every kind (beams
+//   stand upright, so a joint built with the defaults turns about a horizontal axis and swings
+//   under gravity; rods lie along Z and fit those holes), then X, Y.
 //   If T already holds exactly one cell of another part of the opposite class (male for a hole
 //   tool or vice versa), its axis is moved to the front (coaxial preference).
 // proposal.options = the valid candidates in that order.
@@ -118,12 +128,14 @@
 // cleared by selectTool to another tool).
 //
 // Proposal fields: baseModel, action, valid, reason?, cell (ghost incl. axis; null for 'none'),
-// targetPartId? (part receiving the cell when no new part is created), hoverPartId?, joins,
+// extraCells (deep insert's further cells, else []), targetPartId? (part receiving the cell when no
+// new part is created), hoverPartId?, joins,
 // createsPart, color (of a new part, else null), ghostColor (receiving part's colour for extend /
 // join, else the new part's colour; '' for 'none'), highlight { pos, dir } (hovered face; for New
 // on grid the −Y face of the grid cell), description (status-bar sentence; invalid:
 // "<what> — <reason>"), options, orientationHint ("[R] 2/3" or ''), shiftHint (without newPart:
-// "Shift: <description>" when Shift would do a different valid thing, else ''),
+// "Shift: <description>" when Shift would do a different valid thing — another action, join, or
+// number of cells — else ''),
 // apply(current) → { model, partId } (throws if invalid or current !== baseModel).
 //
 // resolveErase(model, pick) → { baseModel, valid, partId, cellIndex, cell, highlight, description,

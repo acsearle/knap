@@ -108,6 +108,8 @@ export interface HoverCell {
 
 export interface Ghost {
   cell: Cell;
+  /** Further cells of the same prospective part (a deep insert); drawn fused with `cell`. */
+  extra?: readonly Cell[];
   valid: boolean;
 }
 
@@ -565,7 +567,8 @@ export class Viewport {
   }
 
   /**
-   * Translucent ghost of a prospective sub-part (its real one-cell geometry), accent-coloured
+   * Translucent ghost of a prospective sub-part (its real geometry; with `extra`, of the whole
+   * prospective part), accent-coloured
    * when valid, red when not; the part of it hidden behind other geometry shows fainter.
    */
   setGhost(g: Ghost | null): void {
@@ -575,7 +578,8 @@ export class Viewport {
       this.requestRender();
       return;
     }
-    const part: Part = { id: -1, color: '#ffffff', cells: [{ ...g.cell }] };
+    const part: Part = { id: -1, color: '#ffffff', cells: [{ ...g.cell }, ...(g.extra ?? []).map((c) => ({ ...c }))] };
+    const origin = partOrigin(part);
     const sig = partSignature(part);
     if (!this.ghostGeo || this.ghostGeo.sig !== sig) {
       const entry = this.acquireGeometry(sig, part);
@@ -586,7 +590,7 @@ export class Viewport {
     }
     const color = g.valid ? this.opts.accent : '#e0322b';
     for (const m of [this.ghostVisible, this.ghostHidden]) {
-      m.position.set(g.cell.x, g.cell.y, g.cell.z);
+      m.position.set(origin[0], origin[1], origin[2]);
       (m.material.uniforms.uColor!.value as THREE.Color).set(color);
       m.visible = true;
     }
@@ -725,6 +729,16 @@ export class Viewport {
   /** Viewport size in CSS px. */
   get size(): { width: number; height: number; pixelRatio: number } {
     return { width: this.cssW, height: this.cssH, pixelRatio: this.dpr };
+  }
+
+  /**
+   * Read the container's size now instead of waiting for the ResizeObserver. Call it after
+   * putting the container into the page and before a first home() / fit(), so the fit uses the
+   * real aspect (a resize keeps the framed world rectangle, so a fit at the placeholder 1×1 size
+   * would stay too loose).
+   */
+  updateSize(): void {
+    this.syncSize(false);
   }
 
   // ========================================================================================
@@ -1334,8 +1348,31 @@ export class Viewport {
       this.requestRender();
     });
 
+    // End a gesture whose release will never come (capture lost to a native dialog, a window
+    // switch mid-drag, …): nothing is clicked, a host drag is ended as cancelled.
+    const abort = (e: PointerEvent): void => {
+      const g = this.gesture;
+      if (!g) return;
+      this.gesture = null;
+      try {
+        c.releasePointerCapture(g.id);
+      } catch {
+        /* ignore */
+      }
+      if (g.kind === 'host') this.dragHandler?.end(this.pointerEvent(e, 0, this.local(e)), true);
+    };
+    on(c, 'lostpointercapture', (e) => {
+      if (this.gesture && e.pointerId === this.gesture.id) abort(e);
+    });
+
     on(c, 'pointerdown', (e) => {
-      if (this.gesture) return;
+      const stale = this.gesture;
+      if (stale) {
+        // A mouse has one pointer (extra buttons arrive as moves), so a new press means the
+        // release of the previous one was lost: drop that gesture and start this one.
+        if (e.pointerType !== 'mouse' && e.pointerId !== stale.id) return;
+        abort(e);
+      }
       const [x, y] = this.local(e);
       try {
         c.setPointerCapture(e.pointerId);
@@ -1365,6 +1402,8 @@ export class Viewport {
 
     on(c, 'pointermove', (e) => {
       const [x, y] = this.local(e);
+      // A mouse moving with no button held cannot be mid-drag: its release was lost.
+      if (this.gesture && e.pointerType === 'mouse' && e.buttons === 0 && e.pointerId === this.gesture.id) abort(e);
       const g = this.gesture;
       if (!g) {
         const cube = this.cubeAt(x, y);

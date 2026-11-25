@@ -186,6 +186,56 @@ export class TopBar {
     if (open) (this.examplesMenu.querySelector('button') as HTMLButtonElement | null)?.focus({ preventScroll: true });
   }
 
+  /**
+   * Keyboard while the Examples menu is open (role=menu): ArrowDown / ArrowUp / Home / End move
+   * between the items, Escape closes it, Space / Enter on a focused item are left to the browser
+   * (they activate it), Tab closes it and moves on. Every other key without Ctrl / ⌘ / Alt is held
+   * back so shortcuts do not act behind the menu; a key with one closes the menu and is not taken.
+   * Returns true when the key was the menu's (the caller then does nothing else with it).
+   */
+  menuKey(e: KeyboardEvent): boolean {
+    if (this.examplesMenu.hidden) return false;
+    if (e.ctrlKey || e.metaKey || e.altKey) {
+      this.closeMenus();
+      return false;
+    }
+    const items = Array.from(this.examplesMenu.querySelectorAll<HTMLButtonElement>('[role=menuitem]'));
+    const i = items.indexOf(document.activeElement as HTMLButtonElement);
+    const focus = (j: number): void => {
+      e.preventDefault();
+      items[(j + items.length) % items.length]?.focus({ preventScroll: true });
+    };
+    switch (e.key) {
+      case 'ArrowDown':
+        focus(i + 1);
+        break;
+      case 'ArrowUp':
+        focus(i < 0 ? -1 : i - 1);
+        break;
+      case 'Home':
+        focus(0);
+        break;
+      case 'End':
+        focus(-1);
+        break;
+      case 'Escape':
+        e.preventDefault();
+        if (i >= 0) items[i]!.blur();
+        this.closeMenus();
+        break;
+      case 'Tab':
+        this.closeMenus();
+        break;
+      case ' ':
+      case 'Enter':
+        if (i < 0) e.preventDefault(); // nothing focused in the menu: nothing to activate
+        break;
+      default:
+        break;
+    }
+    return true;
+  }
+
   closeMenus(): void {
     if (this.examplesMenu.hidden) return;
     this.examplesMenu.hidden = true;

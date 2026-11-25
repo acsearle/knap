@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { emptyModel, validateModel } from '../../src/core';
 import type { Dir, Kind, Model, Vec3i } from '../../src/core';
 import { analyze } from '../../src/core/kinematics';
-import { cycleOrientation, initialToolState, kinematicsSummary, pickCell, pickGrid, resolveBuild, selectTool } from '../../src/editor';
+import { initialToolState, kinematicsSummary, pickCell, pickGrid, resolveBuild, selectTool } from '../../src/editor';
 import type { BuildAction, Ray, ToolState } from '../../src/editor';
 import { faceRay } from './helpers';
 
@@ -32,13 +32,12 @@ describe('scripted four-bar', () => {
     /** Click face `dir` of the cell at `pos` (u: off-axis offset so a shared hole is picked, not its pin). */
     const face = (pos: Vec3i, dir: Dir, u = 0) => faceRay(pos, dir, u, 0);
 
-    // Ground beam (0..6, 0, 0), holes ∥ Z: first cell on the grid, [R] once (Y → Z), then extend.
+    // Ground beam (0..6, 0, 0), holes ∥ Z (the New-on-grid default), then extend.
     tool('pinHole');
     const down: Ray = { origin: [0.1, 10, -0.2], dir: [0, -1, 0] };
     const first = resolveBuild(model, pickCell(model, down), pickGrid(down), s);
     expect(first.action).toBe('newOnGrid');
-    expect(first.cell!.axis).toBe(1);
-    s = cycleOrientation(s, first);
+    expect(first.cell!.axis).toBe(2);
     const ground = click(down, 'newOnGrid');
     for (let x = 0; x < 6; x++) click(face([x, 0, 0], 0), 'extend', ground);
 
@@ -72,12 +71,11 @@ describe('scripted four-bar', () => {
     click(face([4, 0, 1], 2), 'extend', rocker);
     click(face([4, 1, 1], 2), 'extend', rocker);
 
-    // Close the loop at (4,2): a pin into the rocker's hole from behind, then pushed on through
-    // the coupler's hole from the front (insert joins the pin already behind it).
+    // Close the loop at (4,2): one click on the coupler's front mouth pushes a 2-long pin through
+    // the coupler's hole and on into the rocker's hole stacked behind it (deep insert).
     tool('pin');
-    const pin4 = click(face([4, 2, 1], 5, 0.4), 'insert', rocker);
-    expect(click(face([4, 2, 2], 4, 0.4), 'insert', coupler)).toBe(pin4);
-    expect(log.at(-1)).toBe(`Extend part ${pin4} · insert pin ∥ Z into part ${coupler}`);
+    const pin4 = click(face([4, 2, 2], 4, 0.4), 'insert', coupler);
+    expect(log.at(-1)).toBe(`New part · insert pin ∥ Z into part ${coupler} · 2 long, through part ${rocker}`);
 
     expect(model.parts.map((p) => p.cells.length)).toEqual([7, 2, 3, 2, 5, 2, 5, 2]);
     const g = analyze(model);

@@ -12,16 +12,12 @@ export default async function ({ page, url, shot, assert, step }) {
     assert(m.parts.length === 0, `New gives an empty model (${m.parts.length} parts)`);
   });
 
-  await step('first pin hole on the grid, [R] to lie it along Z', async () => {
+  await step('first pin hole on the grid: ∥ Z by default (the beam stands upright)', async () => {
     await page.keyboard.press('1');
     assert((await state(page)).tool === 'pinHole', 'key 1 selects the pin-hole tool');
     await hover(page, await gridPos(page, 0, 0));
-    let st = await status(page);
-    assert(/New part on grid · pin hole ∥ Y/.test(st.hint), `grid hover offers a new pin hole ∥ Y: "${st.hint}"`);
-    await page.keyboard.press('r');
-    await frames(page, 1);
-    st = await status(page);
-    assert(/pin hole ∥ Z/.test(st.hint), `[R] cycles to ∥ Z: "${st.hint}"`);
+    const st = await status(page);
+    assert(/New part on grid · pin hole ∥ Z/.test(st.hint), `grid hover offers a new pin hole ∥ Z: "${st.hint}"`);
     await shot('app-build-ghost');
     await clickAt(page, await gridPos(page, 0, 0));
     const m = await model(page);
@@ -48,16 +44,23 @@ export default async function ({ page, url, shot, assert, step }) {
     assert(m.parts.find((p) => p.id === 2).cells.length === 2, 'pin lengthened to 2 cells');
   });
 
-  await step('sleeve a new beam onto the protruding pin (Shift = new part)', async () => {
+  await step('sleeve a new beam onto the protruding pin (the default on a rod end)', async () => {
     await page.keyboard.press('1');
-    // Without Shift the click would extend the pin part with a hole; the hint says what Shift does.
     const m0 = await model(page);
     const ci = m0.parts.find((p) => p.id === 2).cells.findIndex((c) => c.z === 1);
     const p = await page.evaluate(([a, b]) => window.__knap.clientPosOfCellFace(a, b, 4), [2, ci]);
     await hover(page, p);
-    const st = await status(page);
-    assert(/Shift: New part · sleeve pin hole ∥ Z onto part 2/.test(st.aux), `Shift hint offers the sleeve: "${st.aux}"`);
-    await clickAt(page, p, { shift: true });
+    let st = await status(page);
+    assert(/^New part · sleeve pin hole ∥ Z onto part 2/.test(st.hint) && /\[R\] 1\/3/.test(st.aux), `a click sleeves; [R] offers the Extend orientations: "${st.hint}" "${st.aux}"`);
+    await page.keyboard.press('r');
+    await frames(page, 1);
+    st = await status(page);
+    assert(/^Extend part 2 · pin hole ∥ X/.test(st.hint) && /Shift: New part · sleeve/.test(st.aux), `[R] → Extend ∥ X, Shift would sleeve: "${st.hint}" "${st.aux}"`);
+    await page.keyboard.press('r');
+    await page.keyboard.press('r');
+    await frames(page, 1);
+    assert(/^New part · sleeve pin hole ∥ Z/.test((await status(page)).hint), '[R] wraps back to the sleeve');
+    await clickAt(page, p);
     const m = await model(page);
     const link = m.parts.find((q) => q.id === 3);
     assert(link && deepEqual(link.cells, [{ x: 2, y: 0, z: 1, kind: 'pinHole', axis: 2 }]), `new part 3 sleeved at (2,0,1): ${JSON.stringify(m.parts)}`);

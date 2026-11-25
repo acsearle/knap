@@ -56,19 +56,21 @@ describe('free spin (known limitation, DEVIATIONS §5)', () => {
   // the body's f32 rotation quaternion, whose norm after Rapier's normalisation is ≈ 1 + 6.7e-8 on
   // average, so ω grows by ≈ 1e-7 per substep (independent of ω; present on a free body without
   // any joint). Jointed bodies run 240 substeps per 1/480 s step, so a freely spinning link speeds
-  // up by roughly 0.3–1.4 % of ω per second; unjointed bodies run 30 and drift ≈ 8× less. These are
-  // regression guards at ≈ 1.5× the measured drift, not the physical expectation (0 %).
+  // up by roughly 0.3–1.4 % of ω per second; unjointed bodies run 30 and drift ≈ 8× less. The
+  // energy guard (sim.ts guardEnergy) caps the gain at 1 % of the peak kinetic energy, i.e. ≈ 0.5 %
+  // of ω, whatever the run length; the bound 0.75 % is that cap plus margin.
   const block: Cell[] = [];
   for (let x = 0; x < 3; x++) for (let y = 0; y < 3; y++) for (let z = 0; z < 3; z++) block.push(cell([x + 20, y, z], 'pinHole', 2));
   const spinCases = [
-    { label: 'symmetric axle in a pin hole (cylindrical)', parts: () => [holes([0, 0, 0], [1, 0, 0], 2), axle([0, 0, -2], [0, 0, 2])], pivot: [0, 0, 0] as Vec3, w0: 100, bound: 0.06 },
-    { label: 'centred 5-hole link on a pin', parts: () => [beam([0, 0, 0], [0, -1, 0]), beam([-2, 0, 1], [2, 0, 1]), pin([0, 0, 0], [0, 0, 1])], pivot: [0, 0, 1] as Vec3, w0: 100, bound: 0.1 },
-    { label: 'end-pinned 5-hole link', parts: () => [beam([0, 0, 0], [0, -1, 0]), beam([0, 0, 1], [4, 0, 1]), pin([0, 0, 0], [0, 0, 1])], pivot: [0, 0, 1] as Vec3, w0: 30, bound: 0.02 },
-    // Unjointed bodies (freeSolverIterations = 30 substeps): measured +1.2 % and +0.84 % in 5 s.
+    { label: 'symmetric axle in a pin hole (cylindrical)', parts: () => [holes([0, 0, 0], [1, 0, 0], 2), axle([0, 0, -2], [0, 0, 2])], pivot: [0, 0, 0] as Vec3, w0: 100, bound: 0.0075 },
+    { label: 'centred 5-hole link on a pin', parts: () => [beam([0, 0, 0], [0, -1, 0]), beam([-2, 0, 1], [2, 0, 1]), pin([0, 0, 0], [0, 0, 1])], pivot: [0, 0, 1] as Vec3, w0: 100, bound: 0.0075 },
+    { label: 'end-pinned 5-hole link', parts: () => [beam([0, 0, 0], [0, -1, 0]), beam([0, 0, 1], [4, 0, 1]), pin([0, 0, 0], [0, 0, 1])], pivot: [0, 0, 1] as Vec3, w0: 30, bound: 0.0075 },
+    // Unjointed bodies (freeSolverIterations = 30 substeps): +1.2 % and +0.84 % in 5 s without the guard.
     // The block's inertia is isotropic, so Rapier's principal frame is arbitrary and the f32
-    // round trip also leaks ≈ 1.3e-3 rad/s into the other axes (bound 2e-3).
-    { label: 'free 3×3×3 block (no joint)', parts: () => [beam([0, 0, 0], [1, 0, 0]), block], pivot: null, w0: 100, bound: 0.018, offAxis: 2e-3 },
-    { label: 'free 5-hole beam (no joint)', parts: () => [beam([0, 0, 0], [1, 0, 0]), beam([20, 0, 0], [24, 0, 0])], pivot: null, w0: 100, bound: 0.0125 },
+    // round trip also leaks 0.5–2.5e-3 rad/s into the other axes; it wanders with the step count
+    // (sampled every 0.5 s over 5 s, with or without the energy guard), bound 3e-3.
+    { label: 'free 3×3×3 block (no joint)', parts: () => [beam([0, 0, 0], [1, 0, 0]), block], pivot: null, w0: 100, bound: 0.0075, offAxis: 3e-3 },
+    { label: 'free 5-hole beam (no joint)', parts: () => [beam([0, 0, 0], [1, 0, 0]), beam([20, 0, 0], [24, 0, 0])], pivot: null, w0: 100, bound: 0.0075 },
   ];
   for (const c of spinCases)
     it(`${c.label}: ω drift over 5 s without gravity stays within ${c.bound * 100}%`, async () => {

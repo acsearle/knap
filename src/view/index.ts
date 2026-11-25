@@ -25,6 +25,8 @@
 //           down to 1.5 then 1 when a side would exceed min(8192, MAX_TEXTURE_SIZE) or the ID
 //           buffer 4096² texels ≈ 335 MB), animationMs=250 }
 //   readonly canvas, container, renderer;  size → { width, height, pixelRatio } (CSS px)
+//   updateSize()                    read the container size now (call after attaching a container
+//                                   that was created detached, before the first home() / fit())
 //
 // MODEL
 //   setModel(model)                 Show a Model. Per-part diff: geometry is rebuilt only for parts
@@ -47,7 +49,8 @@
 //                                   lightening (reads on every part colour); getSelection()
 //   setHoverFace({cell:[x,y,z], dir: Dir 0..5, color?} | null)   quad on that face of the cell cube
 //   setHoverCell({cell:[x,y,z], color?='#e0322b'} | null)        whole cell cube (erase tool)
-//   setGhost({cell: Cell, valid} | null)   translucent real geometry of a one-cell sub-part; accent
+//   setGhost({cell: Cell, extra?: Cell[], valid} | null)   translucent real geometry of a one-cell
+//                                   sub-part (with extra: of that multi-cell new part); accent
 //                                   when valid, red when not; parts of it behind geometry are fainter
 //   setGridVisible(bool)            faint grid on y = −½ (cell boundaries) + coloured axis lines
 //                                   (x=0 blue, z=0 red); hide while simulating
@@ -110,6 +113,8 @@
 //                                   with the event at the *press* position; true → the host owns
 //                                   the drag (move/end), false → it becomes an orbit. Use it to
 //                                   grab bodies in simulate mode.
+//   A gesture whose release is lost (lostpointercapture, a mouse move with no button held, or a
+//   new mouse press while it runs) is dropped: no click, a host drag ends with cancelled = true.
 //   ViewportPointerEvent = { x, y, clientX, clientY, ray, button (-1 for hover), buttons,
 //                            shiftKey, ctrlKey, altKey, metaKey, pointerType }
 //   Modifier-only changes (e.g. Shift pressed while hovering) produce no event: re-evaluate the

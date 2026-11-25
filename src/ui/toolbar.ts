@@ -25,6 +25,7 @@ interface ToolDef {
   icon: string;
 }
 
+/** Toolbar order, labels and shortcuts: the one list of tools in the UI (keys: editor TOOL_KEYS). */
 export const TOOL_DEFS: readonly ToolDef[] = [
   { tool: 'select', label: 'Select', key: 'V', icon: ICONS.select },
   { tool: 'pinHole', label: 'Pin hole', key: '1', icon: ICONS.pinHole },

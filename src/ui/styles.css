@@ -1,4 +1,14 @@
 /* knap UI — compact, neutral, tool-like. Plain CSS, no framework. */
+/* Every status sentence names an axis as "∥ X". The system UI fonts draw U+2225 as a short, faint
+   tick; take just that one character from an installed font that draws it full height (math /
+   symbol fonts on macOS, Windows and Linux). Without one, the next font in --font is used. */
+@font-face {
+  font-family: 'knap-parallel';
+  src: local('Arial Unicode MS'), local('ArialUnicodeMS'), local('STIX Two Math'), local('Cambria Math'),
+    local('Segoe UI Symbol'), local('DejaVu Sans'), local('Noto Sans Math');
+  unicode-range: U+2225;
+}
+
 :root {
   --bg: #f7f7f5;
   --chrome: #efefec;
@@ -16,7 +26,7 @@
   --warn: #a86400;
   --warn-soft: #fdf1dc;
   --radius: 5px;
-  --font: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font: 'knap-parallel', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   color-scheme: light;
 }
@@ -281,6 +291,8 @@ body.busy, body.busy * { cursor: progress !important; }
 .inspector .palette { flex-wrap: wrap; }
 .inspector .actions { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; }
 .inspector .actions .btn { width: 100%; justify-content: flex-start; border-color: var(--line); background: #fff; }
+.inspector .actions .row { display: flex; gap: 4px; }
+.inspector .actions .row .btn { flex: 1 1 0; width: auto; min-width: 0; }
 .inspector .actions .btn:hover:not(:disabled) { border-color: #8db6ec; background: #f4f7fb; }
 .inspector .hint { margin-top: 9px; color: var(--muted); font-size: 11px; line-height: 1.6; }
 .inspector .hint kbd { font-size: 9.5px; padding: 1px 3px; }
@@ -301,13 +313,16 @@ body.simulating .inspector { opacity: 0.6; }
 }
 .statusbar > div { padding: 0 8px; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .statusbar > div + div { border-left: 1px solid var(--line); }
-.st-hover { flex: 0 1 300px; color: var(--muted); }
-.st-hint { flex: 1 1 auto; }
+/* When space is short the hover and message cells give way, not the hint, which carries the
+   [R] / Shift alternatives; the hint is cut (with its full text as a tooltip) only beyond 60 %. */
+.st-hover { flex: 0 4 300px; color: var(--muted); }
+.st-hint { flex: 1 0 auto; max-width: 60%; }
 .st-hint.invalid { color: var(--danger); }
 .st-hint .aux { color: var(--muted); margin-left: 8px; }
-.st-msg { flex: 0 1 380px; color: var(--muted); }
+.st-msg { flex: 0 8 380px; color: var(--muted); }
+.st-warn { flex: 0 0 auto; color: var(--warn); font-weight: 500; cursor: help; }
 .st-msg.error { color: var(--danger); font-weight: 500; }
-.st-counts { flex: 0 0 auto; color: var(--muted); font-variant-numeric: tabular-nums; }
+.st-counts { flex: 0 0 auto; margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; }
 .statusbar > div:empty { display: none; }
 
 /* ---------------------------------------------------------------- dialogs / popovers */

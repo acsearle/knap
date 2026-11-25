@@ -288,6 +288,11 @@ describe('canAddCell', () => {
     expect(reason(canAddCell(m, 1, C(3, 0, 0, 'pin', 2)))).toMatch(/would not attach/); // side on wall
     expect(reason(canAddCell(m, 2, C(9, 1, 0, 'pinHole', 2)))).toMatch(/would not attach/); // hole on rod side
     expect(reason(canAddCell(m, 2, C(11, 0, 0, 'pin', 2)))).toMatch(/would not attach/); // perpendicular rod
+    // …and says why
+    expect(reason(canAddCell(m, 1, C(0, 0, 1, 'pin', 2)))).toMatch(/\(a rod’s end on the mouth of a coaxial hole does not hold\)$/);
+    expect(reason(canAddCell(m, 1, C(3, 0, 0, 'pin', 2)))).toMatch(/\(a rod’s side holds nothing\)$/);
+    expect(reason(canAddCell(m, 2, C(9, 1, 0, 'pinHole', 2)))).toMatch(/\(a rod’s side holds nothing\)$/);
+    expect(reason(canAddCell(m, 2, C(11, 0, 0, 'pin', 2)))).toMatch(/\(a rod’s side holds nothing\)$/);
   });
   it('world occupancy: compatible mates allowed, others rejected with reason', () => {
     // new part (null): pin inserted into the beam's hole

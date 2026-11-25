@@ -17,7 +17,12 @@
 //                 displacement of body 2 relative to body 1 along the axis of body 1's frame,
 //                 and body 1 = Joint.bodyA, so Joint.limits map over unchanged (verified for
 //                 every axis and both body orders in tests/physics/joints.test.ts).
-import type { ImpulseJoint, RigidBody, World } from '@dimforge/rapier3d-compat';
+//
+// Energy guard (opts.energyGuard, default on; see guardEnergy and DEVIATIONS §5): after every
+// fixed step, a group of connected dynamic bodies whose energy has risen more than 1 % of its peak
+// kinetic energy above its lowest value is slowed by one uniform factor. It counters Rapier's f32
+// spin-up and never adds energy.
+import type { EventQueue, ImpulseJoint, RigidBody, World } from '@dimforge/rapier3d-compat';
 import { analyze } from '../core/kinematics';
 import type { Joint, KinematicGraph } from '../core/kinematics';
 import type { Model } from '../core/types';
@@ -47,6 +52,9 @@ export type { Quat, Vec3 } from './math';
 
 /** Standard gravity in units/s² (1 unit = 8 mm): 9.81 / 0.008. */
 export const G = 1226.25;
+
+/** Energy guard noise floor per unit of m·|g|·(1 + |com|) (f32 position rounding is ≈ 6e-8 of |com|). */
+const NOISE = 1e-5;
 
 /** Rapier's linear speed clamp at lengthUnit 1, units/s (measured; see DEVIATIONS §5). */
 const SPEED_CAP = 400;
@@ -100,6 +108,16 @@ export interface SimOptions {
   decoupleInertia?: boolean;
   /** Sides of the convex prisms that stand in for collider cylinders (see shapes.ts); a multiple of 4. Default 16. */
   cylinderSegments?: number;
+  /**
+   * Energy guard (see guardEnergy): stop the f32 spin drift inside Rapier from adding energy. Default
+   * true. Only ever removes energy, never adds it.
+   */
+  energyGuard?: boolean;
+  /**
+   * How far a group's energy may rise above the lowest value it has had, as a fraction of the
+   * group's peak kinetic energy, before the guard scales its velocities down. Default 0.01.
+   */
+  energyGuardBand?: number;
 }
 
 const DEFAULTS = {
@@ -119,6 +137,8 @@ const DEFAULTS = {
   grabAngularDamping: 5,
   cylinderSegments: 16,
   decoupleInertia: true,
+  energyGuard: true,
+  energyGuardBand: 0.01,
 };
 
 /** Per-joint diagnostics (current pose). */
@@ -150,6 +170,20 @@ interface SimBody {
   fixed: boolean;
   ref: Vec3;
   rb: RigidBody | null;
+  /** Engine mass properties cached for the energy guard (set on the first guarded step). */
+  mp?: { mass: number; inertia: Vec3; frame: Quat };
+}
+
+/** Energy-guard state of one group of dynamic bodies (see guardEnergy). */
+interface GuardGroup {
+  /** False until the next guarded step sets eRef / kPeak from the current state. */
+  init: boolean;
+  /** Lowest total energy (kinetic + potential) the group has had since init. */
+  eRef: number;
+  /** Highest kinetic energy since init. */
+  kPeak: number;
+  /** Rounding noise of the group's potential energy (f32 positions), set at init; see guardEnergy. */
+  floor: number;
 }
 
 interface SimJoint {
@@ -197,6 +231,13 @@ export class Simulation {
   private disposed = false;
   /** World substep count (= free-body substeps); jointed bodies add solverIterations − this. */
   private readonly baseIterations: number;
+  /** Energy guard: collision events (to merge groups that touch), union-find over body ids, state per root. */
+  private readonly events: EventQueue | null = null;
+  private readonly groupParent: number[] = [];
+  private readonly groups = new Map<number, GuardGroup>();
+  private readonly bodyOfCollider = new Map<number, number>();
+  /** Energy the guard has removed so far (diagnostics). */
+  guardRemoved = 0;
 
   /** Analyse `model` (which must be valid) and build its Rapier world. */
   static async create(model: Model, opts: SimOptions = {}): Promise<Simulation> {
@@ -245,7 +286,12 @@ export class Simulation {
     try {
       this.buildBodies(model);
       this.buildJoints();
+      if (o.energyGuard) {
+        this.events = new RAPIER.EventQueue(true);
+        this.initGroups();
+      }
     } catch (e) {
+      this.events?.free();
       world.free();
       throw e;
     }
@@ -293,7 +339,10 @@ export class Simulation {
             cd.setDensity(o.density);
           }
           cd.setFriction(o.friction).setRestitution(o.restitution);
-          this.world.createCollider(cd, rb);
+          // Contact start events between dynamic bodies merge their energy-guard groups.
+          if (!b.fixed && o.energyGuard) cd.setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS);
+          const col = this.world.createCollider(cd, rb);
+          this.bodyOfCollider.set(col.handle, b.id);
         }
       }
       this.bodies.push({ id: b.id, fixed: b.fixed, ref, rb });
@@ -447,9 +496,141 @@ export class Simulation {
     this.alive();
     for (let i = 0; i < n; i++) {
       this.applyGrab();
-      this.world.step();
+      if (this.events) this.world.step(this.events);
+      else this.world.step();
       this.stepCount++;
       this.removeFallen();
+      if (this.events) this.guardEnergy();
+    }
+  }
+
+  // ------------------------------------------------------------------------------------------
+  // Energy guard
+
+  /**
+   * Groups: dynamic bodies linked by joints (not through fixed bodies) share a group; groups whose
+   * bodies start touching are merged for good. Energy moves within a group (through joints and
+   * contacts) but not between groups, except through a fixed body, which only takes energy away.
+   */
+  private initGroups(): void {
+    for (const b of this.bodies) this.groupParent[b.id] = b.id;
+    for (const j of this.graph.joints) {
+      if (this.bodies[j.bodyA]!.fixed || this.bodies[j.bodyB]!.fixed) continue;
+      this.unionGroups(j.bodyA, j.bodyB);
+    }
+    for (const b of this.bodies) if (!b.fixed) this.groupState(b.id);
+  }
+
+  private findGroup(id: number): number {
+    let r = id;
+    while (this.groupParent[r] !== r) r = this.groupParent[r]!;
+    while (this.groupParent[id] !== r) {
+      const next = this.groupParent[id]!;
+      this.groupParent[id] = r;
+      id = next;
+    }
+    return r;
+  }
+
+  private unionGroups(a: number, b: number): void {
+    const ra = this.findGroup(a);
+    const rb = this.findGroup(b);
+    if (ra === rb) return;
+    const [lo, hi] = ra < rb ? [ra, rb] : [rb, ra];
+    this.groupParent[hi] = lo;
+    this.groups.delete(hi);
+    this.groupState(lo).init = false;
+  }
+
+  private groupState(id: number): GuardGroup {
+    const r = this.findGroup(id);
+    let g = this.groups.get(r);
+    if (!g) {
+      g = { init: false, eRef: 0, kPeak: 0, floor: 0 };
+      this.groups.set(r, g);
+    }
+    return g;
+  }
+
+  /** Forget a group's energy reference (external work was done on it: grab, removal, contact merge). */
+  private resetGroup(bodyId: number): void {
+    if (this.events) this.groupState(bodyId).init = false;
+  }
+
+  /**
+   * Energy guard (DEVIATIONS §5 "Free rotation gains speed"). Rapier's f32 gyroscopic correction
+   * scales every spinning body's ω up by ≈ 1e-7 per substep, so a frictionless mechanism slowly
+   * gains energy (an arm on an axle climbed from horizontal to vertical in 60 s). After every
+   * fixed step, per group (see initGroups): E = kinetic + potential energy, eRef = the lowest E
+   * since the group's reference was (re)set, kPeak = the highest kinetic energy since then. If
+   * E > eRef + max(band·kPeak, floor), all velocities of the group are scaled by one factor s < 1
+   * so that E comes back to that cap. `floor` (1e-5 · Σ m·|g|·(1 + |com|)) sits above the f32
+   * rounding noise of the potential energy, so a mechanism starting from rest — or balanced on an
+   * unstable equilibrium, where the kinetic energy is far below that noise — is never held still. A uniform scale keeps every joint's (homogeneous) velocity constraint
+   * and every contact's sign, so the motion is unchanged except for its speed. The guard never adds
+   * energy: losses (joint solve, impacts, limit stops) lower eRef and stay lost. The reference is
+   * (re)set on the first step, while a body of the group is grabbed, after its release, when a body
+   * of the group is removed and when two groups merge, so external work is never undone.
+   */
+  private guardEnergy(): void {
+    const ev = this.events!;
+    ev.drainCollisionEvents((h1, h2, started) => {
+      if (!started) return;
+      const a = this.bodyOfCollider.get(h1);
+      const b = this.bodyOfCollider.get(h2);
+      if (a === undefined || b === undefined || a === b) return;
+      if (this.bodies[a]!.fixed || this.bodies[b]!.fixed) return;
+      this.unionGroups(a, b);
+    });
+    if (this.grabState?.body.rb) this.resetGroup(this.grabState.body.id);
+    const sums = new Map<number, { e: number; k: number; noise: number; members: SimBody[] }>();
+    const gl = len(this.gravity);
+    for (const b of this.bodies) {
+      const rb = b.rb;
+      if (b.fixed || !rb) continue;
+      if (!b.mp) b.mp = { mass: rb.mass(), inertia: vec(rb.principalInertia()), frame: quat(rb.principalInertiaLocalFrame()) };
+      const { mass, inertia: I, frame } = b.mp;
+      const v = vec(rb.linvel());
+      const wl = rotate(conj(qmul(quat(rb.rotation()), frame)), vec(rb.angvel()));
+      const k = 0.5 * mass * dot(v, v) + 0.5 * (I[0] * wl[0] ** 2 + I[1] * wl[1] ** 2 + I[2] * wl[2] ** 2);
+      const com = vec(rb.worldCom());
+      const e = k - mass * dot(this.gravity, com);
+      const noise = NOISE * mass * gl * (1 + len(com));
+      const r = this.findGroup(b.id);
+      const s = sums.get(r);
+      if (s) {
+        s.e += e;
+        s.k += k;
+        s.noise += noise;
+        s.members.push(b);
+      } else sums.set(r, { e, k, noise, members: [b] });
+    }
+    const band = this.opts.energyGuardBand;
+    for (const [r, { e, k, noise, members }] of sums) {
+      const g = this.groupState(r);
+      if (!g.init) {
+        g.init = true;
+        g.eRef = e;
+        g.kPeak = k;
+        g.floor = noise;
+        continue;
+      }
+      if (k > g.kPeak) g.kPeak = k;
+      if (e < g.eRef) {
+        g.eRef = e;
+        continue;
+      }
+      const excess = e - (g.eRef + Math.max(band * g.kPeak, g.floor));
+      if (!(excess > 0) || !(k > 0)) continue;
+      const f = Math.sqrt(Math.max(0, 1 - excess / k));
+      for (const b of members) {
+        const rb = b.rb!;
+        const v = rb.linvel();
+        const w = rb.angvel();
+        rb.setLinvel({ x: v.x * f, y: v.y * f, z: v.z * f }, true);
+        rb.setAngvel({ x: w.x * f, y: w.y * f, z: w.z * f }, true);
+      }
+      this.guardRemoved += k * (1 - f * f);
     }
   }
 
@@ -464,6 +645,7 @@ export class Simulation {
 
   private removeBody(b: SimBody): void {
     if (!b.rb) return;
+    this.resetGroup(b.id);
     if (this.grabState?.body === b) this.grabState = null;
     this.world.removeRigidBody(b.rb); // also removes its colliders and joints
     b.rb = null;
@@ -575,6 +757,7 @@ export class Simulation {
     const g = this.grabState;
     this.grabState = null;
     if (g?.body.rb) {
+      this.resetGroup(g.body.id);
       g.body.rb.resetForces(true);
       g.body.rb.resetTorques(true);
       g.body.rb.setAngularDamping(this.opts.angularDamping);
@@ -683,6 +866,7 @@ export class Simulation {
     if (this.disposed) return;
     this.disposed = true;
     this.grabState = null;
+    this.events?.free();
     this.world.free();
     for (const b of this.bodies) b.rb = null;
     for (const j of this.joints) j.handle = null;

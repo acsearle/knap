@@ -6,6 +6,7 @@ import {
   AUTOSAVE_KEY,
   autosave,
   clearAutosave,
+  firstProblem,
   initialModel,
   modelFileText,
   parseModelFile,
@@ -92,7 +93,15 @@ describe('files and autosave', () => {
     s.map.set(AUTOSAVE_KEY, serialize(modelOf([c(0, 0, 0, 'pinHole', 2)])).replace('"parts": [', '"parts": [{"id":7,"color":"#000000","cells":[{"x":0,"y":0,"z":0,"kind":"pinHole","axis":2}]},'));
     const r2 = restoreAutosave(s);
     expect(r2.model).toBeNull();
-    expect(r2.message).toBeDefined();
+    // names the first actual problem, not just the "(n problems):" header
+    expect(r2.message).toMatch(/\(Invalid knap model \(\d+ problems?\): \S.*\)$/);
+    expect(r2.message).not.toMatch(/:\)$/);
+  });
+
+  it('firstProblem: the header plus the first listed problem, never a dangling colon', () => {
+    expect(firstProblem('Invalid knap model (2 problems):\n  - part 3: overlaps part 1\n  - part 4: empty')).toBe('Invalid knap model (2 problems): part 3: overlaps part 1');
+    expect(firstProblem('Not a knap model: invalid JSON (Unexpected token)')).toBe('Not a knap model: invalid JSON (Unexpected token)');
+    expect(firstProblem('Invalid knap model (1 problem):')).toBe('Invalid knap model (1 problem):');
   });
 
   it('storage that throws', () => {

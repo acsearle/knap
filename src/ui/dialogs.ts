@@ -1,4 +1,5 @@
-// Modal dialogs (controls "?" and About) and the message banner over the viewport.
+// Modal dialogs (controls "?" and About) and the message banner over the viewport. A dialog keeps
+// Tab focus inside itself while open; closing leaves focus on the page body.
 import { button, h, icon } from './dom';
 import { ICONS } from './icons';
 
@@ -35,6 +36,19 @@ export class Dialog {
     this.overlay.addEventListener('pointerdown', (e) => {
       if (e.target === this.overlay) this.close();
     });
+    // aria-modal: Tab / Shift+Tab cycle within the dialog (a window listener, so it also catches
+    // a Tab pressed while focus has drifted outside, e.g. onto the page body).
+    window.addEventListener('keydown', (e) => {
+      if (e.key !== 'Tab' || this.overlay.hidden || e.defaultPrevented) return;
+      const items = Array.from(this.box.querySelectorAll<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')).filter(
+        (el) => !(el as HTMLButtonElement).disabled,
+      );
+      if (!items.length) return;
+      const i = items.indexOf(document.activeElement as HTMLElement);
+      const next = e.shiftKey ? (i <= 0 ? items.length - 1 : i - 1) : i < 0 || i === items.length - 1 ? 0 : i + 1;
+      e.preventDefault();
+      items[next]!.focus({ preventScroll: true });
+    });
   }
 
   get isOpen(): boolean {
@@ -50,6 +64,8 @@ export class Dialog {
   close(): void {
     if (this.overlay.hidden) return;
     this.overlay.hidden = true;
+    // Focus goes back to the page body (not to the button that opened it: Space would reopen it).
+    if (this.box.contains(document.activeElement)) (document.activeElement as HTMLElement).blur();
     const cb = this.onClose;
     this.onClose = null;
     cb?.();
@@ -88,7 +104,9 @@ export function helpDialog(): Dialog {
           [k('R'), 'Next orientation of the ghost'],
           [k('N'), 'Toggle “New part”: start a separate part'],
           ['Hold ' + k('Shift'), '“New part” for one click: insert / sleeve / new adjacent part'],
-          ['Click on the grid', 'Place the first sub-part of a new part'],
+          ['Click on the grid', 'Start a new part (holes ∥ Z)'],
+          ['Pin on a hole’s mouth', 'Insert, through stacked holes'],
+          ['Hole on a pin’s end', 'Sleeve a beam on (R: extend)'],
         ]),
       ),
       h(
@@ -159,6 +177,18 @@ export class Banner {
   hide(): void {
     window.clearTimeout(this.timer);
     this.el.hidden = true;
+  }
+
+  /** What is shown now (null when hidden), to put back later with restore(). */
+  snapshot(): { text: string; kind: 'error' | 'info' } | null {
+    if (this.el.hidden) return null;
+    return { text: this.msg.textContent ?? '', kind: this.el.classList.contains('info') ? 'info' : 'error' };
+  }
+
+  /** Show a snapshot() again (null hides the banner). */
+  restore(s: { text: string; kind: 'error' | 'info' } | null): void {
+    if (s) this.show(s.text, { kind: s.kind });
+    else this.hide();
   }
 
   get visible(): boolean {

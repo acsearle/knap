@@ -1,4 +1,6 @@
-// Status bar (§7.4): hover info · what a click will do · last message / error · counts.
+// Status bar (§7.4): hover info · what a click will do · last message / error · a lasting warning
+// badge (e.g. "Not autosaved") · counts. When space is short the message cell gives way first, so
+// the hint (with its [R] / Shift alternatives) stays readable at 1280 px.
 import { h, setText } from './dom';
 
 export class StatusBar {
@@ -9,6 +11,7 @@ export class StatusBar {
   private readonly hintAux: HTMLElement;
   private readonly msg: HTMLElement;
   private readonly counts: HTMLElement;
+  private readonly warn: HTMLElement;
 
   constructor() {
     this.hover = h('div', { class: 'st-hover', 'data-role': 'status-hover' });
@@ -17,7 +20,8 @@ export class StatusBar {
     this.hint = h('div', { class: 'st-hint' }, this.hintMain, this.hintAux);
     this.msg = h('div', { class: 'st-msg', 'data-role': 'status-message', 'aria-live': 'polite' });
     this.counts = h('div', { class: 'st-counts', 'data-role': 'status-counts' });
-    this.el = h('footer', { class: 'statusbar' }, this.hover, this.hint, this.msg, this.counts);
+    this.warn = h('div', { class: 'st-warn', 'data-role': 'status-warning' });
+    this.el = h('footer', { class: 'statusbar' }, this.hover, this.hint, this.msg, this.warn, this.counts);
   }
 
   setHover(text: string): void {
@@ -46,6 +50,16 @@ export class StatusBar {
 
   get hintText(): string {
     return this.hintMain.textContent ?? '';
+  }
+
+  /** A lasting warning badge ('' hides it); `title` explains it on hover. */
+  setWarning(text: string, title = ''): void {
+    setText(this.warn, text);
+    this.warn.title = title;
+  }
+
+  get warning(): string {
+    return this.warn.textContent ?? '';
   }
 
   setCounts(text: string): void {
