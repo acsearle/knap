@@ -37,6 +37,7 @@ export default async function ({ page, url, shot, assert, step }) {
       return { text: e.textContent, end, box };
     });
     assert(/Shift: /.test(r.text) && /\[R\]/.test(r.text), `hint has both alternatives: "${r.text}"`);
+    assert(/Alt: back side/.test(r.text), `hint mentions Alt: "${r.text}"`);
     assert(r.end <= r.box + 0.001, `hint not truncated (text ends at ${r.end}, cell at ${r.box}): "${r.text}"`);
     await shot('app-ui-status-1280');
   });

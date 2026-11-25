@@ -241,6 +241,15 @@ had a gap:
   view axis prefer Y, then X, then Z (the isometric view turns about Y). Duplicate only accepts an
   offset where every copied cell is empty, so a copy never mates by accident. Offsets are searched
   nearest first within L∞ ≤ 8.
+- **Back side** (§7.3). `farSidePick(model, pick)` maps the hover to the far side (only the picked
+  part's own cells are walked, so a pin in a hole walks along the pin and the beam along the beam);
+  `resolveBuild` does this itself when `state.backSide` is set and appends " · back side (−Z)"
+  before " — reason". `ToolState.backSide` is the [B] toggle; Alt/Option is applied per event by
+  `withModifiers(s, { shift, alt })` (`altHeld`, never latches, like `shiftHeld`); `withShift` is
+  kept as `withModifiers(s, { shift })`. Like New part, the toggle survives tool changes and is
+  ignored (its button disabled) for Select / Erase. The Shift hint of a back-side proposal is the far
+  side's with the same " · back side (−Z)" suffix, i.e. exactly what a Shift + Back side click does
+  (the hint is only ever a valid alternative, so there is no " — reason" to insert before).
 - **Autosave.** An unreadable autosave is moved to `knap.autosave.v1.corrupt`, so it is neither
   lost nor retried on every load. An autosaved empty model restores as "nothing".
 
@@ -314,6 +323,15 @@ had a gap:
   blocked, a lasting "Not autosaved" badge sits in the status bar (the error message itself is
   shown once and is soon overwritten). A WebGL context loss shows its notice in the banner and,
   on restore, puts back whatever banner was showing before (e.g. a file error).
+- **Back side keys.** `B` toggles it (the toolbar button beside New part shows it, `aria-pressed`);
+  Alt/Option pressed or released re-resolves the hover without a pointer move, and pointer events'
+  `altKey` resync it. A lone Alt keydown/keyup is `preventDefault`ed (no menu-bar focus on Windows /
+  Linux); characters typed with Option/AltGr (`[ ] . ?`) are separate keydowns and still work
+  (checked in `e2e/app-back`). While Alt alone (no Ctrl/Meta/AltGraph) is held, the build-hover
+  keys `R`, `N`, `B`, `V`, `E` and `1`–`5` act as without it (§7.3 "same [R]"); they are matched
+  by physical key (`e.code`), since Option+R types "®" on a Mac. Other Alt combinations are still
+  left to the browser. The hint line adds "Alt: back side" while a part is hovered with a
+  build tool and Back side is off; it still fits at 1280×720 (`e2e/app-ui`).
 - **Clicks belong to the mode of their press.** A press made while simulating and released after
   Stop (Esc) is not an edit-mode click (it used to build a part).
 - **Start-up view.** The viewport is created detached (1×1 px); the app measures it once it is in
@@ -359,12 +377,28 @@ had a gap:
 - **Grid** is drawn behind all parts (it never cuts through parts below y = −½). Axis lines are
   coloured (x = 0 blue, z = 0 red) at 32 % alpha and minor lines are 6.5 % black. The grid fades
   radially, at grazing view angles and where cells fall below ~4 px.
-- **Root marker**: a ground-hatch symbol of constant screen size under the root part's lowest cell
-  on screen. It must never sit on another part (that reads as "this other part is fixed"), so the
-  line shader probes the outline ID buffer over the mark's rectangle and draws it under the first of
-  the root's lowest cells (up to 8, lowest first, within one unit of the lowest) whose rectangle no
-  other part covers. When every candidate is covered, the marker is hidden in that view (e.g. the
-  triple pendulum's root in a tall iso view). It may overlap the root itself and is not depth-tested.
+- **Root marker** (reworked after owner feedback: it jumped while simulating and sometimes
+  vanished). Anchor = `rootAnchorIndex` (`src/view/rootmarker.ts`): among the root's cells with the
+  lowest y, the one nearest that row's x/z centroid; ties → lower x, then lower z. The hatch (24 CSS
+  px wide, 1.35 px strokes, white 3.5 px halo) hangs 0.72 world units + 4 px straight below the
+  anchor cell's centre on screen, follows the root's own transform, and is drawn with no depth test.
+  Fading is per fragment from the outline ID buffer: a texel of another part whose depth is nearer
+  than the anchor-cell centre by > 0.55 (i.e. in front of the root's own surface, not merely beside
+  it in the same layer) multiplies the strokes' alpha by 0.85 and the halo's by 0.5. "Fainter" is
+  carried mostly by the halo: fading the dark strokes as well (0.7 / 0.3 at first, and the ghost's
+  ≈ 0.38 before that) left an unreadable smudge on red, blue and dark-grey parts at 1:1, and the
+  faint state is common (four-bar, pendulum and triple pendulum at Home: a link hangs in front of
+  the root's anchor). It is never hidden. The previous candidate search (`setMask`) is gone.
+  "Always visible" with the anchor off-screen: when the mark would not fit in the view but some
+  root cell reaches into it, the mark is clamped into the view, 4 px from the edge (`placeMark`).
+  Clamping is the identity while the mark fits, so it slides continuously and never hops; it stops
+  when the root has left the view entirely (then the mark is off-screen with it).
+  `rootMarker()` reports `clamped` and the unclamped `anchorX/anchorY`.
+- **Back side ghost / face** (§7.3): a back-side proposal draws its face highlight with no depth
+  test (double-sided, fill 0.22) so it reads through the part, and the hidden part of its ghost at
+  opacity 0.32 instead of 0.16. The hidden part of every ghost also gets a light silhouette rim
+  (fresnel term mixed towards white, `uRim` 0.9 for Back side, 0.5 otherwise) so it stays legible
+  through a part of its own hue (the accent ghost behind a blue beam). No dashed outline.
 - **Top/bottom from the view cube** keep the current yaw rounded to a quarter turn, so the picture
   does not spin. A tie (the default iso view has yaw exactly π/4) goes to the quarter turn nearer
   yaw 0, so TOP from Home has FRONT at the bottom. `snapTo('top')` from code uses yaw 0.

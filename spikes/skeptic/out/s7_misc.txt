@@ -1,0 +1,16 @@
+=== (a) free-floating frame (box 4×1×1, density 1) carrying gear A r1 at x=0 and gear B r2 at x=r1+r2 on revolutes; zero gravity.
+    internal torque τ=50 on A (−τ on the frame) for 0.5 s, then coast 4.5 s. |L_total| must stay 0; compare with |L| scale I_A·ω_A.
+r1=1 r2=1 mesh=false: |L| max 0.039, final 0.012 vs scale I_A·ω_A 25.9 (rel 0.001); frame ω_z -2.1689, θ_frame(5 s) -10.115; ω_A 16.494 ω_B -2.41e-7
+r1=1 r2=1 mesh=true: |L| max 0.021, final 0.021 vs scale I_A·ω_A 13.0 (rel 0.002); frame ω_z 0.0022, θ_frame(5 s) -3.86e-5; ω_A 8.276 ω_B -8.274; phase err 1.35e-5 teeth
+r1=0.5 r2=2.5 mesh=true: |L| max 0.419, final 0.399 vs scale I_A·ω_A 3.6 (rel 0.118); frame ω_z 4.5502, θ_frame(5 s) 21.742; ω_A 34.362 ω_B -1.412; phase err 0.002 teeth
+r1=2.5 r2=0.5 mesh=true: |L| max 0.268, final 0.268 vs scale I_A·ω_A 20.7 (rel 0.013); frame ω_z -1.3482, θ_frame(5 s) -6.322; ω_A 0.337 ω_B -9.763; phase err 1.45e-4 teeth
+=== (b) recipe proximity rule (engage < D+0.03, release > D+0.13, stop row, snap φ0, correction ≤ 0.002/step); O (r=1) motor 5 rad/s max 1e4;
+    P (r=1) on a revolute to a kinematic carrier at distance D(t) = 2 + c + A·sin(2π·5t); P load: angular damping 0.5/s
+c=0.03 A=0.05 (D range 1.980..2.080): 1 engagements, 0 releases in 2 s (10 carrier cycles); max |snap| 0.500 teeth; peak |α_P| 23068 rad/s²; final ω_P -5.160 (engaged: −5)
+c=0.08 A=0.06 (D range 2.020..2.140): 10 engagements, 9 releases in 2 s (10 carrier cycles); max |snap| 0.193 teeth; peak |α_P| 2456 rad/s²; final ω_P -5.422 (engaged: −5)
+c=0.08 A=0.2 (D range 1.880..2.280): 10 engagements, 9 releases in 2 s (10 carrier cycles); max |snap| 0.153 teeth; peak |α_P| 39611 rad/s²; final ω_P -5.458 (engaged: −5)
+c=0.13 A=0.01 (D range 2.120..2.140): 0 engagements, 0 releases in 2 s (10 carrier cycles); max |snap| 0.000 teeth; peak |α_P| 0 rad/s²; final ω_P 0.000 (engaged: −5)
+=== (c) cost: N gears r=1 on revolutes, with and without the N−1 meshes; 2 s each, interleaved, ms per simulated second
+N=2: revolutes only 180 ms/sim s (89.8 per body); + 1 meshes 216 (36.5 per mesh)
+N=6: revolutes only 455 ms/sim s (75.8 per body); + 5 meshes 614 (31.9 per mesh)
+N=11: revolutes only 659 ms/sim s (59.9 per body); + 10 meshes 888 (22.9 per mesh)

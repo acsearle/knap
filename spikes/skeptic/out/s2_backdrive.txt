@@ -1,0 +1,22 @@
+=== back-driving: release the arm (m=20, L=10, from horizontal) on a 1:5^n train with a free input. Analytic reduced model vs sim.
+1:5: I_eff 2064.3, α_out analytic -118.80 rad/s²; input passes 370 rad/s at never (analytic 0.623 s)
+   t=0.050 θ_out -0.1484 (1-DOF RK4 -0.1484) ω_in 29.6 kin.res 4.57e-5 rad phase 5.09e-5 t
+   t=0.100 θ_out -0.5874 (1-DOF RK4 -0.5872) ω_in 57.4 kin.res 3.59e-4 rad phase 4.30e-4 t
+   t=0.200 θ_out -2.0245 (1-DOF RK4 -2.0236) ω_in 73.2 kin.res 8.06e-4 rad phase 0.00 t
+   t=0.500 θ_out -1.7318 (1-DOF RK4 -1.7293) ω_in -76.8 kin.res -9.01e-4 rad phase -0.00 t
+   t=1.000 θ_out -3.1213 (1-DOF RK4 -3.1164) ω_in 12.7 kin.res 5.52e-6 rad phase 9.03e-6 t
+   t=1.498 θ_out -1.0439 (1-DOF RK4 -1.0728) ω_in 72.0 kin.res 7.36e-4 rad phase 9.13e-4 t
+1:25: I_eff 3659.7, α_out analytic -67.01 rad/s²; input passes 370 rad/s at never (analytic 0.221 s)
+   t=0.050 θ_out -0.0838 (1-DOF RK4 -0.0837) ω_in -83.7 kin.res -0.001 rad phase -0.00/7.63e-6 t
+   t=0.100 θ_out -0.3344 (1-DOF RK4 -0.3338) ω_in -168.2 kin.res -0.010 rad phase -0.01/8.19e-5 t
+   t=0.200 θ_out -1.4840 (1-DOF RK4 -1.2665) ω_in -297.5 kin.res -0.056 rad phase -0.04/7.21e-5 t
+   t=0.500 θ_out -5.1080 (1-DOF RK4 -3.0675) ω_in -275.8 kin.res -0.031 rad phase -0.07/4.93e-4 t
+   t=1.000 θ_out -11.1416 (1-DOF RK4 -0.2956) ω_in -259.8 kin.res -0.044 rad phase -0.08/6.39e-4 t
+   t=1.498 θ_out -17.1544 (1-DOF RK4 -2.5031) ω_in -275.4 kin.res -0.032 rad phase -0.07/5.03e-4 t
+1:125: I_eff 43543.2, α_out analytic -5.63 rad/s²; input passes 370 rad/s at never (analytic 0.526 s)
+   t=0.050 θ_out -0.0070 (1-DOF RK4 -0.0070) ω_in 35.2 kin.res 1.51e-5 rad phase 8.56e-5/6.69e-7/-3.02e-6 t
+   t=0.100 θ_out -0.0282 (1-DOF RK4 -0.0282) ω_in 70.5 kin.res 6.25e-4 rad phase 7.91e-4/-5.04e-6/-2.98e-6 t
+   t=0.200 θ_out -0.1129 (1-DOF RK4 -0.1126) ω_in 141.4 kin.res 0.006 rad phase 0.01/-5.26e-5/-2.13e-6 t
+   t=0.500 θ_out -0.3885 (1-DOF RK4 -0.6927) ω_in 79.6 kin.res 9.41e-4 rad phase 0.00/-7.28e-6/-4.32e-6 t
+   t=1.000 θ_out -0.8405 (1-DOF RK4 -2.2733) ω_in 35.0 kin.res 4.68e-6 rad phase 9.17e-5/-1.77e-6/-2.69e-6 t
+   t=1.498 θ_out -1.1299 (1-DOF RK4 -3.1299) ω_in 38.4 kin.res 1.05e-4 rad phase 1.30e-4/-3.87e-7/-2.66e-6 t

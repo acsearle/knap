@@ -33,6 +33,9 @@ says it in words ("Extend part 3 · pin hole ∥ Z"); red means not possible, wi
 - `R` cycles the ghost through its other valid orientations.
 - Hold `Shift` (or toggle **New part** with `N`) to start a separate part instead of extending the
   clicked one.
+- Hold `Alt`/`Option` (or toggle **Back side** with `B`) to build on the far side of the part you
+  point at, straight through from the face under the cursor — no need to orbit round it. `R`, `N`
+  and the tool keys still work while `Alt` is held.
 - Erase removes one sub-part; a part that falls apart is split into separate parts.
 - To close a loop (a four-bar), build the two links so that their end holes are stacked, then
   push one pin into the front hole: it goes on through the hole behind and pins them together.

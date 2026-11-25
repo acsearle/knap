@@ -16,6 +16,7 @@ import {
   kindLabel,
   makeCell,
   mateType,
+  oppositeDir,
   partById,
   removeCell,
   shareResult,
@@ -45,8 +46,14 @@ export function isBuildTool(t: Tool): t is Kind {
 
 export interface ToolState {
   readonly tool: Tool;
-  /** The "New part" toggle [N]. Shift is applied per event with `withShift`. */
+  /** The "New part" toggle [N]. Shift is applied per event with `withModifiers` / `withShift`. */
   readonly newPart: boolean;
+  /**
+   * The "Back side" toggle [B] (§7.3): build tools act on the far side of the hovered part, straight
+   * through from the hovered face (see farSidePick). Alt/Option is applied per event with
+   * `withModifiers`. Ignored by Select and Erase.
+   */
+  readonly backSide: boolean;
   /**
    * Orientation cycling state: the axis last chosen with [R] for this tool, or null for the
    * natural default. Used whenever it is among the hover's valid orientations.
@@ -62,20 +69,22 @@ export interface ToolState {
    * cycleOrientation) drops the Shift-induced newPart again, so it can never latch on.
    */
   readonly shiftHeld?: true;
+  /** Like shiftHeld, for a backSide turned on by Alt/Option (`withModifiers`) for one event. */
+  readonly altHeld?: true;
 }
 
-/** The base state under a withShift view (identity for a base state). */
+/** The base state under a withShift / withModifiers view (identity for a base state). */
 function baseState(s: ToolState): ToolState {
-  if (!s.shiftHeld) return s;
-  const { shiftHeld: _shift, ...rest } = s;
-  return { ...rest, newPart: false };
+  if (!s.shiftHeld && !s.altHeld) return s;
+  const { shiftHeld, altHeld, ...rest } = s;
+  return { ...rest, newPart: shiftHeld ? false : rest.newPart, backSide: altHeld ? false : rest.backSide };
 }
 
 /** Default palette colour for hole parts before the user picks one (matches core DEFAULT_COLORS). */
 export const DEFAULT_PALETTE_COLOR = defaultColorFor('pinHole');
 
 export function initialToolState(color: string = DEFAULT_PALETTE_COLOR): ToolState {
-  return { tool: 'select', newPart: false, axisPref: null, color, colorPicked: false };
+  return { tool: 'select', newPart: false, backSide: false, axisPref: null, color, colorPicked: false };
 }
 
 /** Switch tool. Selecting a different tool resets axisPref and colorPicked; the same tool is a no-op. */
@@ -90,13 +99,29 @@ export function setNewPart(s: ToolState, on: boolean): ToolState {
   return s.newPart === on ? s : { ...s, newPart: on };
 }
 
-/**
- * The state to resolve a hover with while Shift is held (Shift = temporary "New part"). With
- * `shift` false it returns the base state (so withShift(withShift(s, true), false) is s again).
- */
-export function withShift(s: ToolState, shift: boolean): ToolState {
+/** The "Back side" toggle [B]. */
+export function setBackSide(s: ToolState, on: boolean): ToolState {
   s = baseState(s);
-  return shift && !s.newPart ? { ...s, newPart: true, shiftHeld: true } : s;
+  return s.backSide === on ? s : { ...s, backSide: on };
+}
+
+/**
+ * The state to resolve a hover / click with while modifiers are held: Shift = temporary "New
+ * part", Alt/Option = temporary "Back side". Modifiers not held give the base state (so
+ * withModifiers(withModifiers(s, {shift: true, alt: true}), {}) is s again). A toggle that is
+ * already on is the base state and is kept.
+ */
+export function withModifiers(s: ToolState, mods: { shift?: boolean; alt?: boolean }): ToolState {
+  s = baseState(s);
+  const np = !!mods.shift && !s.newPart;
+  const bs = !!mods.alt && !s.backSide;
+  if (!np && !bs) return s;
+  return { ...s, ...(np ? { newPart: true, shiftHeld: true as const } : {}), ...(bs ? { backSide: true, altHeld: true as const } : {}) };
+}
+
+/** withModifiers(s, { shift }) — Shift only (an Alt-induced backSide is dropped). */
+export function withShift(s: ToolState, shift: boolean): ToolState {
+  return withModifiers(s, { shift });
 }
 
 /** The user clicked a palette swatch. */
@@ -196,6 +221,11 @@ export interface Proposal {
    */
   shiftHint: string;
   /**
+   * Resolved on the far side of the hovered part (Back side, §7.3): `highlight` is then the far
+   * face and `description` ends with " · back side (−Z)" (before " — reason" when invalid).
+   */
+  backSide: boolean;
+  /**
    * Perform it on `current`, which must be `baseModel` (pass history.current). Throws if !valid
    * (message = `reason`) or if `current` is another model (the hover is stale, e.g. after undo:
    * re-resolve it). Pure: returns a new model.
@@ -222,6 +252,7 @@ function noProposal(m: Model): Proposal {
     options: [],
     orientationHint: '',
     shiftHint: '',
+    backSide: false,
     apply(): ApplyResult {
       throw new Error('nothing to do here');
     },
@@ -372,6 +403,7 @@ function toProposal(a: Attempt, ctx: Ctx, optionsOverride?: readonly Axis[]): Pr
     options,
     orientationHint: options.length > 1 ? `[R] ${idx + 1}/${options.length}` : '',
     shiftHint: '',
+    backSide: false,
     apply(current: Model): ApplyResult {
       if (!valid) throw new Error(reason);
       if (current !== m) throw new Error(STALE_PROPOSAL);
@@ -396,6 +428,22 @@ function toProposal(a: Attempt, ctx: Ctx, optionsOverride?: readonly Axis[]): Pr
 export function resolveBuild(model: Model, pick: CellPick | null, grid: GridPick | null, state: ToolState): Proposal {
   if (!isBuildTool(state.tool)) return noProposal(model);
   const kind = state.tool;
+  if (pick && state.backSide) {
+    // Back side (§7.3): resolve exactly as if the far face had been hovered.
+    const far = farSidePick(model, pick);
+    if (!far) return noProposal(model);
+    const p = resolveBuild(model, far, null, { ...state, backSide: false });
+    if (p.action === 'none') return p;
+    const suffix = ` · back side (${DIR_LABELS[far.dir]})`;
+    const tail = p.valid ? '' : ` — ${p.reason}`;
+    const head = p.description.slice(0, p.description.length - tail.length);
+    p.description = `${head}${suffix}${tail}`;
+    // The Shift hint describes a Shift + Back side click, so it says back side too (it is only
+    // ever set for a valid alternative, which has no " — reason" tail).
+    if (p.shiftHint) p.shiftHint = `${p.shiftHint}${suffix}`;
+    p.backSide = true;
+    return p;
+  }
   if (pick) {
     const part = partById(model, pick.partId);
     const C = part?.cells[pick.cellIndex];
@@ -417,6 +465,35 @@ export function resolveBuild(model: Model, pick: CellPick | null, grid: GridPick
     return toProposal(a, { m: model, kind, state, highlight: { pos, dir: 3 } });
   }
   return noProposal(model);
+}
+
+/** '+X', '−X', … by Dir. */
+export const DIR_LABELS: readonly string[] = ['+X', '−X', '+Y', '−Y', '+Z', '−Z'];
+
+/**
+ * Back side (§7.3): the hover on the far side of the hovered part, straight through from the
+ * hovered face. From cell C of part P entered through face n, walk in direction −n while the next
+ * cell also belongs to P (only P's own cells count, so a pin in a hole walks along the pin, a beam
+ * around a pin along the beam); with C' the last such cell the result is (P, C', −n). A 1-cell run
+ * gives (P, C, −n). null for a stale pick (part or cell gone).
+ */
+export function farSidePick(model: Model, pick: CellPick): CellPick | null {
+  const part = partById(model, pick.partId);
+  const C = part?.cells[pick.cellIndex];
+  if (!part || !C) return null;
+  const index = new Map<string, number>();
+  part.cells.forEach((c, i) => index.set(`${c.x},${c.y},${c.z}`, i));
+  const n = DIRS[pick.dir]!;
+  let cellIndex = pick.cellIndex;
+  let pos: Vec3i = [C.x, C.y, C.z];
+  for (;;) {
+    const q = add3(pos, n, -1);
+    const j = index.get(`${q[0]},${q[1]},${q[2]}`);
+    if (j === undefined) break;
+    cellIndex = j;
+    pos = q;
+  }
+  return { partId: part.id, cellIndex, dir: oppositeDir(pick.dir) };
 }
 
 /**

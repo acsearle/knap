@@ -1,0 +1,15 @@
+--- (a) which frame defines the locked axis: frame1 X = x, frame2 X = y; body2 v = (1,1,0)
+frame1 X=x frame2 X=y: v1=0.5000,-1.64e-16,0.0000 v2=0.5000,1.0000,0.0000  readback frameX1=0.000,0.000,0.000,1.000
+frame1 X=y frame2 X=x: v1=2.98e-8,0.5000,0.0000 v2=1.0000,0.5000,0.0000  readback frameX1=0.000,0.000,0.707,0.707
+--- (b) one-row purity: offset anchors, random velocities, single step vs analytic single-row impulse
+|v1-pred|=2.95e-4 |w1-pred|=0.002 |v2-pred|=9.82e-5 |w2-pred|=9.40e-4  (|v|~1; deviations are the in-step rotation of the Jacobian over 1/480 s)
+linear momentum change |Δp|=9.82e-7
+2 s free tumbling: max |sep·X1| = 5.62e-7; final |sep| = 3.198 (free axes keep separating: true)
+--- (c) in-place updates take effect on the next step
+after setAnchor1(+0.1 x), one step: x2 - x1 = 0.10000 (target 0.1)
+after setFrameX1/2(X=y) + setAnchor1(+0.1 y): Δx sep = 0.00210 (now free), y sep = 0.09840 (target 0.1)
+--- (d) cost of in-place re-anchoring vs recreate per step (gear pair, 2 revolutes, 240 substeps)
+none      0.4154 ms/step (199.4 ms per simulated s), JS-side update 0.1 µs/step, ratio ω2/ω1=NaN, phase err 0.00000 teeth
+reanchor  0.6707 ms/step (321.9 ms per simulated s), JS-side update 32.1 µs/step, ratio ω2/ω1=-1.00121, phase err -2.30e-5 teeth
+recreate  0.4432 ms/step (212.7 ms per simulated s), JS-side update 20.2 µs/step, ratio ω2/ω1=-1.00121, phase err -2.30e-5 teeth
+node q1_joint.mjs  4.19s user 0.09s system 95% cpu 4.490 total

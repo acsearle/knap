@@ -1,0 +1,11 @@
+import R from '@dimforge/rapier3d-compat';
+await R.init();
+console.log(R.version());
+console.log(R.JointData.generic.toString());
+console.log(R.JointData.prototype.intoRaw.toString());
+console.log(R.ImpulseJoint.prototype.setAnchor1.toString());
+console.log(R.ImpulseJoint.prototype.setFrameX1.toString());
+console.log(R.ImpulseJoint.prototype.setLocalFrame1.toString());
+console.log(R.ImpulseJoint.prototype.frameX1.toString());
+console.log(Object.getOwnPropertyNames(R.World.prototype).join(' '));
+console.log(Object.getOwnPropertyNames(R.IntegrationParameters.prototype).join(' '));

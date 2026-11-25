@@ -1,0 +1,8 @@
+=== warm start: re-anchor in place vs remove+recreate the mesh joint every step (balanced hold, 10 s)
+reanchor 0.5:2.5 m1=1 m2=5.000 F_mesh=7357.5: after 10s θ1 0.002 rad, θ2 -4.48e-4 rad; ω1 rms 3.26e-4 max 0.001 rad/s; phase err -5.99e-7 units (-1.53e-6 teeth) → compliance 8.15e-11 units per unit force; max revolute err 4.77e-7
+recreate 0.5:2.5 m1=1 m2=5.000 F_mesh=7357.5: after 10s θ1 0.002 rad, θ2 -4.48e-4 rad; ω1 rms 3.26e-4 max 0.001 rad/s; phase err -5.99e-7 units (-1.53e-6 teeth) → compliance 8.15e-11 units per unit force; max revolute err 4.77e-7
+reanchor 0.5:2.5 m1=20 m2=100.000 F_mesh=1.47e+5: after 10s θ1 -3.48e-4 rad, θ2 6.53e-5 rad; ω1 rms 2.74e-4 max 0.003 rad/s; phase err -1.09e-5 units (-2.77e-5 teeth) → compliance 7.39e-11 units per unit force; max revolute err 7.15e-7
+recreate 0.5:2.5 m1=20 m2=100.000 F_mesh=1.47e+5: after 10s θ1 -3.48e-4 rad, θ2 6.53e-5 rad; ω1 rms 2.74e-4 max 0.003 rad/s; phase err -1.09e-5 units (-2.77e-5 teeth) → compliance 7.39e-11 units per unit force; max revolute err 7.15e-7
+1:5 recreate: k=[1.0000,-0.2000] Ieff=13.0216 Q(0)=-735.75 α0 meas -56.507 vs analytic -56.502 rad/s² (err 7.45e-5)
+   θ1(t) sim vs ODE: t=0.1s -0.2791/-0.2789; t=0.2s -0.9320/-0.9311; t=0.4s -0.4987/-0.4998; t=0.8s -1.1538/-1.1515
+   kinematic residual θ_j − k_j θ_1 (rad) at end: [0.000000,-1.16e-7] ; max mesh phase err 2.64e-6 teeth; max revolute anchor err 5.62e-7 units; 487.4 ms per sim s

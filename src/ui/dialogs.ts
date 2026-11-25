@@ -104,6 +104,8 @@ export function helpDialog(): Dialog {
           [k('R'), 'Next orientation of the ghost'],
           [k('N'), 'Toggle “New part”: start a separate part'],
           ['Hold ' + k('Shift'), '“New part” for one click: insert / sleeve / new adjacent part'],
+          [k('B'), 'Toggle “Back side”: build on the far side of the part'],
+          ['Hold ' + k('Alt') + ' / ' + k('⌥'), '“Back side” for one click, straight through the part'],
           ['Click on the grid', 'Start a new part (holes ∥ Z)'],
           ['Pin on a hole’s mouth', 'Insert, through stacked holes'],
           ['Hole on a pin’s end', 'Sleeve a beam on (R: extend)'],

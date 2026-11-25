@@ -1,0 +1,6 @@
+b16: 32 / 48 fell through
+b32: 32 / 48 fell through
+b64: 28 / 48 fell through
+rp16: 37 / 48 fell through
+rp32: 39 / 48 fell through
+rp64: 27 / 48 fell through

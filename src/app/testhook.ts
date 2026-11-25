@@ -165,6 +165,9 @@ export function installTestHook(app: App): void {
       mode: app.mode,
       tool: app.tool.tool,
       newPart: app.tool.newPart,
+      /** The Back side toggle [B]; `altHeld`: Alt/Option held (Back side for this hover / click). */
+      backSide: app.tool.backSide,
+      altHeld: app.altHeld,
       axisPref: app.tool.axisPref,
       color: app.tool.color,
       selection: app.selection,
@@ -183,6 +186,16 @@ export function installTestHook(app: App): void {
       slow: !(document.querySelector('[data-role=sim-slow]') as HTMLElement | null)?.hidden,
       viewport: vp.stats(),
     }),
+    /**
+     * The root part's "fixed" marker (DESIGN §6.1): client px of the centre of its base line,
+     * whether it is drawn inside the view, its strength (mean alpha factor over the mark: 1 = clear,
+     * 0.7 = another part in front everywhere, MARK.faint) and its world anchor; null when nothing is marked.
+     */
+    rootMarker: (probe = true) => vp.rootMarkerInfo(probe),
+    /** Show / hide a part in the view (as the simulation does for a removed body). */
+    setPartVisible: (partId: number, on: boolean): void => vp.setPartVisible(partId, on),
+    /** Set the camera at once (CameraState: target, yaw, pitch, height). */
+    setCamera: (c: Parameters<typeof vp.setCamera>[0]): void => vp.setCamera(c, { animate: false }),
     /** Diagnostics: wall-clock ms of n synchronous renders, each followed by gl.finish(). */
     renderTiming: (n = 3): number[] => {
       const gl = vp.renderer.getContext();

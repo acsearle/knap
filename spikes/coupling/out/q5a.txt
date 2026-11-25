@@ -1,0 +1,14 @@
+=== odd loop: 3 gears r=1 on an equilateral triangle (side 2), all three pairs meshed: must lock
+motor 10 rad/s, max 1e3: after 5 s θ = [1.31e-7,-6.86e-8,-1.16e-8] rad; peak |ω| 0.003 rad/s; max phase err 4.76e-7 teeth; final phase errs [1.72e-7,-3.92e-7,2.62e-7]; max revolute err 3.72e-11 units
+motor 10 rad/s, max 1e6: after 5 s θ = [9.64e-5,-2.17e-5,-2.18e-5] rad; peak |ω| 0.005 rad/s; max phase err 1.90e-4 teeth; final phase errs [1.90e-4,-1.11e-4,1.90e-4]; max revolute err 7.01e-9 units
+motor 10 rad/s, max 1e6, no feedback: after 5 s θ = [0.2314,-0.0523,-0.0523] rad; peak |ω| 0.005 rad/s; max phase err 0.456 teeth; final phase errs [0.456,-0.266,0.456]; max revolute err 7.01e-9 units
+motor ∞ gain unlimited: after 5 s θ = [4.4896,-0.2466,-0.2393] rad; peak |ω| 398.700 rad/s; max phase err 10.915 teeth; final phase errs [8.858,-5.232,8.883]; max revolute err 4.07e-5 units
+=== even loop: 4 gears r=1 on a square (side 2), 4 meshes (one redundant): must turn
+feedback=true: θ after 10 s [-0.5310,0.5310,-0.5310,0.5310] (ideal ±100.0); ω [10.0000,-10.0009,9.9991,-9.9982]; max phase err 8.91e-5 teeth; max revolute err 4.87e-10
+feedback=false: θ after 10 s [-0.5310,0.5202,-0.5310,0.5201] (ideal ±100.0); ω [10.0000,-9.9968,9.9988,-9.9995]; max phase err 0.0277 teeth; max revolute err 4.83e-10
+=== centre distance off by ±0.02 (pair r=1:r=1.5, motor 10 rad/s; and a loaded hold)
+Δd=-0.02: mean ratio -4.611201 vs -0.666667; max phase err 1.66e-4 teeth
+Δd=0: mean ratio -4.611191 vs -0.666667; max phase err 1.63e-4 teeth
+Δd=0.02: mean ratio -4.611203 vs -0.666667; max phase err 1.60e-4 teeth
+=== removing a gear body mid-run (3 gears, middle removed at 1 s)
+before removal ω3=10.0010; after 1 s more: meshes dead [true,true], joints in world 2 (2 revolutes expected), ω1=10.0000 ω3=10.0743 (coasting; spin gain only)

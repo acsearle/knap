@@ -1,0 +1,5 @@
+lead=true fb=true iters=240: |L| at end of torque 0.081, max 0.193, at 2 s 0.193; scale I_A·ω_A 3.51; ω_F 4.494 ω_A 34.75
+lead=false fb=true iters=240: |L| at end of torque 0.081, max 0.181, at 2 s 0.181; scale I_A·ω_A 3.48; ω_F 4.484 ω_A 34.52
+lead=false fb=false iters=240: |L| at end of torque 0.081, max 0.180, at 2 s 0.180; scale I_A·ω_A 3.48; ω_F 4.485 ω_A 34.52
+lead=true fb=true iters=60: |L| at end of torque 0.035, max 0.221, at 2 s 0.221; scale I_A·ω_A 3.49; ω_F 4.463 ω_A 34.57
+lead=true fb=true iters=960: |L| at end of torque 0.217, max 4.862, at 2 s 4.369; scale I_A·ω_A 3.47; ω_F 3.497 ω_A 28.23

@@ -93,10 +93,17 @@ or male+hole of the *same* part).
 ```ts
 type Axis = 0 | 1 | 2;
 type Kind = 'pinHole' | 'axleHole' | 'axle' | 'pin' | 'frictionPin';
-interface Cell { x: number; y: number; z: number; kind: Kind; axis: Axis }
+interface Cell { x: number; y: number; z: number; kind: Kind; axis: Axis;
+                 rim?: number }      // wheel radius, §2.6; hole cells only
 interface Part { id: number; color: string /* '#rrggbb' */; cells: Cell[] }
-interface Model { version: 1; parts: Part[]; rootPartId: number | null; nextPartId: number }
+interface Model { version: 1 | 2; parts: Part[]; rootPartId: number | null; nextPartId: number;
+                  ground?: boolean;   // §2.6; absent = false
+                  fixRoot?: boolean } // §2.6; absent = true
 ```
+
+`version` is 2 as soon as a model uses `rim`, `ground` or `fixRoot` (the operations that set them
+set it) and is otherwise left alone; version 1 files load unchanged and a model that uses none of
+the three behaves exactly as before.
 
 `rootPartId` designates the part fixed in space during simulation. If it is `null` or stale, the
 part with the lowest id is the root. The model is plain JSON (this is also the file format,
@@ -131,10 +138,74 @@ movePart(m, partId, delta: [dx,dy,dz]): Model | null          // null if result 
 rotatePart(m, partId, axis: Axis, quarterTurns: number, pivot: [x,y,z]): Model | null
 setPartColor, setRoot
 serialize(m): string; deserialize(json): Model   // deserialize validates and throws a useful error
+
+// wheels, ground (§2.6)
+RIM_MIN = 1, RIM_MAX = 4, RIM_STEP = 0.5
+canSetRim(m, partId, pos, rim: number | undefined): { ok: true } | { ok: false; reason: string }
+setRim(m, partId, pos, rim | undefined): Model    // undefined removes the rim; may split the part
+setGround(m, on): Model; setFixRoot(m, on): Model
+rootIsFixed(m): boolean                           // fixRoot !== false || !ground
+groundLevel(m): number | null                     // null when ground is off or the model is empty
+// disc.ts — exact overlap tests (integer / half-integer arithmetic, no epsilons)
+discOverlapsCell(hub, axis, r, pos): boolean; discCoversCell(hub, axis, r, pos): boolean
+discsOverlap(hubA, axisA, rA, hubB, axisB, rB): boolean
 ```
 
 A `WorldIndex` (position → cells with part ids) helper is expected; rebuild it per call or cache
 by model identity — models are small (≤ a few thousand cells).
+
+### 2.6 Wheels, ground and a free root
+
+Added after user request ("plain wheels with simple colliders … grow them out from the 1×1×1
+pin-hole or axle-hole parts by adding and erasing half-units of material at the outer radius").
+The numbers come from a feasibility spike (`spikes/wheels/`, Rapier 0.21).
+
+**Rim.** A hole cell (`pinHole` or `axleHole`) may carry `rim = r`: a solid disc of radius `r`
+about the cell's axis, one cell thick (the cell's own layer). `r` is a multiple of ½ with
+`1 ≤ r ≤ 4`; absent means a bare cell (whose barrel is the "radius ½" wheel). The cell is the
+wheel's **hub**. A part may have any number of rims and any other cells: a wheel is just a part.
+Male cells never carry a rim. Toothed rims (gears, `16·r` teeth) are a later feature and will
+reuse this field.
+
+**Disc geometry for the rules** (nominal, exact): the disc occupies, in the hub's layer, the
+points within distance `r` of the hub axis. A grid cell is a closed unit cube. *Overlap* means an
+intersection of positive volume; touching does not count.
+- disc × cell: only in the same layer; with in-plane offsets `(du, dv)` from the hub,
+  overlap iff `max(0,|du|−½)² + max(0,|dv|−½)² < r²`; the disc *covers* the cell iff
+  `(|du|+½)² + (|dv|+½)² ≤ r²`.
+- disc × disc, parallel axes: overlap iff same layer and centre distance `< r₁ + r₂`
+  (equal is touching — the distance at which gears will mesh).
+- disc × disc, perpendicular axes `a`, `b`, third axis `k`: with `m_b = max(0,|d_b|−½)²`,
+  `m_a = max(0,|d_a|−½)²`: overlap iff `m_b < r₁²`, `m_a < r₂²` and
+  `|d_k| < √(r₁²−m_b) + √(r₂²−m_a)` (compare squared so it stays exact).
+A reference implementation with tests is in `spikes/wheels/disc.ts`; move it into `src/core`.
+
+**Rules added to §2.2 and §2.3.**
+1. *Connection.* A rim connects its hub to every cell of the same part that its disc overlaps
+   (as well as the ordinary face connections), so a crank hole at `(1,1)` of an `r = 2.5` wheel
+   belongs to the wheel without a bridge of cells. Shrinking or removing a rim can therefore
+   split a part, exactly like erasing a cell.
+2. *Blocking.* A disc must not overlap any cell of **another** part, and must not overlap a disc
+   of another part. The one exception is the ordinary mate: a male cell of another part inside a
+   hole cell of the wheel's part (its hub or a crank hole). Discs and cells of the *same* part may
+   overlap freely (they fuse). `validateModel`, `canAddCell`, `movePart`, `rotatePart` and
+   `canSetRim` all enforce this; reasons read "inside the wheel of part N" / "wheel would hit
+   part N" / "wheels would overlap".
+3. A rim moves and rotates with its cell (`rotatePart` turns the disc with the cell's axis).
+
+Rims do not take part in the kinematic analysis (§3): they add no mates and no slide stops. What
+a turning wheel hits is left to collisions.
+
+**Ground.** `ground: true` puts a horizontal floor under the model. Its nominal level is
+`groundLevel(m)` = the lowest point of the model at edit time: the minimum over all cells of
+`y − ½` and over all rims with a horizontal axis of `y_hub − r`. So a model always starts
+resting on the floor (or hanging from its fixed root above it), wherever it was built, and the
+floor follows the model while editing. Off by default: every existing example swings below its
+own lowest point.
+
+**Free root.** `fixRoot: false` means no part is fixed in space — a vehicle. It only has an
+effect while the ground is on (`rootIsFixed`): without a floor a model with nothing fixed would
+just fall away, so the root stays fixed then. Default: fixed.
 
 ---------------------------------------------------------------------------------------------
 
@@ -179,7 +250,8 @@ interface KinematicGraph { mates: Mate[]; bodies: Body[]; joints: Joint[];
       - Two or more lines, all parallel, and every mate `cylindrical` → **prismatic** along
         that direction with limits (3.2); if the limits are `[0,0]` → the pair is rigid: **union A and B**.
       - Otherwise (two or more lines, any revolute or any non-parallel) → rigid: **union A and B**.
-4. Bodies = final union-find classes. `fixed` = contains the root part. Joints as determined in
+4. Bodies = final union-find classes. `fixed` = contains the root part **and** `rootIsFixed(model)`
+   (§2.6; with a free root no body is fixed). Joints as determined in
    the last iteration, one per body pair. Body ids are dense `0..n−1`, deterministic (ordered by
    lowest part id). `bodyA` is the lower body id. Output is deterministic for a given model.
 
@@ -271,6 +343,17 @@ extended to `±(½+EPS)` on connected ends. *Suggested*: `frictionPin` gets four
 longitudinal ridges so it is distinguishable from `pin` even when recoloured; a small chamfer on
 free rod ends.
 
+Per **rim** (§2.6) on a hole cell with axis `h`: one more positive, a cylinder about the hub axis
+of radius `r − (½ − H)` = `r − 0.03` and extent `[−H, +H]` — the same thickness as a beam, and
+the same 0.06 gap to a neighbour that it touches nominally. Bores of the part's cells (the hub
+and any crank holes) are subtracted from it like from everything else. Rim edges get a small
+chamfer (≈ 0.04). **Index mark:** so that rotation is visible, each rim carries one mark at a
+fixed angle (the hub cell's first transverse axis): a shallow radial groove on both flat faces
+from the hub ring to the edge, continued across the tread. It must be legible at the Home zoom
+of a small model for `r ≥ 1`, from both sides and edge-on; the technique (cut geometry that the
+outline pass picks up, or a painted line) is the implementer's choice. Use ≥ 64 segments for
+`r ≥ 2`.
+
 Bores are subtracted after all positives are united, so a bore always cuts cleanly through its
 own cell.
 
@@ -298,6 +381,9 @@ type ColliderPrim =
   | { shape: 'cylinder'; center: Vec3; axis: Axis; radius: number; halfLength: number; cell: number; male: boolean }
   | { shape: 'box'; center: Vec3; halfExtents: Vec3; cell: number; male: false };
 ```
+
+- rim → `{ shape: 'disc'; center; axis; radius: r − (½ − HC) = r − 0.04; halfLength: HC; cell }`.
+  The physics layer turns it into two colliders (§5.1 "Wheels").
 
 `HC < H` gives stacked liftarms a little real clearance so neighbouring layers do not rub.
 
@@ -333,7 +419,7 @@ and Jolt (excellent solver but a heavier, manual-memory API); noted in the READM
   Use a small fixed step (suggested 1/480 s or finer; tune `lengthUnit`, solver iterations) with
   an accumulator; the UI offers playback speed 1×, ½×, ¼×, ⅒× (default **¼×** so motion is
   readable). Cap sub-steps per frame to avoid the spiral of death.
-- No ground. A dynamic body that falls below `y = −400` is removed from the world (and hidden).
+- No ground unless the model asks for one (see "Ground" below). A dynamic body that falls below `y = −400` is removed from the world (and hidden).
 - **No body damping.** A loose part in free flight keeps its linear and angular velocity.
 - **Joint friction** (added after first user testing: frictionless joints swing far longer than
   real parts). Every joint resists its *free relative motion* with dry (Coulomb) friction:
@@ -364,6 +450,46 @@ and Jolt (excellent solver but a heavier, manual-memory API); noted in the READM
   - `Simulation.setJointFriction(μ)` changes the level while running; the UI offers
     Off / Low / Realistic beside the playback speed and remembers the choice (a UI preference,
     not part of the model file).
+
+- **Ground** (§2.6; only when `model.ground`). A fixed body with a half-space collider, normal
+  +Y, at `groundLevel(model) + (½ − HC)` so that the lowest collider starts in exact contact.
+  Friction 0.4. It is not a model body: it has no part, is not in the energy guard's groups and
+  is never removed. Only a half-space works — measured: a native cylinder on a cuboid floor
+  creeps, accelerates by itself and tunnels. `SimOptions.groundSlopeDeg` (default 0, tests only
+  for now) tilts the floor about Z through the point under the model's centre.
+  The "falls below −400" removal rule stays.
+- **Wheels.** A `disc` primitive becomes two colliders on the part's body, separated by
+  collision groups, because no single shape works for both jobs (measured in `spikes/wheels/`):
+  - *Round*: a native cylinder (radius and half-length of the primitive). It collides **only
+    with the ground and with other wheels' round colliders.** On a half-space it rolls
+    correctly: speed loss ≤ 0.5 % over 20 diameters, incline acceleration within 1 % of
+    `g·sinθ/(1 + I/(m r²))` for `r ≥ 1.5`. It carries the rim's mass: the annulus between the hub
+    barrel and the rim at density 1 (overlap with other cells of the part is ignored). Friction
+    0.8 (a tyre; the ground and parts are 0.4, combine rule average).
+  - *Hull*: a circumscribed 32-gon prism built like the other prisms (DEVIATIONS §5) with an
+    end-face bevel of `0.02·r` (parry's 4-vertex face limit needs ≥ 0.0125·r), density 0. It
+    collides **only with ordinary part colliders** — never the ground, never another wheel. It
+    is what a liftarm hits. A polygon cannot roll (it loses energy at every facet), so a wheel
+    rolling *along a beam* slows quickly; that is a documented limit, not a goal.
+  - Ordinary part colliders collide with the ground, with wheel hulls and with each other, as
+    now. Suggested groups: ground 1, round 2, hull 4, part 8.
+  - Bodies that carry a rim get **no soft CCD** (its predictive contacts make the hull fall
+    through liftarms).
+  - Rapier clamps spin at π/4 per step (377 rad/s): a wheel skids above `377·r` units/s. Fine.
+- **Free root** (§2.6): no body is fixed. Consequences that must be handled:
+  - *Joint-friction load.* The fixed-body ranking has nothing to start from. When the ground is
+    on, every body with a horizontal-axis rim whose lowest point is within 0.05 of the ground at
+    Play counts as a sink (distance 0) in the ranking of "Joint friction" above, in addition to
+    any fixed body. A four-wheel cart's axles then each carry a quarter of the chassis (spike:
+    the lighter-body fallback overestimated it by 1.8×).
+  - *Energy guard*: unchanged; ground contact only removes energy. A frictionless cart rolling
+    at 100 units/s gains 45 % energy in 20 s without the guard and < 1 % with it.
+  - *Products of inertia* (DEVIATIONS §5) are only dropped for mechanisms attached to a fixed
+    body. A free vehicle with an off-centre crank is a known risk: test it, and record what
+    happens.
+- Cost (spike, Node): a four-wheel cart ≈ 480 ms of stepping per simulated second, about twice
+  the same model without wheel contacts; a wheel–wheel pair costs ≈ +200 ms whenever their
+  bounding boxes overlap. Fine at ¼×; at 1× a cart runs slower than real time.
 
 ### 5.2 API
 
@@ -421,6 +547,33 @@ on (default level unless stated):
 - **Chains come to rest**: triple pendulum within 8 s; a light link carrying a heavy one and
   6- and 12-link chains within tens of seconds, not minutes.
 
+**Wheels, ground and free root** (all with the default settings unless stated):
+
+- *Unchanged without them*: a model with no rim, no ground and a fixed root gives bit-identical
+  trajectories to the previous simulator (the existing hash tests must not change).
+- *Rest*: a loose wheel (`r` = 1, 1.5, 2.5, 4; axis horizontal) on the ground for 5 s moves
+  < 0.01 units, sinks < 0.03 and does not tip; lying flat (axis vertical) it stays put too.
+- *Rolling*: a loose wheel (`r` ≥ 1) started rolling at 40 units/s keeps its speed within 1 %
+  over 160 units; on a 5° and a 15° floor (`groundSlopeDeg`) from rest its acceleration is
+  within 2 % of `g·sinθ/(1 + I/(m r²))` for `r ≥ 1.5`.
+- *Drop*: wheels and liftarms dropped onto the ground from 10 units in several orientations come
+  to rest on it; nothing passes through and nothing is removed.
+- *Cart* (free root; chassis, two axles, four wheels `r = 1.5`): at rest for 30 s it drifts
+  < 0.01 units and no joint error exceeds 1e-3; with friction off and a push of 40 units/s it
+  keeps its speed within 2 % for 5 s; with friction Realistic it stops within ± 10 % of
+  `v₀²/(2·decel)`, `decel = 4·τ_f / (r · (M + ΣI/r²))` using the corrected load, and then does
+  not creep; on a 15° floor with friction off it accelerates within 2 % of the analytic value.
+- *Fixed root with ground*: a pendulum hung above the floor swings as before; a link released
+  above the floor lands and rests on it.
+- *Wheels against parts* (the weak spot — measure and report honestly, do not tune the test to
+  pass): a liftarm dropped onto a fixed wheel from 2–10 units in ≥ 12 positions/orientations never
+  passes through it; a loose wheel dropped onto a fixed 15-hole beam lying flat from 2–10 units
+  in ≥ 12 cases never passes through; a pendulum link striking the rim of a pinned wheel bounces
+  off and sets the wheel turning.
+- *Crank wheel*: a pinned `r = 2.5` wheel with a link hanging from a crank hole rocks and comes
+  to rest (friction Realistic) and shows no energy gain beyond the guard's band (friction off).
+- *Determinism*: the cart run twice gives identical pose hashes.
+
 ---------------------------------------------------------------------------------------------
 
 ## 6. Rendering & camera (`src/view`)
@@ -444,8 +597,21 @@ Like printed building instructions: clean flat-ish colour, smooth lit curves, da
   black, so outlines stay visible. Default colours for new parts by first cell: holes → current
   palette colour; `axle` → light grey; `pin` → tan/light grey; `frictionPin` → blue.
 - Edit mode shows a faint reference grid on the plane `y = −½` (cell boundaries) with slightly
-  stronger axis lines; hidden while simulating (there is no ground).
-- The root part carries a small unobtrusive "fixed" marker (e.g. an anchor glyph label or ground hatch).
+  stronger axis lines; hidden while simulating.
+- The root part carries a small unobtrusive "fixed" marker (a ground hatch of constant screen
+  size). It is **stable and always visible**: its anchor is a point fixed on the root part,
+  chosen from the model alone (never from the camera, other parts or the simulation), so it does
+  not jump while simulating or orbiting; it is drawn on top of everything with a halo, at full
+  strength where nothing is in front of it and fainter where another part covers it (the same
+  idiom as the ghost). No marker when the root is free (§2.6).
+- **Wheels** are drawn like any part (part colour, outlines), with their index mark (§4.2).
+- **Ground** (§2.6, when on): shown in **both** modes at the ground level as a quiet floor — a
+  slightly darker tint than the background with faint unit lines, unbounded (it must reach the
+  edges of the view at any zoom and pan, without moiré when zoomed out), drawn behind the model's
+  outlines so parts resting on it stay crisp. Seen from below it must not hide the model (lines
+  only, or nothing). In edit mode the `y = −½` reference grid stays as the building plane; the
+  floor may be lower, and the two must be distinguishable (the grid is lines, the floor is a
+  tint). While simulating, the floor's lines are what make a rolling cart's motion readable.
 
 ### 6.2 Camera & navigation
 
@@ -484,8 +650,16 @@ Left toolbar; keyboard shortcut in brackets.
   id, cell count, colour swatches, **Set as fixed root**, **Duplicate** (offset copy, if cheap).
 - **Build** — one tool per kind: Pin hole `[1]`, Axle hole `[2]`, Axle `[3]`, Pin `[4]`,
   Friction pin `[5]`.
+- **Wheel** `[W]` (after Friction pin in the toolbar): hover a hole cell — or the disc of a
+  wheel — and click to **grow its rim by half a unit** (bare → 1 → 1.5 → … → 4). The ghost is the
+  disc at the new radius. **Shift+click shrinks** by half a unit (1 → bare). Invalid growth is
+  shown red with the reason ("wheel would hit part 3", "largest wheel is radius 4", "wheels grow
+  from pin holes and axle holes"). Status: "Grow wheel · part 3 · radius 1.5 (24 mm across)".
+  Each click is one undo step.
 - **Erase** `[E]`: click a cell to remove that sub-part (hovered cell highlighted red). Parts
-  split if they fall apart.
+  split if they fall apart. On a hub that has a rim, or anywhere on its disc outside the part's
+  own cells, Erase removes **the outer half-unit of the rim** instead (highlighting that ring);
+  once the rim is gone the next click erases the cell as usual.
 
 ### 7.3 Build interaction
 
@@ -512,6 +686,30 @@ part, prefer the coaxial orientation. `[R]` cycles through the other valid orien
 choice persists while the same tool is active). The status bar always says what a click will do
 ("Extend part 3 · pin hole ∥ Z", "New part · insert pin", …).
 
+**Back side.** With **Alt/Option** held (or the "Back side" toggle `[B]` on, a toolbar button
+beside New part) the build tools act on the *far side of the hovered part, straight through
+from the hovered face*: for hover (`P`, `C`, `n`) walk from `C` in direction `−n` while the next
+cell also belongs to `P`; with `C'` the last such cell, resolve exactly as if (`P`, `C'`, `−n`)
+had been hovered — same priority order, same `[R]`, Shift and New part behaviour. The ghost
+(already drawn fainter behind geometry) and the face highlight must be legible through the part,
+and the status sentence says so ("… · back side (−Z)"). Which axis "through" means is chosen the
+same way as when building in front: by which face of the cell is hovered. Erase and Select
+ignore Back side.
+
+**Wheels in picking.** Besides the cell cubes, each rim is pickable as its nominal disc (radius
+`r`, one cell thick). A hit on a disc that is not inside one of the part's own cell cubes gives
+the hover (`P`, `G`, `n`) where `G` is the grid cell under the hit point in the hub's layer — a
+*virtual cell* of the wheel:
+- Select, grab (simulate mode) and the kinematics tint treat it as part `P`.
+- Wheel and Erase act on that rim (§7.2).
+- Hole tools on a flat face of the disc (`n` ∥ hub axis): **Extend** — add a hole cell *at `G`*
+  to `P` (a crank hole through the wheel; default orientation ∥ hub axis). It is valid whenever
+  `canAddCell` allows it (the disc connects it, §2.6).
+- Hits on the tread resolve as the hub cell hovered on its lateral face nearest the hit
+  direction, so the ordinary rules apply.
+- Male tools on a virtual cell: invalid, "add a hole here first" (a pin goes *into* a crank hole).
+- Back side treats a virtual cell as a one-cell-deep piece of `P`.
+
 New parts take the current palette colour (or the kind default, §6.1).
 
 ### 7.4 Other
@@ -523,6 +721,11 @@ New parts take the current palette colour (or the kind default, §6.1).
   each joint axis (ring = revolute, ring + double arrow = cylindrical, double arrow = prismatic),
   so the user can see what welded and what moves before pressing play. Status bar shows counts:
   parts, bodies, joints.
+- **Model settings** (edit mode only; saved in the file; each change is one undo step): a
+  **Ground** toggle `[G]` and a **Fix root** toggle, in a small always-visible "Model" block of
+  the inspector panel (not the top bar, which is full). Fix root is checked and disabled while
+  the ground is off, with a tooltip saying why. The status bar's body count says "(none fixed)"
+  for a free root. The inspector shows a selected wheel's radius.
 - Status bar: hover info, action hint, last error. Keep the chrome compact and neutral.
 - UI is plain DOM + CSS (no framework). Works at 1280×720 and up; DPR-aware.
 
@@ -530,7 +733,10 @@ New parts take the current palette colour (or the kind default, §6.1).
 
 `window.__knap` exposes a small debug API for automated tests: `getModel()`, `setModel(m)`,
 `loadExample(name)`, `analyze()` (summary), `setMode('edit'|'simulate')`, `stepSim(n)`,
-`setView(name)`, `fit()`, `partScreenPos(partId)`, `simTransforms()`.
+`setView(name)`, `fit()`, `partScreenPos(partId)`, `simTransforms()`. For wheels:
+`getState().ground` / `.fixRoot`, `setGround(on)`, `setFixRoot(on)`, `simInfo().groundY`, and a
+way to give a body a velocity in simulate mode (`pushBody(partId, [vx,vy,vz])`) so e2e can roll
+a cart without a mouse.
 
 ---------------------------------------------------------------------------------------------
 
@@ -552,6 +758,12 @@ smooth `pin`s for moving joints.
 6. **Weld test** — two beams joined by two pins (rigid) hanging as one pendulum from a third.
 7. **Collision** — a double pendulum whose lower link strikes a peg on the fixed frame, plus a
    loose part that falls onto the frame.
+8. **Crank wheel** — a fixed upright carrying an `r = 2.5` wheel on a smooth pin, with a link
+   hanging from a pin in a crank hole of the wheel, started off balance so the wheel rocks and
+   the index mark is seen turning. No ground.
+9. **Cart** — ground on, root free: a chassis on two axles with four wheels, carrying a raised
+   arm on a smooth pin that falls and swings at Play, so the cart visibly rolls back and forth
+   under it before friction brings it to rest. Wheel radius ≥ 1.5.
 
 ---------------------------------------------------------------------------------------------
 
@@ -577,6 +789,8 @@ e2e/            Playwright smoke + screenshot scripts (screenshots written to e2
 
 ## 10. Explicit non-goals (for now)
 
-Gears, racks, half-unit offsets, studs, flexible parts, friction-pin friction, motors, an official
+Gears (next: toothed rims meshing as constraints — see `spikes/coupling/`), racks, half-unit
+offsets, tyres as separate parts, sloped or uneven ground, wheels that roll well on other parts,
+studs, flexible parts, friction-pin friction, motors, an official
 part catalogue, decomposition into official parts, collisions between directly-jointed bodies
 (may come later as an experimental option), mobile/touch UI.

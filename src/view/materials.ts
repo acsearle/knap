@@ -61,6 +61,7 @@ export function createPartMaterial(color: string): THREE.ShaderMaterial {
 const GHOST_FRAG = /* glsl */ `
 uniform vec3 uColor;
 uniform float uOpacity;
+uniform float uRim;
 uniform vec3 uKey;
 varying vec3 vNormal;
 void main() {
@@ -69,6 +70,11 @@ void main() {
   float rim = 1.0 - abs(n.z);
   vec3 c = uColor * (0.75 + 0.35 * diff);
   float a = uOpacity * (0.75 + 0.5 * rim * rim);
+  // Light silhouette rim (uRim > 0, the ghost seen through geometry): keeps its outline legible
+  // over a part of the ghost's own hue (a blue ghost behind a blue beam).
+  float r3 = rim * rim * rim;
+  c = mix(c, vec3(1.0), uRim * r3);
+  a = max(a, uRim * r3 * 0.85);
   gl_FragColor = vec4(c, clamp(a, 0.0, 1.0));
   #include <colorspace_fragment>
 }`;
@@ -81,6 +87,7 @@ export function createGhostMaterial(hidden: boolean): THREE.ShaderMaterial {
     uniforms: {
       uColor: { value: new THREE.Color('#2f8cff') },
       uOpacity: { value: hidden ? 0.16 : 0.42 },
+      uRim: { value: 0 },
       uKey: { value: LIGHT.key },
     },
     transparent: true,

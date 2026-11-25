@@ -33,6 +33,7 @@ import type { Box3, CameraState, Ray, Vec3, ViewDir } from './math';
 import { DEFAULT_OUTLINE, OutlinePass, createIdMaterial } from './outline';
 import type { OutlineParams } from './outline';
 import { vertexPatches } from './patches';
+import { MARK, placeMark, rootAnchorIndex } from './rootmarker';
 import { ViewCube } from './viewcube';
 
 // ------------------------------------------------------------------------------------------
@@ -98,6 +99,11 @@ export interface HoverFace {
   dir: Dir;
   /** Default: the accent colour. */
   color?: string;
+  /**
+   * Seen through the part (Back side, §7.3: the face is on the far side): drawn on top of
+   * everything instead of depth-tested, so it reads through the part in front of it.
+   */
+  xray?: boolean;
 }
 
 export interface HoverCell {
@@ -111,6 +117,8 @@ export interface Ghost {
   /** Further cells of the same prospective part (a deep insert); drawn fused with `cell`. */
   extra?: readonly Cell[];
   valid: boolean;
+  /** Built on the far side of a part (Back side): the parts of it behind geometry are drawn stronger. */
+  xray?: boolean;
 }
 
 export type FitTarget = 'all' | 'selection' | readonly number[] | Box3;
@@ -122,6 +130,16 @@ export interface CameraAnimOptions {
 
 // ------------------------------------------------------------------------------------------
 // Internals
+
+/** Hover face fill opacity; seen through the part (Back side) it is drawn on top, a bit lighter. */
+const HOVER_FACE_OPACITY = 0.28;
+const HOVER_FACE_XRAY_OPACITY = 0.22;
+/** The ghost where geometry is in front of it; stronger for a Back side proposal (always behind). */
+const GHOST_HIDDEN_OPACITY = 0.16;
+const GHOST_XRAY_HIDDEN_OPACITY = 0.32;
+/** Light silhouette rim on the hidden ghost (see GHOST_FRAG): stronger when built through a part. */
+const GHOST_HIDDEN_RIM = 0.5;
+const GHOST_XRAY_HIDDEN_RIM = 0.9;
 
 interface GeoEntry {
   geometry: THREE.BufferGeometry;
@@ -324,7 +342,7 @@ export class Viewport {
     // scenes
     this.colorScene.add(this.grid);
     const accent = this.opts.accent;
-    this.hoverFaceFill = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), createFillMaterial(accent, 0.28));
+    this.hoverFaceFill = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), createFillMaterial(accent, HOVER_FACE_OPACITY));
     this.hoverFaceLines = new FatLines(this.lineUniforms, { depthTest: true, depthBias: 0.0005 });
     this.hoverCellFill = new THREE.Mesh(new THREE.BoxGeometry(1.02, 1.02, 1.02), createFillMaterial('#e0322b', 0.16));
     this.hoverCellLines = new FatLines(this.lineUniforms, { depthTest: true, depthBias: 0.0005 });
@@ -346,8 +364,8 @@ export class Viewport {
     this.glyphLines.renderOrder = 11;
     this.overlayScene.add(this.glyphHalo, this.glyphLines);
     const idTex = this.outline.idTarget.textures[0]!;
-    this.rootHalo = new FatLines(this.lineUniforms, { depthTest: false, idMask: idTex });
-    this.rootLines = new FatLines(this.lineUniforms, { depthTest: false, idMask: idTex });
+    this.rootHalo = new FatLines(this.lineUniforms, { depthTest: false, idFade: idTex });
+    this.rootLines = new FatLines(this.lineUniforms, { depthTest: false, idFade: idTex });
     this.rootHalo.renderOrder = 5;
     this.rootLines.renderOrder = 6;
     this.overlayScene.add(this.rootHalo, this.rootLines);
@@ -517,7 +535,16 @@ export class Viewport {
     fill.position.set(...c);
     fill.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), new THREE.Vector3(d[0], d[1], d[2]));
     const color = h.color ?? this.opts.accent;
-    (fill.material as THREE.MeshBasicMaterial).color.set(color);
+    const fm = fill.material as THREE.MeshBasicMaterial;
+    fm.color.set(color);
+    const xray = !!h.xray;
+    if (fm.depthTest === xray) {
+      fm.depthTest = !xray;
+      fm.side = xray ? THREE.DoubleSide : THREE.FrontSide;
+      fm.needsUpdate = true;
+      this.hoverFaceLines.material.depthTest = !xray;
+    }
+    fm.opacity = xray ? HOVER_FACE_XRAY_OPACITY : HOVER_FACE_OPACITY;
     fill.visible = true;
     const t1 = (axis + 1) % 3;
     const t2 = (axis + 2) % 3;
@@ -589,6 +616,8 @@ export class Viewport {
       this.ghostHidden.geometry = entry.geometry;
     }
     const color = g.valid ? this.opts.accent : '#e0322b';
+    this.ghostHidden.material.uniforms.uOpacity!.value = g.xray ? GHOST_XRAY_HIDDEN_OPACITY : GHOST_HIDDEN_OPACITY;
+    this.ghostHidden.material.uniforms.uRim!.value = g.xray ? GHOST_XRAY_HIDDEN_RIM : GHOST_HIDDEN_RIM;
     for (const m of [this.ghostVisible, this.ghostHidden]) {
       m.position.set(origin[0], origin[1], origin[2]);
       (m.material.uniforms.uColor!.value as THREE.Color).set(color);
@@ -1159,80 +1188,136 @@ export class Viewport {
   }
 
   /**
-   * The "fixed" marker: a small ground-hatch symbol of constant screen size, hung just below the
-   * root part's lowest cell on screen. It never overlaps a different part: the line shader probes
-   * the outline ID buffer and draws the mark under the first of the root's lowest cells (up to 8,
-   * lowest first) whose mark rectangle no other part covers, or hides it when every one is
-   * covered. It may overlap the root itself.
+   * World position of the root marker's anchor (centre of rootAnchorIndex's cell, under the root's
+   * current transform), or null when there is no visible root. See updateRootMarker.
    */
-  private updateRootMarker(dpr: number, ss: number): void {
+  private rootAnchor(): { pv: PartView; p: Vec3 } | null {
     const pv = this.rootId !== null ? this.views.get(this.rootId) : undefined;
-    const on = this.rootMarkerVisible && !!pv && !this.hidden.has(pv.id);
-    this.rootHalo.visible = on;
-    this.rootLines.visible = on;
-    if (!on || !pv) return;
-    const { right, up } = cameraBasis(this.cam.yaw, this.cam.pitch);
+    if (!this.rootMarkerVisible || !pv || this.hidden.has(pv.id)) return null;
+    const i = rootAnchorIndex(pv.part.cells);
+    if (i < 0) return null;
+    const cell = pv.part.cells[i]!;
+    let p: Vec3 = [cell.x, cell.y, cell.z];
     const t = this.transforms.get(pv.id);
-    const cells: { c: Vec3; down: number; side: number }[] = [];
-    for (const cell of pv.part.cells) {
-      let c: Vec3 = [cell.x, cell.y, cell.z];
-      if (t) {
-        const m = new THREE.Vector3(...c).applyQuaternion(new THREE.Quaternion(...t.q));
-        c = [m.x + t.p[0], m.y + t.p[1], m.z + t.p[2]];
-      }
-      const down = -(c[0] * up[0] + c[1] * up[1] + c[2] * up[2]);
-      const side = c[0] * right[0] + c[1] * right[1] + c[2] * right[2];
-      cells.push({ c, down, side });
+    if (t) {
+      const m = new THREE.Vector3(...p).applyQuaternion(new THREE.Quaternion(...t.q));
+      p = [m.x + t.p[0], m.y + t.p[1], m.z + t.p[2]];
     }
-    if (!cells.length) return;
-    const lowest = Math.max(...cells.map((x) => x.down));
-    // Lowest row first, centre of that row first; then cells up to one unit higher.
-    const row = cells.filter((x) => x.down > lowest - 1e-6).sort((x, y) => x.side - y.side);
-    const mid = row[Math.floor((row.length - 1) / 2)]!.side;
-    const order = cells
-      .filter((x) => x.down > lowest - 1.0 - 1e-6)
-      .sort((x, y) => Math.round((y.down - x.down) * 1e6) || Math.abs(x.side - mid) - Math.abs(y.side - mid));
-    const anchor = order[0]!.c;
-    const px = (p: Vec3): [number, number] => {
-      const q = projectPoint(this.cam, this.aspect(), p);
+    return { pv, p };
+  }
+
+  /**
+   * Where the mark is drawn: `at` is the anchor's own base-line centre and `x`/`y` the drawn one
+   * (CSS px of the canvas), which differs only when placeMark clamps it into the view.
+   */
+  private rootMarkPlacement(a: { pv: PartView; p: Vec3 }): { at: [number, number]; x: number; y: number; clamped: boolean } {
+    const aspect = this.aspect();
+    const toPx = (p: Vec3): [number, number] => {
+      const q = projectPoint(this.cam, aspect, p);
       return ndcToPixel(q.ndcX, q.ndcY, this.cssW, this.cssH);
     };
-    const [ax, ay] = px(anchor);
-    const candidates: [number, number][] = [];
-    for (const o of order) {
-      const [x, y] = px(o.c);
-      const d: [number, number] = [(x - ax) * dpr, -(y - ay) * dpr];
-      if (candidates.some((k) => Math.abs(k[0] - d[0]) < 2 && Math.abs(k[1] - d[1]) < 2)) continue;
-      candidates.push(d);
-      if (candidates.length === 8) break;
-    }
+    const at = toPx(this.markPoint(a.p, 0, 0));
+    const t = this.transforms.get(a.pv.id);
+    const q = t ? new THREE.Quaternion(...t.q) : null;
+    const cells = a.pv.part.cells.map((c) => {
+      if (!q || !t) return toPx([c.x, c.y, c.z]);
+      const v = new THREE.Vector3(c.x, c.y, c.z).applyQuaternion(q);
+      return toPx([v.x + t.p[0], v.y + t.p[1], v.z + t.p[2]]);
+    });
+    const cellPx = (0.5 * this.cssH) / Math.max(1e-9, this.cam.height);
+    return { at, ...placeMark(at, cells, cellPx, this.cssW, this.cssH) };
+  }
+
+  /** World point of the mark at (dx, dy) CSS px from its base line's centre (x right, y down). */
+  private markPoint(anchor: Vec3, dx: number, dy: number): Vec3 {
+    const { right, up } = cameraBasis(this.cam.yaw, this.cam.pitch);
     const wpp = this.cam.height / Math.max(1, this.cssH); // world units per CSS px
-    const drop = 0.72 / wpp + 4; // CSS px from the cell centre down to the hatch's base line
-    const rect: [number, number, number, number] = [
-      (ax - 13) * dpr,
-      (this.cssH - (ay + drop + 3.5 + 2)) * dpr,
-      (ax + 13) * dpr,
-      (this.cssH - (ay + drop - 2)) * dpr,
-    ];
-    const probeSS = this.floatTargets ? ss : 0;
-    for (const l of [this.rootLines, this.rootHalo]) l.setMask(pv.slot % 4095, rect, candidates, probeSS);
-    const at = (dx: number, dy: number): number[] => {
-      const ox = dx * wpp;
-      const oy = -0.72 - (4 + dy) * wpp; // below the cell, then dy px further down
-      return [0, 1, 2].map((k) => anchor[k]! + right[k]! * ox + up[k]! * oy);
-    };
+    const ox = dx * wpp;
+    const oy = -MARK.dropWorld - (MARK.dropPx + dy) * wpp;
+    return [0, 1, 2].map((k) => anchor[k]! + right[k]! * ox + up[k]! * oy) as unknown as Vec3;
+  }
+
+  /**
+   * The "fixed" marker (DESIGN §6.1): a small ground-hatch symbol of constant screen size, hung
+   * just below the anchor cell on screen. The anchor is chosen from the model alone
+   * (rootAnchorIndex), so the mark never jumps while orbiting, while other parts move or while
+   * simulating; it follows the root's own transform. When the anchor is off-screen but the root
+   * is not, the mark is clamped into the view (placeMark; continuous, so still no jumps). Drawn
+   * on top of everything with a white halo; where another part is in front of the root's surface
+   * at the anchor's depth (outline ID buffer, MARK.frontEps), at MARK.faint / MARK.haloFaint.
+   */
+  private updateRootMarker(dpr: number, ss: number): void {
+    const a = this.rootAnchor();
+    this.rootHalo.visible = !!a;
+    this.rootLines.visible = !!a;
+    if (!a) return;
     const sb = new SegmentBuilder();
     const col = rgba('#41474e');
-    const w = 11;
+    const w = MARK.halfWidth;
+    // Offsets ⟂ the view keep every mark point at the anchor's depth (the fade compares to it).
+    const pl = this.rootMarkPlacement(a);
+    const sx = pl.x - pl.at[0];
+    const sy = pl.y - pl.at[1];
+    const at = (dx: number, dy: number): Vec3 => this.markPoint(a.p, dx + sx, dy + sy);
     sb.seg(at(-w, 0), at(w, 0), col);
     for (let k = 0; k < 5; k++) {
-      const x0 = -w + 4 + k * 4.5;
-      sb.seg(at(x0, 0), at(x0 - 3.5, 3.5), col);
+      const x0 = -w + MARK.hatch + (k * (2 * w - MARK.hatch)) / 4;
+      sb.seg(at(x0, 0), at(x0 - MARK.hatch, MARK.hatch), col);
     }
     sb.apply(this.rootLines);
-    this.rootHalo.setSegments(new Float32Array(sb.ends), [1, 1, 1, 0.85]);
-    this.rootLines.width = 1.25 * dpr;
+    this.rootHalo.setSegments(new Float32Array(sb.ends), [1, 1, 1, 0.9]);
+    this.rootLines.width = 1.35 * dpr;
     this.rootHalo.width = 3.5 * dpr;
+    const fadeSS = this.floatTargets ? ss : 0;
+    this.rootLines.setFade(a.pv.slot % 4095, fadeSS, MARK.faint, MARK.frontEps);
+    this.rootHalo.setFade(a.pv.slot % 4095, fadeSS, MARK.haloFaint, MARK.frontEps);
+  }
+
+  /**
+   * Debug / test hook: where the root marker is (client px of the centre of its base line), whether
+   * it is drawn and inside the view, and its strength — the mean alpha factor over a grid of
+   * points on the mark (1 = nothing in front, MARK.faint = all covered), read back from the
+   * outline ID buffer with the shader's own rule (`probe` false: no render, no read-back, alpha 1
+   * — for cheap position sweeps). null when there is no root
+   * to mark (none, hidden, or the marker is turned off).
+   */
+  rootMarkerInfo(
+    probe = true,
+  ): { x: number; y: number; visible: boolean; alpha: number; anchor: Vec3; clamped: boolean; anchorX: number; anchorY: number } | null {
+    const a = this.rootAnchor();
+    if (!a) return null;
+    if (probe) this.renderNow();
+    else this.updateThreeCamera();
+    const rect = this.canvas.getBoundingClientRect();
+    const pl = this.rootMarkPlacement(a);
+    const [cx, cy] = [pl.x, pl.y];
+    const w = MARK.halfWidth;
+    const inside = cx + w >= 0 && cx - w <= this.cssW && cy + MARK.hatch >= 0 && cy <= this.cssH;
+    let alpha = 1;
+    const ss = this.supersample();
+    if (probe && this.floatTargets && inside) {
+      const tgt = this.outline.idTarget;
+      const depth = -new THREE.Vector3(...a.p).applyMatrix4(this.camera.matrixWorldInverse).z;
+      const buf = new Float32Array(4);
+      let sum = 0;
+      let n = 0;
+      for (let j = 0; j <= 2; j++)
+        for (let i = 0; i <= 10; i++) {
+          const x = cx - w + (2 * w * i) / 10;
+          const y = cy + (MARK.hatch * j) / 2;
+          if (x < 0 || y < 0 || x >= this.cssW || y >= this.cssH) continue;
+          const tx = Math.floor(x * this.dpr * ss);
+          const ty = Math.floor((this.cssH - y) * this.dpr * ss);
+          if (tx >= tgt.width || ty >= tgt.height) continue;
+          this.renderer.readRenderTargetPixels(tgt, tx, ty, 1, 1, buf, undefined, 0);
+          const id = Math.abs(buf[1]!);
+          const other = id > 0.5 && Math.floor((id - 1) / 4096) !== a.pv.slot % 4095 && buf[0]! < depth - MARK.frontEps;
+          sum += other ? MARK.faint : 1;
+          n++;
+        }
+      if (n) alpha = sum / n;
+    }
+    return { x: rect.left + cx, y: rect.top + cy, visible: inside, alpha, anchor: a.p, clamped: pl.clamped, anchorX: rect.left + pl.at[0], anchorY: rect.top + pl.at[1] };
   }
 
   private positionButtons(): void {

@@ -47,9 +47,10 @@ import {
   restoreAutosave,
   rotateSelection,
   selectTool,
+  setBackSide,
   setNewPart,
   suggestFileName,
-  withShift,
+  withModifiers,
 } from '../editor';
 import type { CameraBasis, OpResult, Proposal, StorageLike, Tool, ToolState } from '../editor';
 import { DEFAULT_FRICTION_LEVEL, JOINT_FRICTION } from '../physics';
@@ -99,6 +100,23 @@ export function readFrictionPref(storage: StorageLike | null): FrictionLevel {
 const BLOCKED = 'Stop the simulation to edit (Esc)';
 /** Keys matched by the character they type, even with Option / AltGr held (see keydown). */
 const CHAR_KEYS: ReadonlySet<string> = new Set(['[', ']', '.', '?']);
+/**
+ * Build-hover keys that still act while Alt / Option (momentary Back side, §7.3) is held: the
+ * hover resolves exactly as with [B] on, so [R], [N], [B] and the tool keys must work too. Matched
+ * by physical key (`e.code`) because Option+R types '®' on a Mac.
+ */
+const ALT_BUILD_CODES: Readonly<Record<string, string>> = {
+  KeyR: 'r',
+  KeyN: 'n',
+  KeyB: 'b',
+  KeyV: 'v',
+  KeyE: 'e',
+  Digit1: '1',
+  Digit2: '2',
+  Digit3: '3',
+  Digit4: '4',
+  Digit5: '5',
+};
 
 export class App {
   readonly vp: Viewport;
@@ -127,6 +145,8 @@ export class App {
   private readonly simBadge: HTMLElement;
   private lastHover: ViewportPointerEvent | null = null;
   private shiftDown = false;
+  /** Alt/Option held: momentary "Back side" (§7.3), as Shift is for "New part". */
+  private altDown = false;
   /** The build proposal currently shown (for [R]). */
   private proposal: Proposal | null = null;
   private graphCache: { model: Model; graph: KinematicGraph } | null = null;
@@ -179,6 +199,7 @@ export class App {
     this.toolbar = new Toolbar({
       selectTool: (t) => this.selectTool(t),
       toggleNewPart: () => this.toggleNewPart(),
+      toggleBackSide: () => this.toggleBackSide(),
       cycleOrientation: () => this.cycleOrientation(),
     });
     this.inspector = new Inspector({
@@ -220,6 +241,8 @@ export class App {
 
     vp.onHover((e) => {
       this.lastHover = e;
+      // A pointer event knows whether Alt is held even when its keydown went elsewhere.
+      if (e && e.altKey !== this.altDown) this.altDown = e.altKey;
       this.refreshHover();
     });
     vp.onClick((e) => this.click(e));
@@ -246,8 +269,16 @@ export class App {
     window.addEventListener('keydown', (e) => this.keydown(e));
     window.addEventListener('keyup', (e) => {
       if (e.key === 'Shift') this.setShift(false);
+      if (e.key === 'Alt') {
+        // A lone Alt release must not move focus to the browser's menu bar (Windows / Linux).
+        if (!isTypingTarget(e.target)) e.preventDefault();
+        this.setAlt(false);
+      }
     });
-    window.addEventListener('blur', () => this.setShift(false));
+    window.addEventListener('blur', () => {
+      this.setShift(false);
+      this.setAlt(false);
+    });
     window.addEventListener('pagehide', () => this.flushAutosave());
     // Buttons and the checkbox clicked with the mouse should not keep keyboard focus: Space would
     // activate them instead of playing (keyboard focus, Tab, is kept: there Space activates).
@@ -370,6 +401,7 @@ export class App {
     this.toolbar.update({
       tool: this.tool.tool,
       newPart: this.tool.newPart,
+      backSide: this.tool.backSide,
       disabled: !editing,
       orientationHint: editing ? (this.proposal?.orientationHint ?? '') : '',
     });
@@ -430,16 +462,19 @@ export class App {
       this.status.setHint(ep.description || 'Click a sub-part to erase it');
     } else {
       this.vp.setHoverCell(null);
-      const p = resolveBuild(m, hit, grid, withShift(this.tool, this.shiftDown));
+      const p = resolveBuild(m, hit, grid, this.buildState(this.shiftDown, this.altDown));
       this.proposal = p;
       if (p.action === 'none' || !p.cell) {
         this.vp.setGhost(null);
         this.vp.setHoverFace(null);
         this.status.setHint(this.idleHint());
       } else {
-        this.vp.setGhost({ cell: p.cell, extra: p.extraCells, valid: p.valid });
-        this.vp.setHoverFace(p.highlight ? { cell: p.highlight.pos, dir: p.highlight.dir, ...(p.valid ? {} : { color: RED }) } : null);
-        const aux = [p.orientationHint, p.shiftHint].filter(Boolean).join('   ');
+        const xray = p.backSide;
+        this.vp.setGhost({ cell: p.cell, extra: p.extraCells, valid: p.valid, xray });
+        this.vp.setHoverFace(p.highlight ? { cell: p.highlight.pos, dir: p.highlight.dir, xray, ...(p.valid ? {} : { color: RED }) } : null);
+        // On a part, say what Alt would do (unless Back side is already on).
+        const altHint = hit && !p.backSide ? 'Alt: back side' : '';
+        const aux = [p.orientationHint, p.shiftHint, altHint].filter(Boolean).join('   ');
         this.status.setHint(p.description, !p.valid, aux);
       }
     }
@@ -490,6 +525,22 @@ export class App {
     if (this.mode === 'edit' && isBuildTool(this.tool.tool)) this.refreshHover();
   }
 
+  /** Alt/Option is held (momentary Back side). */
+  get altHeld(): boolean {
+    return this.altDown;
+  }
+
+  private setAlt(on: boolean): void {
+    if (this.altDown === on) return;
+    this.altDown = on;
+    if (this.mode === 'edit' && isBuildTool(this.tool.tool)) this.refreshHover();
+  }
+
+  /** The tool state a build hover / click resolves with (Shift = New part, Alt = Back side). */
+  private buildState(shift: boolean, alt: boolean): ToolState {
+    return withModifiers(this.tool, { shift, alt });
+  }
+
   // ===========================================================================================
   // Pointer
 
@@ -519,7 +570,7 @@ export class App {
       return;
     }
     const grid = hit ? null : pickGrid(ray);
-    const p = resolveBuild(m, hit, grid, withShift(this.tool, e.shiftKey));
+    const p = resolveBuild(m, hit, grid, this.buildState(e.shiftKey, e.altKey));
     if (p.action === 'none') return;
     if (!p.valid) {
       this.error(`Can’t place here: ${p.reason ?? 'not possible'}`);
@@ -553,6 +604,18 @@ export class App {
     }
     this.tool = setNewPart(this.tool, !this.tool.newPart);
     this.info(this.tool.newPart ? 'New part: on — clicks start separate parts' : 'New part: off');
+    this.refreshUI();
+    this.refreshHover();
+  }
+
+  toggleBackSide(): void {
+    if (!this.editable()) return;
+    if (!isBuildTool(this.tool.tool)) {
+      this.info('Back side applies to the build tools: pick one (1–5) first, then press B');
+      return;
+    }
+    this.tool = setBackSide(this.tool, !this.tool.backSide);
+    this.info(this.tool.backSide ? 'Back side: on — clicks build on the far side of the part you point at' : 'Back side: off');
     this.refreshUI();
     this.refreshHover();
   }
@@ -850,9 +913,21 @@ export class App {
       this.setShift(true);
       return;
     }
+    if (e.key === 'Alt') {
+      // Alt alone (not AltGraph): momentary Back side. No browser default is wanted for a lone Alt
+      // (it would focus the menu bar on Windows / Linux); characters typed with Option / AltGr
+      // ([ ] . ?) are separate keydowns and are not affected.
+      if (!isTypingTarget(e.target)) e.preventDefault();
+      this.setAlt(true);
+      return;
+    }
     if (isTypingTarget(e.target)) return;
     const mod = e.ctrlKey || e.metaKey;
-    const key = e.key;
+    // Alt alone + a build-hover key (R, N, B, tool keys): act as the plain key (§7.3 "same [R]").
+    // A character we match by what it types wins: Option+5 is '[' on some Mac layouts.
+    const altBuild =
+      e.altKey && !mod && e.getModifierState?.('AltGraph') !== true && !CHAR_KEYS.has(e.key) ? ALT_BUILD_CODES[e.code] : undefined;
+    const key = altBuild ?? e.key;
     const lower = key.length === 1 ? key.toLowerCase() : key;
 
     // Dialogs and menus first.
@@ -889,7 +964,7 @@ export class App {
       }
       return; // never steal other browser shortcuts
     }
-    if ((e.altKey || mod) && !altChar) return;
+    if ((e.altKey || mod) && !altChar && altBuild === undefined) return;
 
     // Space on a keyboard-focused button / checkbox activates it (the browser's default).
     if ((key === ' ' || key === 'Spacebar' || key === 'Enter') && isActivationTarget(e.target)) return;
@@ -948,6 +1023,7 @@ export class App {
     const editKey =
       toolKey !== undefined ||
       lower === 'n' ||
+      lower === 'b' ||
       lower === 'r' ||
       lower === 'd' ||
       key === 'Delete' ||
@@ -968,6 +1044,7 @@ export class App {
       }
       this.selectTool(toolKey);
     } else if (lower === 'n') this.toggleNewPart();
+    else if (lower === 'b') this.toggleBackSide();
     else if (lower === 'r') this.cycleOrientation();
     else if (this.selection === null) {
       if (key === 'Delete' || key === 'Backspace' || key === '[' || key === ']' || lower === 'd') this.info('Select a part first (V, then click it)');

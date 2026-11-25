@@ -1,0 +1,21 @@
+=== static stiffness: gear 0 FIXED, N−1 idlers r=1, last gear carries horizontal arm (m at L). θ_last should stay 0.
+m=50 L=10 τ=6.13e+5  N= 2 fb=1: θ_last 0.1s -1.84e-5 1s -1.84e-5 10s -1.84e-5 rad (peak 2.98e-5; tip sag 2.98e-4 units); max phase err 7.58e-5 teeth; 454 ms/sim s
+m=50 L=10 τ=6.13e+5  N= 2 fb=0: θ_last 0.1s -0.001 1s -0.013 10s -0.133 rad (peak 0.133; tip sag 1.333 units); max phase err 0.339 teeth; 408 ms/sim s
+m=50 L=10 τ=6.13e+5  N= 5 fb=1: θ_last 0.1s -2.00e-4 1s -2.44e-4 10s -2.47e-4 rad (peak 4.84e-4; tip sag 0.005 units); max phase err 4.57e-4 teeth; 950 ms/sim s
+m=50 L=10 τ=6.13e+5  N= 5 fb=0: θ_last 0.1s -0.023 1s -0.231 10s -1.361 rad (peak 1.361; tip sag 13.607 units); max phase err 1.321 teeth; 837 ms/sim s
+m=50 L=10 τ=6.13e+5  N=10 fb=1: θ_last 0.1s -1.06e-4 1s -6.15e-4 10s -6.29e-4 rad (peak 0.001; tip sag 0.012 units); max phase err 4.52e-4 teeth; 1864 ms/sim s
+m=50 L=10 τ=6.13e+5  N=10 fb=0: θ_last 0.1s -0.057 1s -0.560 10s -1.565 rad (peak 1.565; tip sag 15.651 units); max phase err 0.588 teeth; 1810 ms/sim s
+m=50 L=10 τ=6.13e+5  N=20 fb=1: θ_last 0.1s -0.002 1s -0.001 10s -0.001 rad (peak 0.003; tip sag 0.028 units); max phase err 4.64e-4 teeth; 3774 ms/sim s
+m=50 L=10 τ=6.13e+5  N=20 fb=0: θ_last 0.1s -0.118 1s -1.043 10s -1.570 rad (peak 1.570; tip sag 15.696 units); max phase err 0.266 teeth; 3795 ms/sim s
+m=50 L=10 τ=6.13e+5  N=40 fb=1: θ_last 0.1s -0.003 1s -0.005 10s -0.003 rad (peak 0.006; tip sag 0.058 units); max phase err 4.63e-4 teeth; 7436 ms/sim s
+m=50 L=10 τ=6.13e+5  N=40 fb=0: θ_last 0.1s -0.215 1s -1.452 10s -1.570 rad (peak 1.570; tip sag 15.704 units); max phase err 0.131 teeth; 6183 ms/sim s
+m=100 L=30 τ=3.68e+6  N= 2 fb=1: θ_last 0.1s -1.17e-4 1s -9.56e-5 10s -9.78e-5 rad (peak 1.90e-4; tip sag 0.006 units); max phase err 4.84e-4 teeth; 166 ms/sim s
+m=100 L=30 τ=3.68e+6  N= 2 fb=0: θ_last 0.1s -0.009 1s -0.092 10s -0.703 rad (peak 0.703; tip sag 21.093 units); max phase err 1.790 teeth; 176 ms/sim s
+m=100 L=30 τ=3.68e+6  N= 5 fb=1: θ_last 0.1s -0.002 1s -0.003 10s -0.001 rad (peak 0.003; tip sag 0.088 units); max phase err 0.003 teeth; 497 ms/sim s
+m=100 L=30 τ=3.68e+6  N= 5 fb=0: θ_last 0.1s -0.095 1s -1.063 10s -1.569 rad (peak 1.569; tip sag 47.062 units); max phase err 1.548 teeth; 522 ms/sim s
+m=100 L=30 τ=3.68e+6  N=10 fb=1: θ_last 0.1s -0.006 1s -0.007 10s -0.003 rad (peak 0.007; tip sag 0.225 units); max phase err 0.003 teeth; 1182 ms/sim s
+m=100 L=30 τ=3.68e+6  N=10 fb=0: θ_last 0.1s -0.145 1s -1.557 10s -1.571 rad (peak 1.571; tip sag 47.136 units); max phase err 0.592 teeth; 1677 ms/sim s
+m=100 L=30 τ=3.68e+6  N=20 fb=1: θ_last 0.1s -0.002 1s -0.003 10s -0.013 rad (peak 0.017; tip sag 0.499 units); max phase err 0.003 teeth; 3223 ms/sim s
+m=100 L=30 τ=3.68e+6  N=20 fb=0: θ_last 0.1s -0.174 1s -1.537 10s -1.571 rad (peak 1.891; tip sag 56.736 units); max phase err 0.319 teeth; 3372 ms/sim s
+m=100 L=30 τ=3.68e+6  N=40 fb=1: θ_last 0.1s -0.015 1s -0.024 10s -0.005 rad (peak 0.035; tip sag 1.049 units); max phase err 0.003 teeth; 6649 ms/sim s
+m=100 L=30 τ=3.68e+6  N=40 fb=0: θ_last 0.1s -0.189 1s -1.224 10s -1.571 rad (peak 2.323; tip sag 69.693 units); max phase err 0.187 teeth; 6842 ms/sim s

@@ -1,0 +1,6 @@
+## cost: ms of stepping per simulated second (Node, machine shared with other jobs; min of 3 × 2 s)
+case	ms/sim-s
+cart r1.5 rolling 40 u/s, 240 it	483.6
+cart r1.5 at rest, 240 it	482.6
+same model, no wheels/ground (falls freely)	215.2
+determinism (cart 15°, 2 s): d16300b0 d16300b0

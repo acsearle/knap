@@ -1,0 +1,10 @@
+## coast to a stop on flat ground from v0 (joint friction only; Rapier has no rolling resistance)
+r	μ	mj rule	m_j	v0	decel analytic	stop dist analytic	stop dist meas	t_stop meas	drift after stop (5 s)	guard removed
+1.5	0.2	sim	7.69	20	25.255	7.92	7.95	0.794	0.000000	0.000
+1.5	0.2	sim	7.69	100	25.255	197.98	199.40	3.965	0.000000	4588.590
+1.5	0.2	share	4.18	20	13.723	14.57	14.69	1.465	0.000000	0.000
+1.5	0.2	share	4.18	100	13.723	364.35	367.02	7.302	0.000000	12110.376
+1.5	1	share	4.18	20	68.616	2.91	2.92	0.290	0.000000	0.000
+1.5	1	share	4.18	100	68.616	72.87	73.29	1.462	0.000000	0.000
+1.5	0	sim	7.69	20	0.000	Infinity	NaN	NaN	NaN	288.883
+1.5	0	sim	7.69	100	0.000	Infinity	NaN	NaN	NaN	14349.542

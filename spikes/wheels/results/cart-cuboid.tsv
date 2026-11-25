@@ -1,0 +1,5 @@
+## cart at rest on a cuboid ground (not a half-space), 10 s
+r	|dx|	final y	max |v|
+1	2.19e-5	-0.0105	0.0207
+1.5	3.34e-5	-0.0056	0.0168
+2.5	0.00000	-0.0039	0.0113

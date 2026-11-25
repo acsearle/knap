@@ -1,0 +1,8 @@
+example	min cell y	root min y	cells below y=0	lowest body com y in 10 s (μ 0.2)	lowest geometry y in 10 s (bound)
+pendulum	0	0	0	-2.00	-4.87
+triple-pendulum	0	0	0	-8.00	-9.87
+four-bar	0	0	0	-2.18	-5.24
+parallelogram	-2	0	16	-2.83	-5.20
+sliding-axle	-2	0	2	-0.12	-4.88
+weld-test	0	0	0	-2.70	-6.32
+collision	-6	-6	11	-4.46	-7.76

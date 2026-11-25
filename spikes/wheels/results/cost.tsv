@@ -1,0 +1,11 @@
+case	ms/sim-s	hash
+empty world + half-space	2.5	811c9dc5
+1 loose cyl wheel rolling on half-space, 30 substeps	33.4	da3b8394
+4 loose cyl wheels rolling on half-space, 30 substeps	39.4	299e2f77
+1 cyl wheel on half-space, 240 substeps (as if jointed)	162.8	2f7a1db4
+4 cyl wheels on half-space, 240 substeps	251.3	7bcf48af
+1 hybrid wheel at rest on liftarm floor (hull contact), 30 substeps	37.5	b3bb215a
+1 hybrid wheel at rest on liftarm floor, 240 substeps	282.5	78d90aa2
+friction-drive pair, cylinders pressed together, 240	325.8	45c5045a
+same pair 0.01 apart (AABBs overlap, no contact), 240	367.6	5d701d06
+same pair 5 apart (no narrow phase), 240	139.1	68658acb

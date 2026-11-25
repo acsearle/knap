@@ -1,0 +1,6 @@
+=== swing-arm selector (axis Y, horizontal plane): driver D r1 at origin (motor), arm on D's axis carrying planet P r1 at R=2, outputs O1/O2 r1
+-- B snap rate.002 eps.05 band.03 hyst.10: 1809.0 ms per sim s
+   O1: engaged at [0.652,6.442] s, released at [3.052] s, snap error at engagement [-0.449,0.027] teeth, peak |α_O| within 0.2 s of engagement 2197.4 rad/s²
+   O2: engaged at [3.442] s, released at [6.052] s, snap error at engagement [-0.449] teeth, peak |α_O| within 0.2 s of engagement 3094.0 rad/s²
+   engaged ω_O/ω_D: min -0.2343 max 0.9985 (ideal +1 with arm at rest); max overlap past pitch contact 0.1001 units; min P–O distance 1.8999
+   0.0s β0.002 ω_O1 0.00 ω_O2 0.00 | 0.5s β0.374 ω_O1 0.00 ω_O2 0.00 | 1.0s β0.501 ω_O1 5.03 ω_O2 0.00 [O1] | 1.5s β0.553 ω_O1 4.99 ω_O2 0.00 [O1] | 2.0s β0.553 ω_O1 4.98 ω_O2 0.00 [O1] | 2.5s β0.553 ω_O1 4.98 ω_O2 0.00 [O1] | 3.0s β0.548 ω_O1 1.17 ω_O2 0.00 [O1] | 3.5s β-0.544 ω_O1 0.25 ω_O2 -5.36 [O2] | 4.0s β-0.553 ω_O1 0.09 ω_O2 -4.97 [O2] | 4.5s β-0.553 ω_O1 0.03 ω_O2 -4.99 [O2] | 5.0s β-0.553 ω_O1 0.01 ω_O2 -4.98 [O2] | 5.5s β-0.553 ω_O1 0.00 ω_O2 -4.99 [O2] | 6.0s β-0.548 ω_O1 0.00 ω_O2 -1.15 [O2] | 6.5s β0.549 ω_O1 5.30 ω_O2 -0.24 [O1] | 7.0s β0.553 ω_O1 4.98 ω_O2 -0.09 [O1] | 7.5s β0.553 ω_O1 4.98 ω_O2 -0.03 [O1] | 8.0s β0.553 ω_O1 4.99 ω_O2 -0.01 [O1] | 8.5s β0.553 ω_O1 4.98 ω_O2 -0.00 [O1]

@@ -1,0 +1,7 @@
+=== 20 meshes in one train (21 gears r=1 in a line)
+driven 10 rad/s: last gear ω 9.74799 (ideal 10); max phase err over 20 meshes 8.82e-4 teeth; max revolute err 1.07e-10; 1719.9 ms per sim s
+loaded (2 at L=3 on gear 0, pendulum 3 at L=3 on gear 20): α0 -92.817 vs analytic -107.939 rad/s² (Ieff 68.163); max phase err 1.05e-5 teeth; max revolute err 2.67e-7
+=== determinism: same 20-mesh loaded train twice, compare raw f32 state after 1 s
+max |Δ| between runs: 0 (bitwise identical: true)
+=== removing a gear body mid-run (3 gears, middle removed at 1 s)
+before removal ω3=10.0010; after 1 s more: meshes dead [true,true], joints in world 2 (2 revolutes expected), ω1=10.0000 ω3=10.0743 (coasting; spin gain only)

@@ -1,0 +1,6 @@
+## cart substeps: 15° incline μ=0 accuracy, rest 5 s on flat, cost
+iters	a_analytic	a_meas	rel.err	rest y p-p	rest |dx| 5 s	max joint err (rest)	ms/sim-s (incline)
+30	244.07	243.06	-0.0042	1.75e-5	0.011046	9.17e-6	390
+60	244.07	243.15	-0.0038	1.05e-4	0.012285	2.57e-6	405
+120	244.07	243.42	-0.0027	6.27e-4	6.19e-4	8.32e-7	662
+240	244.07	244.40	0.0014	0.002197	3.15e-5	4.45e-7	1339

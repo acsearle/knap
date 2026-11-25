@@ -1,0 +1,7 @@
+=== even loop: 4 gears r=1 on a square (side 2), 4 meshes (one redundant): must turn
+feedback=true: θ after 10 s [100.0000,-100.0000,100.0000,-100.0000] (ideal ±100.0); ω [10.0000,-10.0009,9.9991,-9.9982]; max phase err 8.91e-5 teeth; max revolute err 4.87e-10
+feedback=false: θ after 10 s [100.0000,-100.0108,100.0000,-100.0108] (ideal ±100.0); ω [10.0000,-9.9968,9.9988,-9.9995]; max phase err 0.0277 teeth; max revolute err 4.83e-10
+=== centre distance off by ±0.02 (pair r=1:r=1.5, motor 10 rad/s; and a loaded hold)
+Δd=-0.02: mean ratio -0.666667 vs -0.666667; max phase err 1.66e-4 teeth
+Δd=0: mean ratio -0.666667 vs -0.666667; max phase err 1.63e-4 teeth
+Δd=0.02: mean ratio -0.666667 vs -0.666667; max phase err 1.60e-4 teeth

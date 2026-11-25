@@ -1,0 +1,2 @@
+=== (c) free 5-gear idler train (r = 1, 0.5, 1.5, 1, 2.5) spun at 10 rad/s on gear 0, no motor, zero gravity, 120 s raw. CONTROL: single r=1 rotor.
+   K/K0 train / control rotor: 20s 1.2483/1.2446 | 40s 1.5503/1.5351 | 60s 1.9062/1.8967 | 80s 2.3068/2.3517 | 100s 2.7486/3.0387 | 120s 3.2112/4.0298; max phase err 0.0076 teeth

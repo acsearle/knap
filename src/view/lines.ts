@@ -24,43 +24,16 @@ varying vec2 vP;
 flat varying vec2 vA;
 flat varying vec2 vB;
 flat varying vec4 vColor;
-#ifdef ID_MASK
-// Placement against the outline ID buffer (outline.ts): the set is drawn at the first candidate
-// offset whose probe rectangle holds no part other than slot uMaskSlot, or not at all. Every
-// vertex evaluates the same probes, so the whole set moves (or hides) as one.
-uniform highp sampler2D uMaskTex;
-uniform float uMaskSlot;
-uniform vec4 uMaskRect;      // probe rect where the set was built (drawing px, GL y-up)
-uniform vec2 uMaskCand[8];   // candidate offsets (drawing px), in order of preference
-uniform int uMaskCount;
-uniform float uMaskSS;
-bool maskBlocked(vec2 off) {
-  ivec2 sz = textureSize(uMaskTex, 0);
-  for (int j = 0; j <= 4; j++)
-    for (int i = 0; i <= 10; i++) {
-      vec2 q = (off + mix(uMaskRect.xy, uMaskRect.zw, vec2(float(i) / 10.0, float(j) / 4.0))) * uMaskSS;
-      if (q.x < 0.0 || q.y < 0.0 || q.x >= float(sz.x) || q.y >= float(sz.y)) continue;
-      float id = abs(texelFetch(uMaskTex, ivec2(q), 0).y);
-      if (id > 0.5 && floor((id - 1.0) / 4096.0) != uMaskSlot) return true;
-    }
-  return false;
-}
+#ifdef ID_FADE
+varying float vViewDepth;
 #endif
 void main() {
   vec4 ca = projectionMatrix * modelViewMatrix * vec4(iA, 1.0);
   vec4 cb = projectionMatrix * modelViewMatrix * vec4(iB, 1.0);
   vec2 sa = (ca.xy / ca.w * 0.5 + 0.5) * uResolution;
   vec2 sb = (cb.xy / cb.w * 0.5 + 0.5) * uResolution;
-#ifdef ID_MASK
-  int found = -1;
-  vec2 shift = vec2(0.0);
-  for (int k = 0; k < 8; k++) {
-    if (k >= uMaskCount || found >= 0) break;
-    if (!maskBlocked(uMaskCand[k])) { found = k; shift = uMaskCand[k]; }
-  }
-  if (found < 0) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
-  sa += shift;
-  sb += shift;
+#ifdef ID_FADE
+  vViewDepth = -(modelViewMatrix * vec4(position.x < 0.0 ? iA : iB, 1.0)).z;
 #endif
   vec2 d = sb - sa;
   float L = length(d);
@@ -84,6 +57,17 @@ varying vec2 vP;
 flat varying vec2 vA;
 flat varying vec2 vB;
 flat varying vec4 vColor;
+#ifdef ID_FADE
+// Fainter where another part is in front (root marker): the outline ID buffer (outline.ts) holds
+// the nearest surface's view depth and id per texel; a texel of a part other than slot uFadeSlot
+// nearer than this fragment by more than uFadeEps multiplies its alpha by uFadeAlpha.
+uniform highp sampler2D uFadeTex;
+uniform float uFadeSlot;
+uniform float uFadeSS;
+uniform float uFadeAlpha;
+uniform float uFadeEps;
+varying float vViewDepth;
+#endif
 void main() {
   vec2 pa = vP - vA;
   vec2 ba = vB - vA;
@@ -91,6 +75,15 @@ void main() {
   float h = bb > 1e-8 ? clamp(dot(pa, ba) / bb, 0.0, 1.0) : 0.0;
   float d = length(pa - ba * h);
   float a = clamp(uWidth * 0.5 + 0.5 - d, 0.0, 1.0) * vColor.a * uOpacity;
+#ifdef ID_FADE
+  if (uFadeSS > 0.0) {
+    ivec2 sz = textureSize(uFadeTex, 0);
+    ivec2 q = clamp(ivec2(gl_FragCoord.xy * uFadeSS), ivec2(0), sz - 1);
+    vec2 di = texelFetch(uFadeTex, q, 0).xy;
+    float id = abs(di.y);
+    if (id > 0.5 && floor((id - 1.0) / 4096.0) != uFadeSlot && di.x < vViewDepth - uFadeEps) a *= uFadeAlpha;
+  }
+#endif
   if (a <= 0.002) discard;
   gl_FragColor = vec4(vColor.rgb, a);
 }`;
@@ -103,10 +96,10 @@ export interface FatLinesOptions {
   depthBias?: number;
   opacity?: number;
   /**
-   * Outline ID texture for placement probing (root marker): the set is drawn at the first of a
-   * few candidate screen offsets where no other part covers it, or hidden. See setMask().
+   * Outline ID texture (root marker): fragments where a part other than the fade slot is in front
+   * are drawn fainter. See setFade().
    */
-  idMask?: THREE.Texture;
+  idFade?: THREE.Texture;
 }
 
 /** A set of independent segments drawn as one instanced mesh. */
@@ -120,19 +113,18 @@ export class FatLines extends THREE.Mesh<THREE.InstancedBufferGeometry, THREE.Sh
       uDepthBias: { value: opts.depthBias ?? 0 },
       uOpacity: { value: opts.opacity ?? 1 },
     };
-    if (opts.idMask) {
-      uni.uMaskTex = { value: opts.idMask };
-      uni.uMaskSlot = { value: -1 };
-      uni.uMaskRect = { value: new THREE.Vector4() };
-      uni.uMaskCand = { value: Array.from({ length: 8 }, () => new THREE.Vector2()) };
-      uni.uMaskCount = { value: 1 };
-      uni.uMaskSS = { value: 1 };
+    if (opts.idFade) {
+      uni.uFadeTex = { value: opts.idFade };
+      uni.uFadeSlot = { value: -1 };
+      uni.uFadeSS = { value: 0 };
+      uni.uFadeAlpha = { value: 1 };
+      uni.uFadeEps = { value: 0 };
     }
     const mat = new THREE.ShaderMaterial({
       vertexShader: VERT,
       fragmentShader: FRAG,
       uniforms: uni,
-      defines: opts.idMask ? { ID_MASK: '' } : {},
+      defines: opts.idFade ? { ID_FADE: '' } : {},
       transparent: true,
       depthTest: opts.depthTest ?? false,
       depthWrite: false,
@@ -155,21 +147,17 @@ export class FatLines extends THREE.Mesh<THREE.InstancedBufferGeometry, THREE.Sh
   }
 
   /**
-   * ID-mask mode only. `rect` = probe rectangle [x0, y0, x1, y1] around where the segments
-   * project as built (drawing-buffer px, GL y-up); `candidates` = up to 8 [dx, dy] offsets in order of
-   * preference (the first, normally [0, 0], is where they were built); `slot` = the outline-ID
-   * slot that may be covered; `ss` = ID texels per drawing-buffer pixel (0 disables the probe).
+   * ID-fade mode only. `slot` = the outline-ID slot that never fades the set (the part it belongs
+   * to); `ss` = ID texels per drawing-buffer pixel (0 disables fading); `alpha` = the factor where
+   * another part is nearer than the fragment by more than `eps` world units.
    */
-  setMask(slot: number, rect: readonly [number, number, number, number], candidates: readonly (readonly [number, number])[], ss: number): void {
+  setFade(slot: number, ss: number, alpha: number, eps: number): void {
     const u = this.material.uniforms;
-    if (!u.uMaskTex) return;
-    u.uMaskSlot!.value = slot;
-    (u.uMaskRect!.value as THREE.Vector4).set(...rect);
-    const cand = u.uMaskCand!.value as THREE.Vector2[];
-    const n = Math.max(1, Math.min(8, candidates.length));
-    for (let i = 0; i < n; i++) cand[i]!.set(candidates[i]?.[0] ?? 0, candidates[i]?.[1] ?? 0);
-    u.uMaskCount!.value = n;
-    u.uMaskSS!.value = ss;
+    if (!u.uFadeTex) return;
+    u.uFadeSlot!.value = slot;
+    u.uFadeSS!.value = ss;
+    u.uFadeAlpha!.value = alpha;
+    u.uFadeEps!.value = eps;
   }
 
   set width(px: number) {

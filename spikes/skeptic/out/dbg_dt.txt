@@ -1,0 +1,16 @@
+ω0=100 dt=1/480 iters=240 lead=1: rotation/step 0.208 rad; K/K0 after 1 s 1.0085; ω_small 100.50; max phase err 0.003 teeth
+ω0=100 dt=1/480 iters=240 lead=0: rotation/step 0.208 rad; K/K0 after 1 s 0.8830; ω_small 89.47; max phase err 0.006 teeth
+ω0=100 dt=1/960 iters=120 lead=1: rotation/step 0.104 rad; K/K0 after 1 s 1.0079; ω_small 100.40; max phase err 8.38e-4 teeth
+ω0=100 dt=1/960 iters=120 lead=0: rotation/step 0.104 rad; K/K0 after 1 s 1.0016; ω_small 98.73; max phase err 6.60e-4 teeth
+ω0=100 dt=1/1920 iters=60 lead=1: rotation/step 0.052 rad; K/K0 after 1 s 1.0089; ω_small 100.46; max phase err 1.20e-4 teeth
+ω0=100 dt=1/1920 iters=60 lead=0: rotation/step 0.052 rad; K/K0 after 1 s 1.0080; ω_small 100.06; max phase err 1.66e-4 teeth
+ω0=100 dt=1/3840 iters=30 lead=1: rotation/step 0.026 rad; K/K0 after 1 s 1.0087; ω_small 100.44; max phase err 3.00e-4 teeth
+ω0=100 dt=1/3840 iters=30 lead=0: rotation/step 0.026 rad; K/K0 after 1 s 1.0086; ω_small 100.35; max phase err 7.13e-5 teeth
+ω0=200 dt=1/480 iters=240 lead=1: rotation/step 0.417 rad; K/K0 after 1 s 0.0729; ω_small -54.01; max phase err 0.068 teeth
+ω0=200 dt=1/480 iters=240 lead=0: rotation/step 0.417 rad; K/K0 after 1 s 0.1925; ω_small -84.09; max phase err 0.036 teeth
+ω0=200 dt=1/960 iters=120 lead=1: rotation/step 0.208 rad; K/K0 after 1 s 1.0975; ω_small 209.75; max phase err 0.021 teeth
+ω0=200 dt=1/960 iters=120 lead=0: rotation/step 0.208 rad; K/K0 after 1 s 0.9090; ω_small 181.35; max phase err 0.005 teeth
+ω0=200 dt=1/1920 iters=60 lead=1: rotation/step 0.104 rad; K/K0 after 1 s 1.0059; ω_small 200.64; max phase err 0.003 teeth
+ω0=200 dt=1/1920 iters=60 lead=0: rotation/step 0.104 rad; K/K0 after 1 s 0.9937; ω_small 196.72; max phase err 9.63e-4 teeth
+ω0=200 dt=1/3840 iters=30 lead=1: rotation/step 0.052 rad; K/K0 after 1 s 1.0074; ω_small 200.75; max phase err 3.88e-4 teeth
+ω0=200 dt=1/3840 iters=30 lead=0: rotation/step 0.052 rad; K/K0 after 1 s 0.8932; ω_small 188.47; max phase err 0.012 teeth

@@ -1,0 +1,21 @@
+=== idler chain of 6 gears r=1 (5 meshes); weight m=2 at L=3 (+x) on gear 1, pendulum m=3 on gear 6
+chain6: k=[1.0000,-1.0000,1.0000,-1.0000,1.0000,-1.0000] Ieff=54.5498 Q(0)=-7357.50 α0 meas -135.639 vs analytic -134.877 rad/s² (err 0.0057)
+   θ1(t) sim vs ODE: t=0.0104s -0.0073/-0.0073; t=0.05s -0.1616/-0.1615; t=0.1s -0.5618/-0.5613; t=0.2s -1.1753/-1.1736; t=0.4s -0.0074/-0.0094
+   kinematic residual θ_j − k_j θ_1 (rad) at end: [0.000000,-1.51e-7,2.66e-7,-3.94e-7,4.67e-7,-5.16e-7] ; max mesh phase err 1.22e-5 teeth; max revolute anchor err 9.83e-7 units; 670.5 ms per sim s
+=== idler chain of 11 gears r=1 (10 meshes); weight m=2 at L=3 (+x) on gear 1, pendulum m=3 on gear 11
+chain11: k=[1.0000,-1.0000,1.0000,-1.0000,1.0000,-1.0000,1.0000,-1.0000,1.0000,-1.0000,1.0000] Ieff=62.4038 Q(0)=-7357.50 α0 meas -116.558 vs analytic -117.902 rad/s² (err -0.0114)
+   θ1(t) sim vs ODE: t=0.0104s -0.0064/-0.0064; t=0.05s -0.1421/-0.1419; t=0.1s -0.5033/-0.5028; t=0.2s -1.1539/-1.1520; t=0.4s -0.0927/-0.0942
+   kinematic residual θ_j − k_j θ_1 (rad) at end: [0.000000,-2.04e-8,8.74e-8,-3.91e-7,3.76e-7,-5.86e-7,5.02e-7,-6.16e-7,4.65e-7,-3.16e-7,2.79e-8] ; max mesh phase err 1.10e-5 teeth; max revolute anchor err 1.92e-6 units; 917.2 ms per sim s
+=== idler chain of 21 gears r=1 (20 meshes); weight m=2 at L=3 (+x) on gear 1, pendulum m=3 on gear 21
+chain21: k=[1.0000,-1.0000,1.0000,-1.0000,1.0000,-1.0000,1.0000,-1.0000,1.0000,-1.0000,1.0000,-1.0000,1.0000,-1.0000,1.0000,-1.0000,1.0000,-1.0000,1.0000,-1.0000,1.0000] Ieff=78.1117 Q(0)=-7357.50 α0 meas -92.817 vs analytic -94.192 rad/s² (err -0.0146)
+   θ1(t) sim vs ODE: t=0.0104s -0.0051/-0.0051; t=0.05s -0.1144/-0.1143; t=0.1s -0.4159/-0.4154; t=0.2s -1.0793/-1.0772; t=0.4s -0.3640/-0.3644
+   kinematic residual θ_j − k_j θ_1 (rad) at end: [0.000000,8.21e-7,-1.60e-6,1.81e-6,-2.56e-6,2.72e-6,-3.40e-6,3.52e-6,-4.04e-6,4.14e-6,-4.73e-6,4.71e-6,-5.31e-6,5.36e-6,-5.92e-6,6.01e-6,-6.64e-6,6.70e-6,-7.25e-6,6.71e-6,-7.65e-6] ; max mesh phase err 1.05e-5 teeth; max revolute anchor err 3.83e-6 units; 1676.5 ms per sim s
+=== mass ratio ~100: r0.5 gear with 0.2 arm weight driving r2.5 gear with 80 arm weight (pendulum)
+m100-ish (light both): k=[1.0000,-0.2000] Ieff=4.7907 Q(0)=-735.75 α0 meas -153.491 vs analytic -153.577 rad/s² (err -5.59e-4)
+   θ1(t) sim vs ODE: t=0.05s -0.1904/-0.1903; t=0.1s -0.7315/-0.7305; t=0.2s -2.1265/-2.1220
+   kinematic residual θ_j − k_j θ_1 (rad) at end: [0.000000,-4.07e-7] ; max mesh phase err 6.84e-5 teeth; max revolute anchor err 2.46e-7 units; 172.0 ms per sim s
+   masses 0.985,20.835
+m100 heavy output   : k=[1.0000,-0.2000] Ieff=39.7355 Q(0)=-735.75 α0 meas -18.403 vs analytic -18.516 rad/s² (err -0.0061)
+   θ1(t) sim vs ODE: t=0.05s -0.0215/-0.0214; t=0.1s -0.0678/-0.0677; t=0.2s -0.0908/-0.0907; t=0.4s -0.0395/-0.0396
+   kinematic residual θ_j − k_j θ_1 (rad) at end: [0.000000,-1.92e-7] ; max mesh phase err 2.58e-6 teeth; max revolute anchor err 7.54e-7 units; 171.3 ms per sim s
+   masses 0.985,117.635 (ratio 119.4)

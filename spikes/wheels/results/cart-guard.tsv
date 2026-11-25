@@ -1,0 +1,4 @@
+## guard: μ = 0, flat, v0 = 100 u/s for 20 s (2000 units)
+guard	v_end/v0	guard removed/KE0	E_end/E0−1	ms/sim-s
+true	1.00479	0.37440	0.00919	999
+false	1.20266	0.00000	0.44709	996

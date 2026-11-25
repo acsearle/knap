@@ -1,0 +1,21 @@
+fixed	loose	drop h	final loose com y (rest ≈ 0.92)	removed?
+edge	flat	2	0.910	no
+edge	flat	3	0.910	no
+edge	flat	5	0.910	no
+edge	flat	8	0.910	no
+edge	flat	10	0.910	no
+edge	edge	2	0.910	no
+edge	edge	3	0.910	no
+edge	edge	5	0.910	no
+edge	edge	8	0.910	no
+edge	edge	10	0.911	no
+flat	flat	2	0.910	no
+flat	flat	3	0.910	no
+flat	flat	5	0.910	no
+flat	flat	8	0.910	no
+flat	flat	10	0.911	no
+flat	edge	2	0.910	no
+flat	edge	3	0.910	no
+flat	edge	5	0.910	no
+flat	edge	8	0.910	no
+flat	edge	10	0.911	no

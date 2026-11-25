@@ -1,0 +1,19 @@
+=== sim.ts joint friction (μ=0.2, stiction hold) on every revolute of an N-gear idler train (r=1); input motor target 1 rad/s, max torque f·Στ_f
+N=2 f=0.9: Στ_f 477.7; input θ(1 s) 1.46e-7 rad (analytic 0.0000); last θ -1.36e-7 (kinematic -1.46e-7); max phase err 2.72e-8 teeth
+N=2 f=1.1: Στ_f 477.7; input θ(1 s) 7.6262 rad (analytic 7.6028); last θ -7.6261 (kinematic -7.6262); max phase err 4.07e-5 teeth
+N=6 f=0.9: Στ_f 1433.1; input θ(1 s) 6.10e-7 rad (analytic 0.0000); last θ -2.62e-7 (kinematic -6.10e-7); max phase err 2.43e-7 teeth
+N=6 f=1.1: Στ_f 1433.1; input θ(1 s) 7.6402 rad (analytic 7.6028); last θ -7.6401 (kinematic -7.6402); max phase err 4.15e-5 teeth
+N=12 f=0.9: Στ_f 2866.2; input θ(1 s) 3.03e-6 rad (analytic 0.0000); last θ -1.29e-6 (kinematic -3.03e-6); max phase err 7.64e-7 teeth
+N=12 f=1.1: Στ_f 2866.2; input θ(1 s) 7.6632 rad (analytic 7.6028); last θ -7.6630 (kinematic -7.6632); max phase err 4.30e-5 teeth
+=== two shafts 2 apart with TWO meshes each. Inconsistent: A{1, 1.5} vs B{1, 0.5} (ratios 1 and 3) must lock. Consistent: A{1,1} vs B{1,1} must turn 1:1.
+INCONSISTENT arm m=10 L=5 on B, no motor: θA 3.54e-6 θB -8.24e-6 rad after 5 s; peak |ω| 0.02; final phase errs -1.20e-5, 3.02e-6 teeth (max 1.55e-5)
+INCONSISTENT motor on A 10 rad/s, max 1e4: θA 8.19e-7 θB -1.26e-6 rad after 5 s; peak |ω| 4.35e-6; final phase errs -1.14e-6, 1.52e-6 teeth (max 1.52e-6)
+INCONSISTENT motor on A 10 rad/s, unlimited: θA 53.7756 θB -83.7495 rad after 5 s; peak |ω| 214.46; final phase errs -74.440, 99.605 teeth (max 100.438)
+consistent   arm m=10 L=5 on B, no motor: θA 2.6958 θB -2.6958 rad after 5 s; peak |ω| 22.36; final phase errs 4.76e-5, 4.76e-5 teeth (max 1.30e-4)
+consistent   motor on A 10 rad/s, max 1e4: θA 49.9647 θB -49.9647 rad after 5 s; peak |ω| 10.01; final phase errs 1.16e-5, 1.16e-5 teeth (max 8.76e-5)
+consistent   motor on A 10 rad/s, unlimited: θA 50.0000 θB -50.0000 rad after 5 s; peak |ω| 10.08; final phase errs 1.16e-5, 1.16e-5 teeth (max 4.69e-4)
+=== revolute angle limit on the driven gear: g1 (r1) motor 2 rad/s with max torque τm; g2 (r2) revolute limited to [−0.5, 0.5]. Expect g1 stops at θ1 = 0.5·r2/r1 and holds.
+r1=1 r2=1 τm=1000: expected stop θ1 = 0.5000, θ2 = −0.5 | 0.5s θ1 0.9937 θ2 -0.9937 | 1.0s θ1 1.9937 θ2 -1.9937 | 1.5s θ1 2.9937 θ2 -2.9937 | 2.0s θ1 3.9937 θ2 -3.9937 | 2.5s θ1 4.9937 θ2 -4.9937 | 3.0s θ1 5.9937 θ2 -5.9937 | phase err 5.99e-12 teeth (max 9.68e-7)
+r1=0.5 r2=2.5 τm=1000: expected stop θ1 = 2.5000, θ2 = −0.5 | 0.5s θ1 0.9949 θ2 -0.1990 | 1.0s θ1 1.9949 θ2 -0.3990 | 1.5s θ1 2.9949 θ2 -0.5990 | 2.0s θ1 3.9949 θ2 -0.7990 | 2.5s θ1 4.9949 θ2 -0.9990 | 3.0s θ1 5.9949 θ2 -1.1990 | phase err 7.80e-8 teeth (max 2.21e-6)
+r1=0.5 r2=2.5 τm=100000: expected stop θ1 = 2.5000, θ2 = −0.5 | 0.5s θ1 1.0000 θ2 -0.2000 | 1.0s θ1 2.0000 θ2 -0.4000 | 1.5s θ1 3.0000 θ2 -0.6000 | 2.0s θ1 4.0000 θ2 -0.8000 | 2.5s θ1 5.0000 θ2 -1.0000 | 3.0s θ1 6.0000 θ2 -1.2000 | phase err 9.36e-7 teeth (max 2.28e-6)
+r1=2.5 r2=0.5 τm=1000: expected stop θ1 = 0.1000, θ2 = −0.5 | 0.5s θ1 0.8724 θ2 -4.3621 | 1.0s θ1 1.8724 θ2 -9.3621 | 1.5s θ1 2.8724 θ2 -14.3622 | 2.0s θ1 3.8724 θ2 -19.3622 | 2.5s θ1 4.8725 θ2 -24.3623 | 3.0s θ1 5.8725 θ2 -29.3623 | phase err 1.36e-6 teeth (max 3.59e-6)

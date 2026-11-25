@@ -14,7 +14,7 @@
 //   switch (toolState.tool) {
 //     case 'select': resolveSelect(model, hit)        // { partId | null, description }
 //     case 'erase':  resolveErase(model, hit)         // red highlight of hit cell, description
-//     default:       proposal = resolveBuild(model, hit, grid, withShift(toolState, ev.shiftKey))
+//     default:       proposal = resolveBuild(model, hit, grid, withModifiers(toolState, { shift: ev.shiftKey, alt: ev.altKey }))
 //                    // draw proposal.cell as a ghost in proposal.ghostColor (red when !valid),
 //                    // tint proposal.highlight face, show proposal.description (+ orientationHint,
 //                    // + shiftHint when non-empty)
@@ -28,6 +28,8 @@
 //           Passing the withShift(...) state is safe: every state function drops a Shift-induced
 //           newPart (ToolState.shiftHeld), so Shift never latches the "New part" toggle on.
 // [N]:      toolState = setNewPart(toolState, !toolState.newPart).
+// [B]:      toolState = setBackSide(toolState, !toolState.backSide). Alt/Option held = withModifiers'
+//           alt (per event, like Shift for New part; altHeld never latches either).
 // [1]-[5], [V], [E], Esc: toolState = selectTool(toolState, TOOL_KEYS[key.toLowerCase()]).
 // Palette swatch: toolState = pickColor(toolState, '#rrggbb').
 //
@@ -88,6 +90,12 @@
 // considered, else Extend/New adjacent), with `reason` from canAddCell / shareResult or a precise
 // precondition message ("the pin hole at (1, 0, 0) already holds a pin (part 4)").
 //
+// Back side (§7.3): with state.backSide and a cell pick, resolveBuild resolves exactly as if
+// farSidePick(model, pick) had been hovered (walk from C along −n while the next cell belongs to the
+// SAME part P; hover (P, C', −n)) — same priority order, [R], Shift / New part — and then sets
+// proposal.backSide = true and inserts " · back side (−Z)" (the far face's direction) at the end
+// of the description, before " — reason" when invalid. Grid hovers and Select / Erase ignore it.
+//
 // Insert joining (DEVIATION, see docs/DEVIATIONS.md §7): without newPart, if the cell behind the
 // hole (C − n, the far side from the viewer) holds a coaxial male of a part other than P, the
 // inserted male is added to THAT part (proposal.joins = true, targetPartId = that part,
@@ -135,7 +143,7 @@
 // on grid the −Y face of the grid cell), description (status-bar sentence; invalid:
 // "<what> — <reason>"), options, orientationHint ("[R] 2/3" or ''), shiftHint (without newPart:
 // "Shift: <description>" when Shift would do a different valid thing — another action, join, or
-// number of cells — else ''),
+// number of cells — else ''), backSide (resolved on the far side, see above),
 // apply(current) → { model, partId } (throws if invalid or current !== baseModel).
 //
 // resolveErase(model, pick) → { baseModel, valid, partId, cellIndex, cell, highlight, description,

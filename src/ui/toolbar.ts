@@ -1,5 +1,5 @@
-// Left toolbar (§7.2): Select, the five build tools, Erase, plus the "New part" toggle [N] and
-// the orientation cycler [R]. Shortcuts are shown on the buttons.
+// Left toolbar (§7.2): Select, the five build tools, Erase, plus the "New part" toggle [N], the
+// "Back side" toggle [B] (§7.3) and the orientation cycler [R]. Shortcuts are shown on the buttons.
 import type { Tool } from '../editor';
 import { button, h, icon } from './dom';
 import { ICONS } from './icons';
@@ -7,12 +7,14 @@ import { ICONS } from './icons';
 export interface ToolbarHandlers {
   selectTool(t: Tool): void;
   toggleNewPart(): void;
+  toggleBackSide(): void;
   cycleOrientation(): void;
 }
 
 export interface ToolbarState {
   tool: Tool;
   newPart: boolean;
+  backSide: boolean;
   disabled: boolean;
   /** "[R] 2/3" or '' — enables the orientation button when there is a choice. */
   orientationHint: string;
@@ -40,6 +42,7 @@ export class Toolbar {
   readonly el: HTMLElement;
   private readonly buttons = new Map<Tool, HTMLButtonElement>();
   private readonly newPartBtn: HTMLButtonElement;
+  private readonly backSideBtn: HTMLButtonElement;
   private readonly rotateBtn: HTMLButtonElement;
 
   constructor(on: ToolbarHandlers) {
@@ -65,6 +68,14 @@ export class Toolbar {
       'data-action': 'new-part',
       onclick: () => on.toggleNewPart(),
     });
+    this.backSideBtn = button([icon(ICONS.backSide), h('span', { class: 'key' }, 'B')], {
+      class: 'tool small',
+      title: 'Back side (B) — build on the far side of the part you point at, straight through from the face under the cursor. Hold Alt / Option for one click.',
+      'aria-label': 'Back side',
+      'aria-pressed': 'false',
+      'data-action': 'back-side',
+      onclick: () => on.toggleBackSide(),
+    });
     this.rotateBtn = button([icon(ICONS.rotate), h('span', { class: 'key' }, 'R')], {
       class: 'tool small',
       title: 'Next orientation of the ghost (R)',
@@ -72,7 +83,7 @@ export class Toolbar {
       'data-action': 'orientation',
       onclick: () => on.cycleOrientation(),
     });
-    this.el.append(this.newPartBtn, this.rotateBtn);
+    this.el.append(this.newPartBtn, this.backSideBtn, this.rotateBtn);
   }
 
   update(s: ToolbarState): void {
@@ -86,6 +97,9 @@ export class Toolbar {
     this.newPartBtn.disabled = s.disabled || !build;
     this.newPartBtn.classList.toggle('on', s.newPart && build);
     this.newPartBtn.setAttribute('aria-pressed', String(s.newPart));
+    this.backSideBtn.disabled = s.disabled || !build;
+    this.backSideBtn.classList.toggle('on', s.backSide && build);
+    this.backSideBtn.setAttribute('aria-pressed', String(s.backSide));
     this.rotateBtn.disabled = s.disabled || !build || !s.orientationHint;
     this.rotateBtn.title = `Next orientation of the ghost (R)${s.orientationHint ? ` — ${s.orientationHint.replace('[R] ', '')}` : ''}`;
   }

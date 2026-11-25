@@ -49,15 +49,17 @@
 //                                   lightening (reads on every part colour); getSelection()
 //   setHoverFace({cell:[x,y,z], dir: Dir 0..5, color?} | null)   quad on that face of the cell cube
 //   setHoverCell({cell:[x,y,z], color?='#e0322b'} | null)        whole cell cube (erase tool)
-//   setGhost({cell: Cell, extra?: Cell[], valid} | null)   translucent real geometry of a one-cell
+//   setGhost({cell: Cell, extra?: Cell[], valid, xray?} | null)   translucent real geometry of a one-cell
 //                                   sub-part (with extra: of that multi-cell new part); accent
 //                                   when valid, red when not; parts of it behind geometry are fainter
 //   setGridVisible(bool)            faint grid on y = −½ (cell boundaries) + coloured axis lines
 //                                   (x=0 blue, z=0 red); hide while simulating
-//   setRootMarkerVisible(bool)      small ground-hatch "fixed" mark under the root part's lowest
-//                                   cell on screen (effectiveRootId of the model). It never
-//                                   overlaps another part: it moves to the next-lowest root cell
-//                                   whose mark area is clear (up to 8 tried), else it is hidden
+//   setRootMarkerVisible(bool)      small ground-hatch "fixed" mark hung below an anchor cell of
+//                                   the root part (effectiveRootId), chosen from the model alone
+//                                   (rootmarker.ts rootAnchorIndex: lowest row, nearest its
+//                                   centroid), so it never jumps; drawn on top with a halo, fainter
+//                                   (MARK.faint) where another part is in front of it.
+//                                   rootMarkerInfo(probe?) reports where it is (test hook).
 //   setJointGlyphs(glyphs | null), setGlyphsVisible(bool)
 //                                   JointGlyph = { type, origin, axis, followPartId? }; build them
 //                                   with jointGlyphsFromGraph(analyze(model)). Ring = revolute,

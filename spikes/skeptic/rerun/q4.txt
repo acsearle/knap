@@ -1,0 +1,17 @@
+=== planetary, fixed sun, arm driven by a motor: ω_planet / ω_arm vs 1 + r_s/r_p
+axis Z rs=1 rp=1 ω_arm=1: mean ω_p/ω_arm 2.000000 vs 2.000000 (err 1.85e-7); end-of-step ω_p/ω_arm 2.05253; phase err -1.99e-7 teeth (max 8.90e-7); planet revolute err 1.98e-6
+axis Z rs=1 rp=1 ω_arm=10: mean ω_p/ω_arm 2.000000 vs 2.000000 (err -4.80e-8); end-of-step ω_p/ω_arm 1.99399; phase err -1.14e-5 teeth (max 1.41e-5); planet revolute err 2.02e-6
+axis Z rs=2.5 rp=0.5 ω_arm=1: mean ω_p/ω_arm 6.000000 vs 6.000000 (err 3.12e-8); end-of-step ω_p/ω_arm 6.02489; phase err -4.35e-7 teeth (max 9.07e-7); planet revolute err 1.18e-6
+axis Z rs=2.5 rp=0.5 ω_arm=10: mean ω_p/ω_arm 5.999996 vs 6.000000 (err -7.27e-7); end-of-step ω_p/ω_arm 5.99549; phase err -2.01e-4 teeth (max 3.55e-4); planet revolute err 1.20e-6
+axis Z rs=0.5 rp=1.5 ω_arm=1: mean ω_p/ω_arm 1.333334 vs 1.333333 (err 4.58e-7); end-of-step ω_p/ω_arm 1.40727; phase err 2.01e-8 teeth (max 1.26e-6); planet revolute err 4.70e-6
+axis Z rs=0.5 rp=1.5 ω_arm=10: mean ω_p/ω_arm 1.333333 vs 1.333333 (err 2.51e-8); end-of-step ω_p/ω_arm 1.32565; phase err -2.42e-6 teeth (max 4.25e-6); planet revolute err 1.05e-5
+axis Y rs=1 rp=1 ω_arm=1: mean ω_p/ω_arm 2.000000 vs 2.000000 (err 3.64e-9); end-of-step ω_p/ω_arm 2.00328; phase err -1.45e-13 teeth (max 1.06e-6); planet revolute err 2.78e-6
+axis Y rs=1 rp=1 ω_arm=10: mean ω_p/ω_arm 2.000000 vs 2.000000 (err -5.15e-8); end-of-step ω_p/ω_arm 2.00043; phase err -1.15e-5 teeth (max 1.46e-5); planet revolute err 2.83e-6
+axis Y rs=2.5 rp=0.5 ω_arm=1: mean ω_p/ω_arm 6.000000 vs 6.000000 (err -1.34e-8); end-of-step ω_p/ω_arm 5.99522; phase err -2.53e-7 teeth (max 9.70e-7); planet revolute err 1.41e-6
+axis Y rs=2.5 rp=0.5 ω_arm=10: mean ω_p/ω_arm 5.999996 vs 6.000000 (err -7.34e-7); end-of-step ω_p/ω_arm 5.99772; phase err -2.03e-4 teeth (max 3.58e-4); planet revolute err 1.39e-6
+axis Y rs=0.5 rp=1.5 ω_arm=1: mean ω_p/ω_arm 1.333333 vs 1.333333 (err 3.78e-8); end-of-step ω_p/ω_arm 1.33266; phase err -1.65e-7 teeth (max 1.25e-6); planet revolute err 5.83e-6
+axis Y rs=0.5 rp=1.5 ω_arm=10: mean ω_p/ω_arm 1.333333 vs 1.333333 (err 2.24e-8); end-of-step ω_p/ω_arm 1.33334; phase err -2.47e-6 teeth (max 4.31e-6); planet revolute err 8.38e-6
+=== planetary, sun free and motor-driven, arm free (axis Y, gravity along the axis): arm speed from p_β = 0
+rs=1 rp=1 ω_s=10: arm ω mean 1.56643 vs analytic 1.60960 rad/s (err -0.027); I_p eng 1.5708 vs πr⁴/2 1.5708; phase err 6.99e-6 teeth
+rs=0.5 rp=1.5 ω_s=10: arm ω mean 0.79119 vs analytic 0.82041 rad/s (err -0.036); I_p eng 7.9522 vs πr⁴/2 7.9522; phase err 2.41e-6 teeth
+rs=2.5 rp=0.5 ω_s=5: arm ω mean 1.17937 vs analytic 1.21659 rad/s (err -0.031); I_p eng 0.0982 vs πr⁴/2 0.0982; phase err 1.12e-5 teeth

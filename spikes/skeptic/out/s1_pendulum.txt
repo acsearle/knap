@@ -1,0 +1,30 @@
+CONTROL single pendulum (no mesh): r1=1 r2=1 θ0=0.2  I1=19.6208 I2=0.0000
+   period: sim early 0.32532 late 0.35208 s; analytic (RK4 reduced, nonlinear) 0.32528 s (small-angle 0.32447); err early 1.03e-4 late 0.082
+   oscillation energy E/E0 at 120s: 29.3315  (range 1.0000..29.2580); per 20 s: 20s:1.7880 40s:3.1611 60s:5.5913 80s:9.8467 100s:17.0534 120s:29.3315
+1:1 geared pair: r1=1 r2=1 θ0=0.2  I1=19.6208 I2=19.6208
+   period: sim early 0.32532 late 0.35192 s; analytic (RK4 reduced, nonlinear) 0.32528 s (small-angle 0.32447); err early 1.03e-4 late 0.082
+   oscillation energy E/E0 at 120s: 29.1859  (range 1.0000..29.1281); per 20 s: 20s:1.7863 40s:3.1564 60s:5.5777 80s:9.8199 100s:17.0110 120s:29.1859
+   max |phase err| 1.05e-4 teeth; 481.6 ms per sim s
+1:3 geared pair (small drives big): r1=0.5 r2=1.5 θ0=0.2  I1=18.1481 I2=26.0022
+   period: sim early 0.31947 late 0.32113 s; analytic (RK4 reduced, nonlinear) 0.31946 s (small-angle 0.31874); err early 2.96e-5 late 0.005
+   oscillation energy E/E0 at 120s: 3.2759  (range 1.0000..3.2714); per 20 s: 20s:1.2244 40s:1.4932 60s:1.8167 80s:2.2071 100s:2.6845 120s:3.2759
+   max |phase err| 3.52e-6 teeth; 418.4 ms per sim s
+3:1 geared pair (big gear θ0/3, small swings θ0): r1=1.5 r2=0.5 θ0=0.06666666666666667  I1=26.0022 I2=18.1481
+   period: sim early 0.31947 late 0.32104 s; analytic (RK4 reduced, nonlinear) 0.31946 s (small-angle 0.31874); err early 2.94e-5 late 0.005
+   oscillation energy E/E0 at 120s: 3.1593  (range 1.0000..3.1544); per 20 s: 20s:1.2136 40s:1.4692 60s:1.7766 80s:2.1476 100s:2.5992 120s:3.1593
+   max |phase err| 3.25e-6 teeth; 414.4 ms per sim s
+CONTROL single pendulum (no mesh): r1=1 r2=1 θ0=1.2  I1=19.6208 I2=0.0000
+   period: sim early 0.35794 late 0.65790 s; analytic (RK4 reduced, nonlinear) 0.35633 s (small-angle 0.32447); err early 0.005 late 0.846
+   oscillation energy E/E0 at 120s: 21.1092  (range 1.0000..21.0692); per 20 s: 20s:1.6421 40s:2.5681 60s:3.7272 80s:6.8323 100s:13.0686 120s:21.1092
+1:1 geared pair: r1=1 r2=1 θ0=1.2  I1=19.6208 I2=19.6208
+   period: sim early 0.35792 late 0.67982 s; analytic (RK4 reduced, nonlinear) 0.35633 s (small-angle 0.32447); err early 0.004 late 0.908
+   oscillation energy E/E0 at 120s: 7.0373  (range 1.0000..7.0351); per 20 s: 20s:1.6251 40s:2.4833 60s:3.4085 80s:5.1003 100s:6.5796 120s:7.0373
+   max |phase err| 0.004 teeth; 416.0 ms per sim s
+1:3 geared pair (small drives big): r1=0.5 r2=1.5 θ0=1.2  I1=18.1481 I2=26.0022
+   period: sim early 0.34727 late 0.41145 s; analytic (RK4 reduced, nonlinear) 0.34687 s (small-angle 0.31874); err early 0.001 late 0.186
+   oscillation energy E/E0 at 120s: 2.3178  (range 1.0000..2.3167); per 20 s: 20s:1.1672 40s:1.3583 60s:1.5712 80s:1.8049 100s:2.0564 120s:2.3178
+   max |phase err| 7.67e-4 teeth; 384.9 ms per sim s
+3:1 geared pair (big gear θ0/3, small swings θ0): r1=1.5 r2=0.5 θ0=0.39999999999999997  I1=26.0022 I2=18.1481
+   period: sim early 0.34727 late 0.41281 s; analytic (RK4 reduced, nonlinear) 0.34687 s (small-angle 0.31874); err early 0.001 late 0.190
+   oscillation energy E/E0 at 120s: 2.3352  (range 1.0000..2.3338); per 20 s: 20s:1.1677 40s:1.3597 60s:1.5746 80s:1.8119 100s:2.0675 120s:2.3352
+   max |phase err| 8.67e-5 teeth; 255.3 ms per sim s

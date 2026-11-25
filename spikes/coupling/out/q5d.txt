@@ -1,0 +1,7 @@
+=== 20 meshes in one train (21 gears r=1 in a line)
+driven 10 rad/s: last gear mean ratio (angles, 10 s) 0.9999992 (ideal 1), end-of-step ω 9.74799 (ideal 10); max phase err over 20 meshes 8.82e-4 teeth; max revolute err 1.07e-10; 2122.2 ms per sim s
+=== cost: chain of N gears r=1 on revolutes, motor on the first; with and without meshes (median of 3 runs, 2 s each)
+N=2: revolutes only 191.8 ms/sim s; with 1 meshes 233.4 ms/sim s (JS re-anchoring 3.65 of it) → 41.57 ms per mesh per sim s
+N=6: revolutes only 476.7 ms/sim s; with 5 meshes 635.4 ms/sim s (JS re-anchoring 16.01 of it) → 31.76 ms per mesh per sim s
+N=11: revolutes only 867.7 ms/sim s; with 10 meshes 1152.3 ms/sim s (JS re-anchoring 29.41 of it) → 28.45 ms per mesh per sim s
+N=21: revolutes only 1552.3 ms/sim s; with 20 meshes 2117.2 ms/sim s (JS re-anchoring 56.69 of it) → 28.25 ms per mesh per sim s
