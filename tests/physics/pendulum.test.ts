@@ -14,7 +14,7 @@ describe('pendulum period', () => {
     // Tilt gravity by α instead of tilting the link (cells are grid-aligned): the link starts
     // α from its equilibrium, released from rest.
     const alpha = (5 * Math.PI) / 180;
-    const s = await sim(hanging(), { gravity: [G * Math.sin(alpha), -G * Math.cos(alpha), 0] });
+    const s = await sim(hanging(), { gravity: [G * Math.sin(alpha), -G * Math.cos(alpha), 0], jointFriction: 0 });
     expect(s.graph.bodies).toHaveLength(2);
     expect(s.graph.joints.map((j) => j.type)).toEqual(['revolute']);
     const link = 1;
@@ -74,7 +74,7 @@ describe('free spin (known limitation, DEVIATIONS §5)', () => {
   ];
   for (const c of spinCases)
     it(`${c.label}: ω drift over 5 s without gravity stays within ${c.bound * 100}%`, async () => {
-      const s = await sim(mk(c.parts(), 1), { gravity: [0, 0, 0] });
+      const s = await sim(mk(c.parts(), 1), { gravity: [0, 0, 0], jointFriction: 0 });
       const rb = (s as unknown as { bodies: { rb: { setAngvel(v: object, w: boolean): void; setLinvel(v: object, w: boolean): void } }[] }).bodies[1]!.rb;
       rb.setAngvel({ x: 0, y: 0, z: c.w0 }, true);
       if (c.pivot) {

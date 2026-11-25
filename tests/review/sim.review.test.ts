@@ -150,7 +150,7 @@ interface Envelope {
 }
 
 async function envelope(name: string, model: Model, seconds: number): Promise<Envelope> {
-  const s = await Simulation.create(model);
+  const s = await Simulation.create(model, { jointFriction: 0 }); // energy envelopes: friction off
   const t0 = performance.now();
   const steps = Math.round(seconds / s.fixedDt);
   const tot = () => {
@@ -252,7 +252,7 @@ describe('review sim: energy gain over 30 s stays within the documented 1 % of p
   ];
   for (const [label, f, settle] of cases) {
     it(label, { timeout: 600000 }, async () => {
-      const s = await Simulation.create(f());
+      const s = await Simulation.create(f(), { jointFriction: 0 }); // energy-gain bound: friction off
       s.stepFixed(Math.round(settle / s.fixedDt));
       const tot = () => {
         const e = s.energy();

@@ -7,7 +7,7 @@ import { G, angleZ, isFiniteTransform, maxSpeeds, mk, report, sim, total, toEdit
 
 describe('triple pendulum (released horizontal)', () => {
   it('10 s: no NaN, joint error < 0.02, energy within +2% / −10%', async () => {
-    const s = await sim(buildExample('triple-pendulum'));
+    const s = await sim(buildExample('triple-pendulum'), { jointFriction: 0 }); // §5.3: conservation test, friction off
     expect(s.graph.joints).toHaveLength(3);
     // Energy scale: what is available to the motion, E0 − E_min, with E_min the potential of
     // the chain hanging straight down. The links start collinear along +x from the pivot (0,0),

@@ -334,8 +334,36 @@ and Jolt (excellent solver but a heavier, manual-memory API); noted in the READM
   an accumulator; the UI offers playback speed 1×, ½×, ¼×, ⅒× (default **¼×** so motion is
   readable). Cap sub-steps per frame to avoid the spiral of death.
 - No ground. A dynamic body that falls below `y = −400` is removed from the world (and hidden).
-- No damping by default (a tiny angular damping constant is acceptable if needed for stability;
-  state its value in the README).
+- **No body damping.** A loose part in free flight keeps its linear and angular velocity.
+- **Joint friction** (added after first user testing: frictionless joints swing far longer than
+  real parts). Every joint resists its *free relative motion* with dry (Coulomb) friction:
+  - `revolute`: a torque about the joint axis of at most `τ_f`.
+  - `prismatic`: a force along the joint axis of at most `F_f`.
+  - `cylindrical`: both, independently.
+  - `F_f = μ · m_j · |g|` and `τ_f = F_f · R_BORE`, where `m_j` is the **weight the joint
+    carries**, estimated once per run from the kinematic graph: bodies are ranked by joint
+    distance from a fixed body and, from the farthest in, each dynamic body passes its own mass
+    plus everything passed to it, in equal shares, to its joints that lead one step closer to a
+    fixed body; `m_j` is what the joint passes. So every pivot of a hanging chain carries all the
+    links below it. A joint that passes nothing (two bodies at the same distance) and every joint
+    of an assembly with no path to a fixed body use the lighter body's mass. This is a static
+    load estimate — real friction follows the instantaneous joint reaction, which the engine does
+    not expose. (First specified as "the lighter of the two bodies"; review showed that left
+    chains swinging for minutes.)
+  - `μ` is the **friction level**: `off` = 0, `low` = 0.05, `realistic` = 0.2 (default); any
+    value in [0, 10] is accepted by the API. With `off` the simulation behaves exactly as it did
+    without this feature (bit-identical trajectories).
+  - Friction opposes motion and holds below its limit (stiction): a mechanism comes to rest in
+    finite time, possibly slightly off its equilibrium, and then stays at rest without creeping.
+    It never adds energy. A stuck joint is held at the coordinate where it stuck (a bare
+    velocity motor creeps under load) and lets go once the load exceeds the limit.
+  - Suggested construction: a velocity motor with target 0 on each free joint axis, limited with
+    `setMotorMaxForce`. Verify units and behaviour against the installed package; if the motor
+    limit is not usable from JS, use another construction with the same behaviour and record it
+    in DEVIATIONS.md.
+  - `Simulation.setJointFriction(μ)` changes the level while running; the UI offers
+    Off / Low / Realistic beside the playback speed and remembers the choice (a UI preference,
+    not part of the model file).
 
 ### 5.2 API
 
@@ -372,6 +400,26 @@ class Simulation {
 - **Collision**: a free part dropped onto a fixed, un-jointed part comes to rest on / deflects off
   it and never tunnels through.
 - **Welds**: a two-pin-connected pair behaves as one rigid body (relative pose constant to 1e-6).
+
+The period and energy-conservation tests above run with joint friction **off**. With friction
+on (default level unless stated):
+
+- **Pendulum decay**: the swing amplitude falls by `≈ 2 τ_f / (m g d)` per half-swing (linear
+  decay, the signature of dry friction; within 25 %), the link comes to rest in finite time, rests
+  within `asin(τ_f / (m g d))` of straight down (plus tolerance) and stays at rest for a further
+  5 s. The built-in pendulum released horizontal is at rest within 2–6 simulated seconds.
+- **Monotone energy**: for every built-in example, total energy never rises (beyond the energy
+  guard's band) and every jointed mechanism is at rest by 30 simulated seconds.
+- **Spin**: a rotor spun up on a smooth pin slows at `τ_f / I` and stops; it never speeds up.
+- **Slides**: the vertical axle still drops to its stop; a horizontal axle at rest does not creep.
+- **Linkages still move**: four-bar and parallelogram crank range > 20° at every level.
+- **Level changes**: `setJointFriction` while running takes effect on the next step; `off` then
+  matches a run created with friction off from that state on.
+- **Loose bodies** are unaffected by the friction level.
+- **Stiction is exact**: a link released inside its dead zone, or come to rest, moves less than
+  3e-5 rad in 20 s; a closed loop held far below its limit does not creep.
+- **Chains come to rest**: triple pendulum within 8 s; a light link carrying a heavy one and
+  6- and 12-link chains within tens of seconds, not minutes.
 
 ---------------------------------------------------------------------------------------------
 

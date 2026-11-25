@@ -12,7 +12,7 @@ gravity. It is a tool, not a game: orthographic, instruction-style drawing, comp
 ## Quick tour
 
 The window has a top bar (File, Examples, Undo/Redo, colour palette, Show kinematics, the
-simulation controls, help `?` and About), a tool bar on the left, the 3D view with the view cube
+simulation controls with playback speed and joint friction, help `?` and About), a tool bar on the left, the 3D view with the view cube
 top-right, an inspector for the selected part, and a status bar (what is under the cursor, what a
 click will do, the last message or error, and counts of parts / bodies / joints). The `?` button
 lists every control.
@@ -55,7 +55,10 @@ what is welded and what moves before pressing Play.
 
 **Simulating.** Play (`Space`) freezes the model and runs the physics; Pause (`Space`), Step
 (`.`, 1/60 s), and the speed buttons 1× ½× ¼× ⅒× (default ¼× so the motion is readable) control
-it. Drag a moving part to pull it with a spring; dragging empty space or the fixed part orbits.
+it; the simulated time shows next to the SIMULATING badge. **Friction** Off / Low / Real(istic) sets how
+quickly pins and axles lose motion (default Realistic: a swing dies down within seconds; Off:
+ideal joints that never stop); it can be changed while simulating, is remembered by the browser
+and is not part of the model file. Drag a moving part to pull it with a spring; dragging empty space or the fixed part orbits.
 While simulating, editing is disabled (tools, palette, undo, New / Open / Examples are greyed
 out; keys say "Stop the simulation to edit"). Stop (`Esc`) returns to exactly the model you
 edited; the camera stays where it is. A "can't keep up" badge appears when the computer cannot
@@ -100,14 +103,33 @@ Everything, WASM included, is bundled: no network access at runtime.
 ## Known limitations
 
 From `docs/DEVIATIONS.md` §5 (physics):
-- Fixed step 1/480 s with 240 solver substeps; no damping by default (angular damping 0). Rapier's
-  joint solver still loses some energy in fast motion (triple pendulum ≈ −4 % over 10 s), while
-  its f32 integration slowly *adds* speed to rotation (up to +50 % of the peak kinetic energy in
-  30 s for an arm on an axle or a spatial chain). An *energy guard* stops that: per group of
-  connected moving parts, energy may rise at most 1 % of the group's peak kinetic energy above
-  its lowest value, beyond which the group's velocities are scaled down uniformly (it never adds
-  energy and keeps the work done by dragging). So a frictionless pendulum can end up to 1 % of its
-  swing energy above where it started, and a spinning part keeps its speed only to within ≈ 0.5 %.
+- Joints have dry friction, at the *Realistic* level (μ = 0.2) by default; *Low* is 0.05 and *Off*
+  is frictionless. Each joint resists its free rotation with a torque of at most
+  τ_f = μ·m·g·R_BORE (R_BORE = 0.31 units), and its free slide with a force of at most μ·m·g. Here
+  m is the weight the joint carries: in a chain a pivot carries every link below it, and in a loop
+  the far link's weight is shared between the two sides. At Realistic the built-in pendulum,
+  released horizontal, makes about 10 swings and is at rest after 3.6 s, 0.7° off vertical; the
+  triple pendulum rests after ≈ 6.5 s. A part may come to rest anywhere within asin(τ_f/(m·g·d))
+  of its equilibrium (d = distance of its centre of mass from the axis), so a nearly balanced
+  part, such as the sliding-axle example's arm, can stop visibly tilted. Once stopped it stays
+  exactly where it stopped.
+  - The load is estimated from the weight, once per run, not from the joint's true reaction: it
+    ignores swinging (centrifugal) loads, and a joint between two parts falling freely, or along a
+    vertical slide, still feels the weight. Long chains of light links take longest to settle
+    (twelve 3-hole links: ≈ 32 s).
+  - Pins and axles share the same μ.
+  - Without gravity there is no joint friction.
+- Fixed step 1/480 s with 240 solver substeps; no body damping. Rapier's joint solver loses some
+  energy in fast motion (frictionless triple pendulum ≈ −4 % over 10 s), while its f32 integration
+  slowly *adds* speed to rotation (up to +50 % of the peak kinetic energy in 30 s for an arm on an
+  axle or a spatial chain). An *energy guard* stops that:
+  - Per group of connected moving parts, energy may rise at most 1 % of the group's peak kinetic
+    energy above its lowest value. Beyond that, the group's velocities are scaled down uniformly.
+  - It never adds energy and it keeps the work done by dragging.
+  - With joint friction on it also makes sure friction's work is not offset by that gain (a fast
+    spinning rotor at Low slows at the friction rate). With friction Off a pendulum can end up 1 % of its
+    swing energy above where it started, and a part spinning without gravity keeps its speed only
+    to within ≈ 0.5 %.
 - Rapier clamps linear speed to 400 units/s (3.2 m/s) and angular speed to 377 rad/s, so falling
   parts fall slower than free fall once they are fast.
 - A flat face landing squarely on another at high speed can be thrown sideways; parts never pass

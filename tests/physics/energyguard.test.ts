@@ -31,7 +31,7 @@ const spatial = (): Model =>
 
 /** Max rise of the total energy over `seconds`, from a reference taken after `settle` s, as a fraction of the peak KE. */
 async function rise(model: Model, settle: number, seconds: number, energyGuard = true): Promise<number> {
-  const s = await sim(model, { energyGuard });
+  const s = await sim(model, { energyGuard, jointFriction: 0 });
   s.stepFixed(Math.round(settle / s.fixedDt));
   const e0 = total(s.energy());
   let eMax = e0;
@@ -70,8 +70,8 @@ describe('energy guard', () => {
 
   it('leaves a mechanism that only loses energy untouched (triple pendulum, 10 s, bit-identical)', { timeout: 60000 }, async () => {
     const m = EXAMPLES.find((e) => e.name === 'triple-pendulum')!.build();
-    const a = await sim(m);
-    const b = await sim(m, { energyGuard: false });
+    const a = await sim(m, { jointFriction: 0 });
+    const b = await sim(m, { energyGuard: false, jointFriction: 0 });
     a.stepFixed(4800);
     b.stepFixed(4800);
     expect(a.guardRemoved).toBe(0);
@@ -81,7 +81,7 @@ describe('energy guard', () => {
   });
 
   it('keeps the work done by a grab: a pendulum pulled up and released swings with that energy', { timeout: 60000 }, async () => {
-    const s = await sim(EXAMPLES.find((e) => e.name === 'pendulum')!.build());
+    const s = await sim(EXAMPLES.find((e) => e.name === 'pendulum')!.build(), { jointFriction: 0 });
     const link = s.bodyOf(2)!;
     for (let i = 0; i < 480; i++) s.stepFixed(1); // swing down first (reference = horizontal release)
     expect(s.grab(link, where(s, link, [4, 0, 1]))).toBe(true);
@@ -106,7 +106,7 @@ describe('energy guard', () => {
     // A link hanging straight down on a pin (no gravity), and a loose one-hole part in its layer
     // moving toward the link's lower end at 100 units/s.
     const m = mk([beam([-2, 0, 0], [0, 0, 0]), beam([0, 0, 1], [0, -4, 1], 2), pin([0, 0, 0], [0, 0, 1]), beam([3, -4, 1], [3, -4, 1])], 1);
-    const s = await sim(m, { gravity: [0, 0, 0] });
+    const s = await sim(m, { gravity: [0, 0, 0], jointFriction: 0 });
     const link = s.bodyOf(2)!;
     const loose = s.bodyOf(4)!;
     rbOf(s, loose).setLinvel({ x: -100, y: 0, z: 0 }, true);

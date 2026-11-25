@@ -71,8 +71,24 @@ export default async function ({ page, url, shot, assert, step }) {
     assert((await page.evaluate(() => window.__knap.simInfo())).grabbed === null, 'nothing grabbed');
     await page.keyboard.press('Home');
     await settle(page);
-    // ground beam: part 1, a cell with no pin in it (x = 3)
-    const g = await page.evaluate(() => window.__knap.cellScreenPos(1, 3));
+    // ground beam: part 1, a cell with no pin in it whose point on screen is not covered by a
+    // moving link. Which cells are covered depends on the pose (with joint friction the linkage
+    // soon hangs at rest, in front of the middle of the ground beam), so pause (a link swinging
+    // past between the check and the press made this racy) and ask the hover readout.
+    await page.keyboard.press(' ');
+    await frames(page, 1);
+    assert((await state(page)).paused, 'paused for the ground drag');
+    let g = null;
+    for (const i of [3, 2, 4, 1, 5]) {
+      const p = await page.evaluate((i) => window.__knap.cellScreenPos(1, i), i);
+      await page.mouse.move(p.x, p.y, { steps: 2 });
+      await frames(page, 1);
+      if (/^Part 1 /.test((await status(page)).hover)) {
+        g = p;
+        break;
+      }
+    }
+    assert(g, 'a ground-beam cell is visible');
     const c2 = await cam(page);
     await page.mouse.move(g.x, g.y);
     await page.mouse.down();
@@ -110,8 +126,13 @@ export default async function ({ page, url, shot, assert, step }) {
       assert((await state(page)).paused && (await page.evaluate(() => window.__knap.simInfo())).time === 0, 'paused at t = 0');
     };
 
+    // The follow bound below (≥ 15 px closer in 0.5 s) was set with frictionless joints; joint
+    // friction (default Realistic) slows the follow to ≈ 16 px, too close to the bound, so this
+    // step runs at friction Off explicitly (picked in the top bar; restored at the end).
+    await press(page, '[data-friction=off]');
     // Baseline: 1 s of simulated time without grabbing — the linkage falls.
     await restartPaused();
+    assert((await page.evaluate(() => window.__knap.simInfo())).jointFriction === 0, 'friction Off for the grab checks');
     /** Largest displacement of the coupler's middle over 1 s (8 × 1/8 s of fixed steps). */
     const maxMove = async (p0) => {
       let m = 0;
@@ -157,6 +178,7 @@ export default async function ({ page, url, shot, assert, step }) {
     assert((await page.evaluate(() => window.__knap.simInfo())).grabbed === null, 'released on pointer up');
     const je = (await page.evaluate(() => window.__knap.simInfo())).jointError;
     assert(je < 0.05, `joints held while dragging (${je})`);
+    await press(page, '[data-friction=realistic]');
   });
 
   await step('pause / step / speed', async () => {

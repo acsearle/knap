@@ -4,6 +4,7 @@ import { DIRS, partById } from '../core';
 import type { Dir, Model } from '../core';
 import { describeGraph } from '../core/kinematics';
 import { pickCell, pickGrid } from '../editor';
+import type { FrictionLevel } from '../physics';
 import type { App } from './app';
 
 type V3 = [number, number, number];
@@ -82,6 +83,8 @@ export function installTestHook(app: App): void {
       return app.session?.time ?? 0;
     },
     setPaused: (on: boolean): void => app.setPaused(on),
+    /** Joint-friction level, as if picked in the top bar (any mode). */
+    setFriction: (level: FrictionLevel): void => app.setFriction(level),
     setView: (name: string): void => vp.snapTo(name, { animate: false }),
     fit: (): void => vp.fit(undefined, { animate: false }),
     home: (): void => vp.home({ animate: false }),
@@ -156,7 +159,7 @@ export function installTestHook(app: App): void {
     simInfo: () => {
       const s = app.session;
       if (!s) return null;
-      return { time: s.time, jointError: s.sim.jointError(), paused: s.paused, speed: s.sim.speed, grabbed: s.grabbedBody, droppedSteps: s.sim.droppedSteps, stepCount: s.sim.stepCount };
+      return { time: s.time, jointError: s.sim.jointError(), paused: s.paused, speed: s.sim.speed, jointFriction: s.sim.jointFriction, grabbed: s.grabbedBody, droppedSteps: s.sim.droppedSteps, stepCount: s.sim.stepCount };
     },
     getState: () => ({
       mode: app.mode,
@@ -170,6 +173,7 @@ export function installTestHook(app: App): void {
       historySize: app.history.size,
       showKinematics: app.showKinematics,
       speed: app.speed,
+      friction: app.friction,
       paused: app.session?.paused ?? false,
       fileName: app.fileName,
       hint: app.status.hintText,

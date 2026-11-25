@@ -1,5 +1,6 @@
 // App e2e: layout at 1280×720 and 1920×1080 @2×, live resize, nothing overlapping the view
-// cube, the top bar fitting without overflow, no console warnings in normal use.
+// cube, the top bar fitting without overflow (every top-bar control in a row, none overlapping,
+// none truncated, the friction control included), no console warnings in normal use.
 import { openPage } from './lib.mjs';
 import { frames, openApp, press, settle } from './app-lib.mjs';
 
@@ -23,9 +24,31 @@ async function checkLayout(page, assert, label) {
       buttons: rect('[data-role=view-buttons]'),
       badge: rect('.sim-status'),
       docOverflow: document.documentElement.scrollWidth - innerWidth + (document.documentElement.scrollHeight - innerHeight),
+      // Top-level top-bar items left to right (the spacer excluded) and every text leaf's clipping.
+      topItems: Array.from(top.children)
+        .flatMap((e) => (e.classList.contains('simgroup') ? Array.from(e.children) : [e]))
+        .filter((e) => !e.classList.contains('spacer') && e.getClientRects().length)
+        .map((e) => {
+          const b = e.getBoundingClientRect();
+          return { name: e.dataset.action || e.dataset.role || e.className, x: b.x, r: b.right, y: b.y, b: b.bottom };
+        }),
+      clipped: Array.from(top.querySelectorAll('button, label, .seg-caption, .brand'))
+        .filter((e) => e.getClientRects().length && e.scrollWidth > e.clientWidth + 0.5)
+        .map((e) => e.textContent),
+      topBox: (() => {
+        const b = top.getBoundingClientRect();
+        return { x: b.x, r: b.right, y: b.y, b: b.bottom };
+      })(),
+      friction: rect('[data-role=friction]'),
     };
   });
   assert(r.topOverflow <= 0, `${label}: top bar fits (${r.topOverflow} px overflow)`);
+  for (let i = 1; i < r.topItems.length; i++) {
+    assert(r.topItems[i].x >= r.topItems[i - 1].r - 0.5, `${label}: ${r.topItems[i - 1].name} and ${r.topItems[i].name} do not overlap`);
+  }
+  for (const it of r.topItems) assert(it.x >= r.topBox.x && it.r <= r.topBox.r + 0.5 && it.y >= r.topBox.y && it.b <= r.topBox.b, `${label}: ${it.name} inside the top bar`);
+  assert(r.clipped.length === 0, `${label}: no truncated top-bar text (${r.clipped.join(', ')})`);
+  assert(r.friction && r.friction.w > 100 && r.friction.r <= r.topBox.r, `${label}: friction control shown in the top bar ${JSON.stringify(r.friction)}`);
   assert(r.statusOverflow <= 0, `${label}: status bar fits`);
   assert(r.docOverflow <= 0, `${label}: no page scroll`);
   assert(Math.abs(r.canvas.w - r.view.w) < 1 && Math.abs(r.canvas.h - r.view.h) < 1, `${label}: canvas fills the viewport`);

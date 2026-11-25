@@ -252,15 +252,42 @@ had a gap:
 - **Simulate mode freezes editing by disabling, not by stopping.** Tools, palette, New / Open /
   Examples, Undo / Redo and the inspector's buttons are disabled and greyed; editing keys and
   `⌘/Ctrl+Z` show "Stop the simulation to edit (Esc)"; clicks in the view edit nothing. Save,
-  Show kinematics, speed and the camera stay available. Stop keeps the selection (the model is
+  Show kinematics, speed, joint friction and the camera stay available. Stop keeps the selection (the model is
   the same object, so it is still valid) and does not touch the camera.
 - **Pause turns the frame loop off.** While paused nothing renders continuously (the view
   renders on demand); Step (`.`) advances 1/60 s = 8 fixed steps. Step in edit mode starts the
   simulation paused.
 - **"Can't keep up"** is shown when `Simulation.step` dropped steps (its per-call cap) *or* when
   frames arrive more than 10 ms later than the viewport's clamped dt (the page cannot draw fast
-  enough), held for 1.2 s. It sits over the view next to the SIMULATING badge so the top bar
-  never changes width.
+  enough), held for 1.2 s. It sits over the view next to the SIMULATING badge and the time
+  readout so the top bar never changes width.
+- **Joint friction control** (DESIGN §5.1 last bullet). The caption "Friction" (plain text, fix
+  after review: as a grey cell of the group it read as a disabled fourth option) and a segmented
+  control "Off | Low | Real" sit right of the playback speed. The level's one name is Off / Low /
+  Realistic — in the tooltips, the status bar, the help dialog and each button's accessible name;
+  "Real" is only the button caption, shortened to fit. The group's title / aria-label is "Joint
+  friction: how quickly pins and axles lose motion", the active level is highlighted and
+  `aria-pressed`. Arrow keys on a keyboard-focused speed or friction button move the focus within
+  its group (fix after review: they fell through to the edit keys and moved the selected part);
+  Space / Enter pick the focused level. It works in every mode
+  (edit, starting, simulating, paused): it is a simulation setting, so it is no undo step, does
+  not touch the model, its autosave or the saved file, and a running simulation gets
+  `setJointFriction(μ)` at once (effective from its next fixed step). A level picked while the
+  simulation is starting is applied when the world is ready, like the speed. The status bar says
+  what the level means ("Joint friction: Off — ideal joints, motion never dies down", …). The
+  level is a UI preference in `localStorage` under `knap.pref.jointFriction`; a missing, blocked
+  or unrecognised value gives Realistic silently, and a failed write keeps the level for the page.
+  `window.__knap`: `getState().friction`, `setFriction(level)`, `simInfo().jointFriction` (μ).
+- **Top-bar room for it.** At 1280×720 the bar had ≈ 48 px to spare and the control needs ≈ 160 px,
+  so the simulated-time readout moved out of the top bar into the overlay beside the SIMULATING
+  badge (shown only while simulating; it was a useless "t = –" while editing), and spacing was
+  tightened slightly (gaps 4 → 3 px, separators' margins 5 → 4 px, segmented buttons' padding 7 →
+  6 px, the Show kinematics label's padding 8 → 6 px, brand 10 → 8 px). With the caption as plain
+  text the bar needs 1252 px (HEAD before the control: 1216 px); at 1280 px the spacer keeps 20 px
+  (its minimum is 8). Below ≈ 1252 px Help and About overflow past the right edge, as they did
+  below 1216 px before; DESIGN §7 promises 1280×720 and up. `e2e/app-layout` checks that no top-bar item overlaps, overflows or is
+  truncated at 1280×720, 1440×860 and 1920×1080 @2×, and `e2e/app-friction` checks the control at
+  1280×720 and 1440×900.
 - **Simulation failure.** Exceptions from stepping, non-finite poses, a NaN joint error or a joint
   error above 2 units stop the simulation on the next microtask with a banner
   ("Simulation stopped: …"); the model is restored as on Stop.
@@ -293,7 +320,8 @@ had a gap:
   the page and then fits Home, so the start-up view equals Home (it was ≈ 30 % looser).
 - **Input while the simulation starts.** Play first builds the physics world asynchronously (mode
   `starting`, tens of ms on a cold first Play). Stop / Esc in that window cancels the start (back
-  to edit, "Simulation cancelled"); a speed picked then is applied to the new simulation; a Step
+  to edit, "Simulation cancelled"); a speed or friction level picked then is applied to the new
+  simulation; a Step
   waits for the start and then steps, so two quick Steps from edit mode advance 2/60 s.
 - **Hover is re-resolved on camera changes** (wheel zoom, snaps) from the last pointer position, so
   the ghost never lags behind the view.
@@ -457,8 +485,9 @@ had a gap:
       0.914–0.916; the exact touching distance is 0.92. The deepest transient penetration of the
       40-cell drop is 0.656 instead of 0.659 (the bound is 0.57).
   - 1 PGS iteration and `lengthUnit` 1.
-  - No damping and no sleeping (`setCanSleep(false)`). The energy guard (§5 "Free rotation gains
-    speed") only trims energy a group has gained beyond 1 % of its peak kinetic energy.
+  - No body damping and no sleeping (`setCanSleep(false)`). Joints have dry friction (§5 "Joint
+    friction" below, default μ = 0.2). The energy guard (§5 "Free rotation gains speed") only trims
+    energy a group has gained beyond 1 % of its peak kinetic energy.
   - **Rapier's hard CCD is off (`maxCcdSubsteps = 0`, fix after review); free bodies use soft
     CCD instead.** The hard CCD clamped the motion of a jointed body at a time of impact with its
     own joint partner, although contacts between them are disabled: an axle sliding in its hole
@@ -620,7 +649,7 @@ had a gap:
       energy: losses (joint solve, impacts, slide stops) lower eRef and stay lost. It does not undo
       external work: the reference is reset on the first step, every step a body of the group is
       grabbed, on release, when a body of the group is removed and when groups merge.
-    - This is a correction, not damping: §5.1 asks for no damping by default and the guard does
+    - This is a correction, not damping: §5.1 asks for no body damping and the guard does
       not act on a mechanism that is not gaining (the triple pendulum's 10 s run is bit-identical
       with and without it; chain6, crank-slider, collision, prismatic sled: nothing removed).
     - Measured with the guard over 30 s (60 s for axle-arm, spatial chain and sliding axle): every
@@ -678,6 +707,228 @@ had a gap:
   - While held, the body gets an angular damping of 5/s so it does not swing about the cursor;
     the damping is removed on release.
   - Fixed, removed or unknown bodies cannot be grabbed: `grab` returns false.
+- **Joint friction (added after first user testing; DESIGN §5.1 "Joint friction").** Options
+  `jointFriction` (μ, default 0.2), `Simulation.setJointFriction(μ)` / `jointFriction`, levels
+  `JOINT_FRICTION = { off: 0, low: 0.05, realistic: 0.2 }`, `DEFAULT_FRICTION_LEVEL = 'realistic'`.
+  μ must be a number in [0, `MAX_JOINT_FRICTION` = 10] (fix after review: any finite μ was
+  accepted and `Number.MAX_VALUE` made τ_f = Infinity); −0 is stored as 0.
+  - **Three changes after review, all in `sim.ts`; the first changes DESIGN §5.1:**
+    1. **m_j is the weight the joint carries, not the lighter body** (below, "Load estimate").
+    2. **Stuck joints are held where they stuck** (below, "Stiction hold"); DESIGN asked for this
+       ("stays at rest without creeping") and the motor alone did not deliver it.
+    3. **The energy guard subtracts friction's work from its reference** (below, "Energy guard
+       and grab"), so DESIGN §5.3's "slows at τ_f / I" holds at Low for long fast rotors too.
+  - **Construction: the suggested one.** Every joint gets a Rapier velocity motor with target 0 on
+    each free axis: revolute AngX, prismatic LinX, cylindrical (generic joint) AngX and LinX. It is
+    set through `world.impulseJoints.raw.jointConfigureMotorModel / jointConfigureMotorVelocity /
+    jointSetMotorMaxForce` with the raw axis values AngX = 3 and LinX = 0, model
+    `AccelerationBased`, gain (damping factor) 1e9, and maxForce = τ_f or F_f.
+    - F_f = μ·m_j·|g| and τ_f = F_f·R_BORE (0.31), m_j from "Load estimate" below (engine masses,
+      read after `decoupleInertia`, which keeps the mass). |g| is the magnitude of the `gravity`
+      option, so with zero gravity there is no joint friction (tested). `jointStates()` reports
+      `loadMass` = m_j and the limits; a joint whose body was removed reports 0 for both limits
+      (fix after review: it reported the configured value although it has no motor any more).
+    - The generic joint's frame X is the joint axis for every world axis and both body orders (the
+      same frame the LinX limits use). Spin-down was identical for X, Y and Z, and for both orders.
+    - μ = 0: a joint that never had friction gets no motor at all. Every example's trajectory at
+      μ = 0 is bit-identical to the code before this change (hashes recorded from git HEAD before
+      editing, in `tests/physics/friction.test.ts`).
+    - A joint whose friction is switched off keeps its motor rows at limit 0. That is bit-identical
+      to having no motor: tested for every example over 3 s. A run switched off mid-way also
+      continues exactly as a run created with friction off from that state (state copied, tested).
+  - **Rapier 0.21 motor findings (measured).**
+    - `maxForce` is a force or torque, not an impulse. Rapier turns it into an impulse per substep,
+      so the limit does not depend on the substep count. For a rotor with I = 2, maxForce 4 and 10
+      rad/s, dω/dt is 2.000 rad/s² at 1 substep. At 240 substeps it measures 1.84; the missing
+      0.16 is the known f32 spin gain, which gives +0.15 rad/s² with maxForce 0. 1 and 4 PGS
+      iterations give the same result.
+    - While sliding, the motor saturates. The deceleration was then the same for both motor models
+      and for gains 1, 1e3 and 1e6.
+    - Below the limit, a low gain is a soft damper, and the joint creeps through. At gain ≥ 1e6 the
+      row is effectively rigid, and the two models agree.
+    - Limits still hold with a motor on the same axis. Prismatic and cylindrical joints along X, Y
+      and Z, in both body orders, stop exactly at their stops.
+    - Joint error is unchanged: at realistic it is as small as at off for every example (table).
+  - **Load estimate (fix after review; changes DESIGN §5.1, which said "the smaller of the two
+    joined bodies' masses").** `Simulation.loadMasses`, computed once when the world is built:
+    - Bodies are ranked by their joint distance from a fixed body. From the farthest in, each
+      dynamic body passes its own mass plus everything passed to it on to its joints that lead one
+      step closer to a fixed body, in equal shares. A joint's m_j is what it passes. So in a chain
+      every pivot carries every link below it, and in a loop (four-bar, parallelogram) the far
+      link's weight is split between the two sides. At rest this equals the static joint load of
+      a chain exactly; for the four-bar it is the equal-split approximation of the statics.
+    - A joint that passes nothing (it joins two bodies at the same distance, e.g. across a loop),
+      and every joint of a group with no path to a fixed body (a loose sub-assembly): the lighter
+      body's mass, as before. Two fixed bodies: Infinity, i.e. no friction.
+    - Why: with the lighter body, a pivot that carries a chain got one link's friction. The
+      reviewers measured (realistic): a 15-hole beam on a 2-hole link (m_j / true load 0.10) never
+      at rest in 120 s (≈ 145 s); a 12-link chain of 3-hole links still swinging at 150 s; three
+      9-hole links 62.5 s; the triple-pendulum example 17 s (68 s on screen at ¼×), against "a
+      swing dies down within seconds" in the UI.
+    - Rest after the change (`tests/physics/friction-chains.test.ts`; at rest = no body turns more
+      than 1e-3 rad in 0.5 s): triple pendulum 17 → 6.5 s, 2-hole + 15-hole 145 → 22.0 s, double
+      5 + 5 13.5 → 8.5 s, six 3-hole links ≈ 25 → 13.0 s, three 9-hole links 62.5 → 37.0 s, twelve
+      3-hole links > 150 → 31–32 s. Single-pivot examples are unchanged (pendulum 4.01, weld test
+      8.22, sliding axle 3.34 / 3.42). Built-in loads now: triple pendulum 10.53 / 6.00 / 2.31,
+      four-bar 4.84 (ground–crank) / 7.15 (ground–rocker) / 2.53 / 2.53, parallelogram 6.73 / 6.73
+      (ground–cranks) / 1.58 / 1.58 (cranks–coupler; the lighter-body rule gave 2× the true load),
+      collision 6.84 / 3.16.
+    - Tried and not adopted: the instantaneous reaction, Σ m·(a − g) over the far side from each
+      body's Δv per step (it also gives the radial load of a slide, and zero load in free fall).
+      Rest times: twelve links 29 s, 2 + 15 18.5 s, triple pendulum 8.0 s, pendulum 3.5 s — barely
+      different, at the cost of rewriting the calibration (Coulomb on an incline) and per-step
+      limits. Long chains are slow because their light tail links carry only their own weight
+      under either model.
+  - **Stiction hold (fix after review).** The friction motor is one Gauss–Seidel row per substep:
+    a joint held below its limit kept slipping slowly, in proportion to the load (1.2e-3 rad/s for
+    a 2-hole link at 90 % of τ_f). The slip shows wherever the f32 pose resolves ≈ 1e-9 rad per
+    substep, which is near the build orientation *and* ≈ 180° from it (an up-built part hanging
+    down), and it did not run toward equilibrium: a 2-hole link released at 0.9 × its dead zone
+    turned 1.02° in 20 s; an up-built pendant wandered 1.3° over 6 minutes; the built-in four-bar
+    at μ ≥ 2 crept 0.4°/s whatever μ. (The earlier text here said it only showed near the build
+    orientation and ran toward equilibrium; both were wrong.)
+    - Now (`updateFriction`, after every fixed step with μ > 0): a free axis whose relative speed
+      is below `STICK_SPEED` = 0.01 rad/s (units/s) sticks at its current coordinate — the angle
+      of B relative to A about the axis since the build pose, from the f32 rotations, or B's
+      anchor along A's axis. While stuck, its velocity motor's target is −offset / fixedDt (0 when
+      |offset| ≤ `HOLD_DEADBAND` = 1e-5), still limited to τ_f / F_f: the next step takes it back
+      to where it stuck. Once |offset| > `SLIP` = 2e-4 the load has overcome the limit, the joint
+      lets go and the target is 0 again (sliding friction). The motor's target velocity sign is
+      the sign of `jointStates().omega` / `.speed` (measured: target +1 gives ω = +1.0000 for both
+      body orders).
+    - It only ever pulls back an offset of at most SLIP against a limited force, so it can return
+      at most τ_f·SLIP of energy per stick (0.06 for the pendulum, whose swing energy is ≈ 1e4);
+      the energy never rose above its running minimum in any sweep. A held joint's offset stays
+      ≤ 1.7e-5 rad (SLIP is 12× that). The deadband keeps the target 0 for offsets the f32 pose
+      cannot undo, so a body at rest does not report a velocity it never moves with.
+    - A first version corrected a quarter of the offset per step: two stuck joints of a light link
+      under a heavy one (2-hole + 15-hole) then oscillated to ±SLIP, let go and re-stuck 7 times
+      a second, ratcheting 3.5e-4 rad/s. Correcting the whole offset each step holds them still.
+    - Measured (`tests/physics/friction.test.ts` "stiction is exact"): 2- and 5-hole links released
+      at 0.5 and 0.97 × their dead zone near the build pose deviate ≤ 1.7e-5 rad in 20 s (was
+      1.2e-2 – 2.2e-2 rad for the 2-hole link); a 2-hole link stuck 175.4° from its build pose moves
+      2.7e-6 rad from 3 to 30 s (was 2.45°); the four-bar at μ = 10 moves 5.8e-8 rad in 10 s.
+      Every example and chain, once at rest, turns < 1e-4 rad for the rest of the run (jointed
+      bodies; at most 1.4e-5 rad measured, twelve-link chain).
+    - A part resting on *another moving part* through a contact is held by the contact, whose own
+      solver creep remains: in the reviewers' four-joint mechanism a pendant leaning on a sibling
+      beam (its pin's τ_f = 240 against 2385 of gravity torque) slides 0.12° in 50 s. That is
+      Rapier's resting-contact creep (DEVIATIONS "Contacts"), not joint friction.
+    - "At rest" in the tests is still judged by pose; a held body's velocity reading stays below
+      1e-3 rad/s (the grab-release test checks it).
+  - **Calibration (Node, `tests/physics/friction.test.ts`).**
+    - Built-in pendulum at realistic: m = 4.005, d = 2.000, τ_f = 304.5, so 2τ_f/(mgd) = 3.55°
+      per half-swing.
+      - Energy lost per half-swing divided by τ_f·(θ₁+θ₂) = 0.987–1.001.
+      - Decrement below 30° divided by 2τ_f/(mgd) = 1.001–1.035 (unchanged by the review fixes: a
+        single pivot's load is the same). At large amplitude the decrement
+        is larger (≈ 2τ_f/(mgd) · θ/sin θ), as dry friction predicts.
+      - 21 half-swings (≈ 10 swings), amplitudes 90 → 4.2°. At rest (|ω| < 1e-3) from 3.58 s,
+        0.684° off vertical (dead zone asin(τ_f/(mgd)) = 1.776°).
+      - The spec's 2–6 s bound is met with the formula as specified. At low: 73 half-swings, at
+        rest from ≈ 15 s.
+    - Spin-down at realistic: a centred 5-hole link on a pin decelerates at 38.82 rad/s² against
+      τ_f/I = 39.12 (−0.8 %). An axle in a pin hole decelerates at 1783 rad/s² against 1784. Neither
+      ever speeds up: the largest step-to-step rise in |ω| is 0.
+    - Spin-down at low, centred 9-hole beam (fix after review): 2.89 rad/s² from 50 rad/s and 2.90
+      from 200 rad/s against τ_f/I = 2.95 (−2 %; before the fix −17 % and −52 %, still 140 rad/s at
+      40 s instead of stopping at 67.7 s; now it stops at 68.0 s). |ω| never rises over any 0.1 s;
+      single steps from 200 rad/s rise by up to 7.6e-4 rad/s (f32 noise of the spin gain).
+    - Slides: a prismatic joint loaded at 2μ accelerates at (sin φ − μ)·g, measured exactly
+      (1.226 vs 1.226 units after 0.1 s). Loaded at 0.5μ it moves < 1e-6 in 3 s. The sliding-axle
+      example's vertical axle reaches 1.97 at 0.0646 s against 0.0634 s for free fall under
+      (1 − μ)·g (one 1/480 s step of sampling).
+    - A hanging 5-hole link with gravity tilted to load it to 0.5 or 0.9 × τ_f holds (≤ 8.6e-6 rad
+      in 2 s). At 1.2 × τ_f it slides.
+  - **Energy guard and grab.**
+    - **The energy guard counts friction's work (fix after review).** The f32 spin gain grows with ω
+      (≈ 0.0115·ω rad/s² for a jointed body), and while friction lowered the energy faster than
+      the gain raised it the guard never acted, so the gain silently ate part of friction's
+      deceleration (above). Now `updateFriction` adds τ_f·|Δθ| + F_f·|Δs| of every axis with
+      friction to its group's work for the step (a moving friction motor is saturated, so that is
+      the energy it removed; a stuck axis has Δ ≈ 0), and the guard lowers its reference eRef by
+      that work before comparing. Energy above the reference minus friction's work (beyond the 1 %
+      band) is trimmed as before; the guard still only removes energy. At μ = 0 the work is
+      exactly 0, so the frictionless guard is unchanged bit for bit. `setJointFriction` restarts the
+      guard's reference (like a grab), so a run switched to off continues exactly as a run created
+      off from that state.
+    - Over 30 s at realistic the guard removed nothing in any example; at low it removed 51 (pendulum)
+      and 64 (four-bar) of the f32 gain and nothing elsewhere. The total energy never rose above its
+      running minimum at low or realistic.
+    - Grab at realistic: the grab spring (M·(2π·10 Hz)²) is far stiffer than friction.
+      - Dragging the pendulum's tip round at 6 units/s, it lags the cursor by 0.346 units, against
+        0.341 with friction off. Most of that is the spring's sag under gravity, g/ω².
+      - Released at 45°, it rests 1.72° off vertical, inside the 1.78° dead zone.
+      - Released at rest 1.17° off vertical, inside the dead zone, it stays there: 0.0° in 2 s.
+  - **Measured behaviour per example and level** (30 s, `friction-examples-*.test.ts`).
+    - "At rest" is judged by pose (see above). "Creep" is the largest rotation after that, up to
+      30 s.
+    - Joint error is the maximum over the run. Energy never rose above its running minimum by more
+      than the guard's band at any level; at low and realistic it never rose at all.
+
+  | example | at rest from: off / low / realistic | creep after rest (realistic) | max joint error off / realistic |
+  |---|---|---|---|
+  | pendulum | never / 14.5 s / 4.0 s (ω below 1e-3 rad/s from 3.58 s) | 0 | 9.9e-7 / 9.9e-7 |
+  | triple pendulum | never / 21.5 s / 6.5 s | 0 | 9.6e-6 / 3.5e-6 |
+  | four-bar | never / 9.5 s / 2.5 s | 0 | 7.7e-6 / 5.0e-6 |
+  | parallelogram | never / 4.0 s / 1.5 s | 0 | 1.1e-6 / 8.2e-7 |
+  | sliding axle | never / 2.5 s / 0.5 s | 0 | 6.6e-7 / 4.8e-7 |
+  | weld test | never / 21.5 s / 5.5 s | 0 | 1.3e-6 / 1.3e-6 |
+  | collision | 1.5 s / 1.0 s / 0.5 s | 0 (the loose beam settles ≤ 1.7e-3 units) | 1.1e-6 / 1.1e-6 |
+
+  - Notes on the table:
+    - Collision at "off" comes to rest because the struck link ends up lying on the peg. The loose
+      beam settles on its contact by up to 1.7e-3 units at every level.
+    - Before the review fixes, realistic was: triple pendulum 17.0 s, four-bar 3.0 s, parallelogram
+      3.5 s with 0.049° of creep after rest, collision 0.046° of creep; low: triple pendulum still
+      2.5 rad/s at 30 s.
+    - The linkages still move at every level. Crank range over 5 s: four-bar 212° / 212° / 212°,
+      parallelogram 61° / 59° / 56° (off / low / realistic).
+    - **Dead zones of nearly balanced parts.** A body comes to rest anywhere within
+      asin(τ_f / (m·g·d)) of hanging straight, d = its centre of mass's distance from the axis.
+      The sliding-axle example's arm sits on its axle with a bush (m = 3.42, d = 0.214), so its dead
+      zone is 16.8° and at realistic it stops 11.3° short of hanging straight in its first swing
+      (reviewer fapp). This is what the model says for a real near-balanced rotor with that load and
+      bore (μ·R_BORE/d = 0.29); it is kept and documented in the README rather than special-cased.
+  - **Collision example, transient depth.** The struck link comes to 0.745 of the peg's centre line
+    at realistic (0.638 with the earlier load estimate), against 0.731 at off (contact at 0.75).
+    - This is the step-phase effect in "Contacts" below, not friction. With gravity scaled by
+      1 + k·2e-3 (k = 0…11): off 0.590–0.731, low 0.642–0.751, realistic 0.573–0.745.
+    - `tests/physics/examples.test.ts` runs every example's 10 s checks at off *and* at the default
+      level (fix after review: it ran only at off). The collision bound is > 0.70 at off and > 0.5
+      at the default level, below the measured range and far from passing through. The 30 s
+      friction sweep checks > 0.75 − 0.29, the documented transient depth.
+  - **Cost** (Node, best of 3, ms of stepping per simulated s, off → realistic): pendulum 90 → 95
+    (+6 %), triple pendulum 209 → 225 (+8 %), four-bar 262 → 284 (+8 %), sliding axle 149 → 165
+    (+11 %), collision 315 → 329 (+4 %). All are under the 15 % budget.
+  - **Limits of the model.**
+    - The load is an estimate from the weight, fixed for the run, not the joint's true reaction.
+      It ignores centrifugal and impact loads, so a fast swinging chain gets less friction than real
+      parts. It also applies when the true load is small: a pinned pair falling freely has its
+      relative spin of 10 rad/s stopped within 0.2 s, and the sliding-axle example's vertical axle
+      falls at (1 − μ)·g although its weight is along the axle. Both last a fraction of a second.
+      Long chains of light links settle slowest (twelve 3-hole links ≈ 32 s, three 9-hole links
+      37 s at realistic; DESIGN §5.3's 30 s bound is for the built-in examples).
+    - Pins and axles share one μ, and the level is independent of the contact friction (0.4).
+      Friction pins are still welds.
+    - The friction does not depend on speed (no viscous term) or on how the joint is loaded
+      sideways.
+    - There is no joint friction without gravity.
+    - A part resting on another moving part is held by the contact, which creeps slowly (above).
+  - **Tests.**
+    - `tests/physics/friction.test.ts`: API and μ range, load estimate (chain, loop, loose pair),
+      diagnostics (no gravity, removed body, omega / speed), μ = 0 hashes, the off switch,
+      determinism, pendulum decay, static hold, exact stiction (near and 180° from the build pose,
+      closed loop at μ = 10), spin (also 9-hole at low), slides on every axis and in both body
+      orders, linkages, level changes, loose bodies and grab.
+    - `tests/physics/friction-examples-{off,low,realistic}.test.ts`: every example for 30 s; at
+      realistic no jointed body turns more than 1e-4 rad after coming to rest (was 0.1°).
+    - `tests/physics/friction-chains.test.ts`: the chains of "Load estimate" come to rest by their
+      bounds and then turn < 1e-4 rad in 5 s.
+    - The conservation tests (period, energy bounds, energy guard, spin drift, triple pendulum,
+      free-slide timing, non-principal spin-up, the 10 s example run) and both review files now
+      pass `jointFriction: 0` explicitly, so they still test what they tested. No assertion was
+      changed.
 - **Removal depth is relative to the model (fix after review).** §5.1 says a body that *falls*
   below y = −400 is removed. A body is now removed when its centre of mass is below
   `removalY` = min(−400, lowest edit-time cell centre y − 400) (`removeBelowY` sets the −400).

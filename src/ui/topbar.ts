@@ -1,6 +1,8 @@
 // Top bar: app name, File (New / Open… / Save / Examples ▾), Undo / Redo, colour palette,
-// Show kinematics, simulate controls (Play/Stop, Pause, Step, speed, time, "can't keep up"),
-// help and about.
+// Show kinematics, simulate controls (Play/Stop, Pause, Step, speed, joint friction), help and
+// about. The simulated-time readout and the "can't keep up" pill are built here but placed by the
+// host over the viewport (next to the SIMULATING badge), so the top bar never changes width.
+import type { FrictionLevel } from '../physics';
 import { button, h, icon, setText } from './dom';
 import { ICONS } from './icons';
 import { PALETTE } from './palette';
@@ -24,6 +26,7 @@ export interface TopBarHandlers {
   togglePause(): void;
   step(): void;
   setSpeed(speed: number): void;
+  setFriction(level: FrictionLevel): void;
   help(): void;
   about(): void;
 }
@@ -38,6 +41,7 @@ export interface TopBarState {
   color: string;
   showKinematics: boolean;
   speed: number;
+  friction: FrictionLevel;
 }
 
 export const SPEEDS: readonly { value: number; label: string }[] = [
@@ -46,6 +50,16 @@ export const SPEEDS: readonly { value: number; label: string }[] = [
   { value: 0.25, label: '¼×' },
   { value: 0.1, label: '⅒×' },
 ];
+
+/** The joint-friction levels (DESIGN §5.1) as the top bar shows them; μ is in JOINT_FRICTION. */
+/** `name` is the level's one name everywhere (tooltip, status, help, accessible name); `label` the
+ * button caption ("Real" is "Realistic" shortened to fit the 1280 px top bar). */
+export const FRICTION_LEVELS: readonly { level: FrictionLevel; name: string; label: string; title: string }[] = [
+  { level: 'off', name: 'Off', label: 'Off', title: 'Off — ideal joints: motion never dies down' },
+  { level: 'low', name: 'Low', label: 'Low', title: 'Low — joints slip easily: a swing dies down slowly' },
+  { level: 'realistic', name: 'Realistic', label: 'Real', title: 'Realistic — like real parts: a swing dies down within seconds' },
+];
+export const FRICTION_TITLE = 'Joint friction: how quickly pins and axles lose motion';
 
 const MOD = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl+';
 
@@ -64,7 +78,9 @@ export class TopBar {
   private readonly pauseBtn: HTMLButtonElement;
   private readonly stepBtn: HTMLButtonElement;
   private readonly speedBtns: HTMLButtonElement[] = [];
-  private readonly readout: HTMLElement;
+  private readonly frictionBtns: HTMLButtonElement[] = [];
+  /** Simulated time; the host places it (over the viewport, next to the mode badge). */
+  readonly readout: HTMLElement;
   /** The "can't keep up" pill; the host places it (over the viewport, next to the mode badge). */
   readonly slow: HTMLElement;
 
@@ -146,7 +162,16 @@ export class TopBar {
       this.speedBtns.push(b);
       seg.append(b);
     }
-    this.readout = h('span', { class: 'readout', 'data-role': 'sim-time', title: 'Simulated time' }, 't = –');
+    // A plain-text caption beside the segmented buttons (not a cell of the group, which read as a
+    // disabled fourth option).
+    const fricSeg = h('div', { class: 'seg' });
+    const fric = h('span', { class: 'friction', role: 'group', 'aria-label': FRICTION_TITLE, title: FRICTION_TITLE, 'data-role': 'friction' }, h('span', { class: 'seg-caption', 'aria-hidden': 'true' }, 'Friction'), fricSeg);
+    for (const f of FRICTION_LEVELS) {
+      const b = h('button', { type: 'button', 'data-friction': f.level, title: `${FRICTION_TITLE}\n${f.title}`, 'aria-label': f.name, 'aria-pressed': 'false', onclick: () => on.setFriction(f.level) }, f.label);
+      this.frictionBtns.push(b);
+      fricSeg.append(b);
+    }
+    this.readout = h('span', { class: 'readout', hidden: true, 'data-role': 'sim-time', title: 'Simulated time' }, 't = –');
     this.slow = h('span', { class: 'slow', hidden: true, 'data-role': 'sim-slow', title: 'The computer cannot simulate this model fast enough: it runs slower than the chosen speed.' }, 'can’t keep up — running slower than the chosen speed');
 
     const helpBtn = button(icon(ICONS.help), { class: 'btn icon-only', title: 'Mouse and keyboard controls (?)', 'aria-label': 'Controls', 'data-action': 'help', onclick: () => on.help() });
@@ -168,7 +193,7 @@ export class TopBar {
       h('span', { class: 'sep' }),
       kin,
       h('span', { class: 'spacer' }),
-      h('span', { class: 'simgroup' }, this.playBtn, this.pauseBtn, this.stepBtn, seg, this.readout),
+      h('span', { class: 'simgroup' }, this.playBtn, this.pauseBtn, this.stepBtn, seg, fric),
       h('span', { class: 'sep' }),
       helpBtn,
       aboutBtn,
@@ -267,7 +292,12 @@ export class TopBar {
     this.pauseBtn.title = s.paused ? 'Resume (Space)' : 'Pause (Space)';
     this.stepBtn.disabled = s.mode === 'starting' || (s.mode === 'simulate' && !s.paused);
     for (const b of this.speedBtns) b.classList.toggle('on', Number(b.dataset.speed) === s.speed);
-    this.readout.classList.toggle('live', running);
+    for (const b of this.frictionBtns) {
+      const on = b.dataset.friction === s.friction;
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-pressed', String(on));
+    }
+    this.readout.hidden = s.mode !== 'simulate';
     if (!running) {
       setText(this.readout, 't = –');
       this.slow.hidden = true;

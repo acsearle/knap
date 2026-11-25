@@ -47,8 +47,14 @@ export class SimSession {
   }
 
   /** Build the Rapier world for `model` (awaits the physics WASM on first use). */
-  static async start(vp: Viewport, model: Model, speed: number, host: SimHost, opts: { paused?: boolean } = {}): Promise<SimSession> {
-    const sim = await Simulation.create(model, { speed });
+  static async start(
+    vp: Viewport,
+    model: Model,
+    speed: number,
+    host: SimHost,
+    opts: { paused?: boolean; jointFriction?: number } = {},
+  ): Promise<SimSession> {
+    const sim = await Simulation.create(model, { speed, ...(opts.jointFriction !== undefined ? { jointFriction: opts.jointFriction } : {}) });
     const s = new SimSession(vp, model, sim, host);
     vp.setDragHandler(s.dragHandler);
     s.paused = !!opts.paused;
@@ -83,6 +89,11 @@ export class SimSession {
 
   setSpeed(speed: number): void {
     this.sim.setSpeed(speed);
+  }
+
+  /** Joint friction μ (DESIGN §5.1); takes effect on the next fixed step. No-op once disposed. */
+  setJointFriction(mu: number): void {
+    if (!this.disposed) this.sim.setJointFriction(mu);
   }
 
   /** Exactly n fixed steps (Step button, tests), then show the result. */

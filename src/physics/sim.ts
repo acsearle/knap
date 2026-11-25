@@ -18,14 +18,25 @@
 //                 and body 1 = Joint.bodyA, so Joint.limits map over unchanged (verified for
 //                 every axis and both body orders in tests/physics/joints.test.ts).
 //
+// Joint friction (opts.jointFriction = μ, default JOINT_FRICTION.realistic = 0.2; DESIGN §5.1,
+// DEVIATIONS §5 "Joint friction"): every joint gets a Rapier velocity motor with target 0 on each
+// free axis (revolute AngX, prismatic LinX, cylindrical AngX + LinX), its maxForce limited to
+// τ_f = μ·m_j·|g|·R_BORE (rotation) or F_f = μ·m_j·|g| (slide), m_j = the weight the joint carries
+// (see loadMasses). Rapier's maxForce is a torque/force (measured), so a sliding joint feels
+// exactly ∓τ_f / ∓F_f. Below that the joint sticks: once its relative speed falls below a
+// threshold, the motor's target velocity steers it back to the coordinate where it stuck (see
+// updateFriction), which cancels the solver's slow creep; it lets go when the joint has been
+// pushed more than a hair away. μ = 0 adds no motor and runs none of this.
+//
 // Energy guard (opts.energyGuard, default on; see guardEnergy and DEVIATIONS §5): after every
 // fixed step, a group of connected dynamic bodies whose energy has risen more than 1 % of its peak
-// kinetic energy above its lowest value is slowed by one uniform factor. It counters Rapier's f32
-// spin-up and never adds energy.
+// kinetic energy above its lowest value (less the work its joint friction has done since) is
+// slowed by one uniform factor. It counters Rapier's f32 spin-up and never adds energy.
 import type { EventQueue, ImpulseJoint, RigidBody, World } from '@dimforge/rapier3d-compat';
 import { analyze } from '../core/kinematics';
 import type { Joint, KinematicGraph } from '../core/kinematics';
 import type { Model } from '../core/types';
+import { R_BORE } from '../geometry/dims';
 import { partShapes } from './shapes';
 import {
   add,
@@ -55,6 +66,43 @@ export const G = 1226.25;
 
 /** Energy guard noise floor per unit of m·|g|·(1 + |com|) (f32 position rounding is ≈ 6e-8 of |com|). */
 const NOISE = 1e-5;
+
+/**
+ * Joint friction levels μ (DESIGN §5.1 "Joint friction"): F_f = μ·m_j·|g| along a sliding joint's
+ * axis, τ_f = F_f·R_BORE about a rotating joint's axis, m_j = the mass the joint carries (loadMasses).
+ */
+export const JOINT_FRICTION = { off: 0, low: 0.05, realistic: 0.2 } as const;
+export type FrictionLevel = keyof typeof JOINT_FRICTION;
+export const DEFAULT_FRICTION_LEVEL: FrictionLevel = 'realistic';
+/**
+ * Largest μ that SimOptions.jointFriction / setJointFriction accept (50× realistic; far beyond any
+ * real pin, and keeps τ_f finite for every model).
+ */
+export const MAX_JOINT_FRICTION = 10;
+
+/**
+ * Stiction (see updateFriction): a free joint axis whose relative speed is below STICK_SPEED
+ * (rad/s or units/s) after a step sticks at its current coordinate. While stuck, the friction
+ * motor's target velocity is −offset/fixedDt (so the next step takes the joint back to where it
+ * stuck; once the offset is within HOLD_DEADBAND the target is 0), which cancels the residual slip
+ * that one Gauss–Seidel row per substep leaves; it lets go once the offset exceeds SLIP (rad or
+ * units). STICK_SPEED sits above the ≈ 5e-3 rad/s that a held mechanism reports without moving
+ * (f32 poses) and far below any swing's speed. SLIP is ≈ 10× the largest offset a held joint
+ * reaches, and small enough that the hold can return at most τ_f·SLIP of energy per stick.
+ * HOLD_DEADBAND keeps the target 0 for offsets the f32 pose cannot undo, so a body at rest does
+ * not report a velocity it never moves with. Measured in DEVIATIONS §5 "Joint friction".
+ */
+const STICK_SPEED = 1e-2;
+const SLIP = 2e-4;
+const HOLD_DEADBAND = 1e-5;
+
+/**
+ * Gain of the friction motors (Rapier velocity motor, acceleration-based model, target 0). Large
+ * enough that the motor row is effectively rigid below its limit (measured: a low gain is a soft
+ * damper that lets a loaded joint creep; ≥ 1e6 holds as well as 1e9). The torque/force limit, not
+ * this gain, sets how hard it pulls while sliding (see DEVIATIONS §5 "Joint friction").
+ */
+const FRICTION_GAIN = 1e9;
 
 /** Rapier's linear speed clamp at lengthUnit 1, units/s (measured; see DEVIATIONS §5). */
 const SPEED_CAP = 400;
@@ -88,7 +136,7 @@ export interface SimOptions {
   maxStepsPerCall?: number;
   /** step() stops after this much wall-clock time (ms) and drops the rest. Default 8; Infinity = off. */
   stepBudgetMs?: number;
-  /** Angular damping of every dynamic body. Default 0. */
+  /** Angular damping of every dynamic body. Default 0 (DESIGN §5.1: no body damping; joints have friction instead). */
   angularDamping?: number;
   friction?: number; // default 0.4
   restitution?: number; // default 0.1
@@ -118,6 +166,16 @@ export interface SimOptions {
    * group's peak kinetic energy, before the guard scales its velocities down. Default 0.01.
    */
   energyGuardBand?: number;
+  /**
+   * Joint friction coefficient μ (DESIGN §5.1 "Joint friction"; levels in JOINT_FRICTION; at most
+   * MAX_JOINT_FRICTION). Every joint resists its free relative motion with dry friction of at most
+   * F_f = μ·m_j·|g| along a sliding axis and τ_f = F_f·R_BORE about a rotation axis, m_j = the mass
+   * the joint carries (see Simulation.loadMasses) and |g| the magnitude of `gravity` (so without
+   * gravity there is no joint friction: the load is weight). 0 adds nothing to the world: the
+   * simulation is then exactly the frictionless one. Change it while running with
+   * setJointFriction. Default JOINT_FRICTION.realistic (0.2).
+   */
+  jointFriction?: number;
 }
 
 const DEFAULTS = {
@@ -139,6 +197,7 @@ const DEFAULTS = {
   decoupleInertia: true,
   energyGuard: true,
   energyGuardBand: 0.01,
+  jointFriction: JOINT_FRICTION[DEFAULT_FRICTION_LEVEL] as number,
 };
 
 /** Per-joint diagnostics (current pose). */
@@ -155,6 +214,27 @@ export interface JointState {
   slide: number;
   /** Angle between the joint axis as carried by A and by B, radians. */
   tilt: number;
+  /** Relative angular velocity of B with respect to A about A's joint axis, rad/s. */
+  omega: number;
+  /** Relative velocity of B with respect to A at B's anchor, along A's joint axis, units/s. */
+  speed: number;
+  /** Friction torque limit τ_f about the axis (0 for a prismatic joint, with friction off or once dead). */
+  frictionTorque: number;
+  /** Friction force limit F_f along the axis (0 for a revolute joint, with friction off or once dead). */
+  frictionForce: number;
+  /** Load mass m_j the friction limits are computed from (see Simulation.loadMasses). */
+  loadMass: number;
+}
+
+/** Stiction state of one free joint axis (see updateFriction). */
+interface Stick {
+  /** Joint coordinate after the last step: relative angle (rad, from the build pose) or slide (units). */
+  x: number;
+  stuck: boolean;
+  /** Coordinate it stuck at. */
+  at: number;
+  /** Motor target velocity currently set. */
+  target: number;
 }
 
 export interface MassInfo {
@@ -196,6 +276,13 @@ interface SimJoint {
   /** Joint axis in either body's local frame (same at t=0, identity rotations). */
   axis: Vec3;
   handle: ImpulseJoint | null;
+  /** Load mass m_j for joint friction (see loadMasses; Infinity if both bodies are fixed). */
+  mj: number;
+  /** True once friction motors were configured on this joint (they then stay, at limit 0 when off). */
+  motors: boolean;
+  /** Stiction state of the rotation (AngX) and slide (LinX) axes. */
+  ang: Stick;
+  lin: Stick;
 }
 
 interface Grab {
@@ -209,6 +296,9 @@ interface Grab {
 /** JointAxis.LinX as the raw enum (same value) for RawImpulseJointSet.jointSetLimits. */
 type RawAxis = Parameters<World['impulseJoints']['raw']['jointSetLimits']>[1];
 const LIN_X = 0 as RawAxis; // RAPIER.JointAxis.LinX (asserted in tests/physics/joints.test.ts)
+const ANG_X = 3 as RawAxis; // RAPIER.JointAxis.AngX (asserted in tests/physics/friction.test.ts)
+type RawMotorModel = Parameters<World['impulseJoints']['raw']['jointConfigureMotorModel']>[2];
+const ACCELERATION_BASED = 0 as RawMotorModel; // RAPIER.MotorModel.AccelerationBased
 
 export class Simulation {
   readonly graph: KinematicGraph;
@@ -238,6 +328,9 @@ export class Simulation {
   private readonly bodyOfCollider = new Map<number, number>();
   /** Energy the guard has removed so far (diagnostics). */
   guardRemoved = 0;
+  private frictionValue: number;
+  /** Friction work (τ_f·|Δθ| + F_f·|Δs|) done in the last step, per energy-guard group root. */
+  private readonly frictionWork = new Map<number, number>();
 
   /** Analyse `model` (which must be valid) and build its Rapier world. */
   static async create(model: Model, opts: SimOptions = {}): Promise<Simulation> {
@@ -256,6 +349,7 @@ export class Simulation {
     this.opts = o;
     this.fixedDt = o.fixedDt;
     this.speedValue = o.speed;
+    this.frictionValue = checkFriction(o.jointFriction);
     this.gravity = options.gravity ? [...options.gravity] : [0, -G, 0];
     this.graph = analyze(model);
     let minY = Infinity;
@@ -286,6 +380,7 @@ export class Simulation {
     try {
       this.buildBodies(model);
       this.buildJoints();
+      this.applyFriction();
       if (o.energyGuard) {
         this.events = new RAPIER.EventQueue(true);
         this.initGroups();
@@ -416,8 +511,62 @@ export class Simulation {
       const anchorB = sub(j.origin, B.ref);
       const axis = unitAxis(j.axis);
       const handle = this.createImpulse(j, A.rb!, B.rb!, anchorA, anchorB, axis);
-      this.joints.push({ index, joint: j, sliding: j.type !== 'revolute', anchorA, anchorB, axis, handle });
+      const stick = (): Stick => ({ x: 0, stuck: false, at: 0, target: 0 });
+      this.joints.push({ index, joint: j, sliding: j.type !== 'revolute', anchorA, anchorB, axis, handle, mj: 0, motors: false, ang: stick(), lin: stick() });
     });
+    const mj = this.loadMasses();
+    this.joints.forEach((sj, i) => (sj.mj = mj[i]!));
+  }
+
+  /**
+   * Load mass m_j of every joint (graph.joints order) for joint friction (DESIGN §5.1, DEVIATIONS
+   * §5 "Joint friction: load estimate"): the weight each joint passes on toward the fixed bodies,
+   * fixed for the run. Engine masses (after decoupleInertia, which keeps the mass).
+   *  - Bodies are ranked by their joint distance from a fixed body. Starting with the farthest,
+   *    each dynamic body passes its own mass plus everything passed to it on to its joints that
+   *    lead one step closer to a fixed body, in equal shares. A joint's load is what it passes.
+   *    So in a chain every pivot carries everything below it, and a loop shares a coupler's
+   *    weight between the two sides.
+   *  - A joint that passes nothing (it joins two bodies at the same distance, e.g. across a loop)
+   *    and every joint of a group of bodies with no path to a fixed body: the lighter body's mass
+   *    (a fixed body counts as infinitely heavy; two fixed bodies give Infinity, i.e. no friction).
+   */
+  private loadMasses(): number[] {
+    const mass = (id: number) => (this.bodies[id]!.fixed ? Infinity : this.bodies[id]!.rb!.mass());
+    const joints = this.graph.joints;
+    const dist = new Map<number, number>();
+    let frontier = this.bodies.filter((b) => b.fixed).map((b) => b.id);
+    for (const id of frontier) dist.set(id, 0);
+    for (let d = 1; frontier.length; d++) {
+      const next: number[] = [];
+      for (const u of frontier)
+        for (const j of joints) {
+          const o = j.bodyA === u ? j.bodyB : j.bodyB === u ? j.bodyA : -1;
+          if (o < 0 || dist.has(o)) continue;
+          dist.set(o, d);
+          next.push(o);
+        }
+      frontier = next;
+    }
+    const passed = joints.map(() => 0);
+    const carried = new Map<number, number>();
+    const order = this.bodies.filter((b) => !b.fixed && dist.has(b.id)).sort((a, b) => dist.get(b.id)! - dist.get(a.id)! || a.id - b.id);
+    for (const b of order) {
+      const d = dist.get(b.id)!;
+      const load = mass(b.id) + (carried.get(b.id) ?? 0);
+      const down: number[] = [];
+      joints.forEach((j, i) => {
+        const o = j.bodyA === b.id ? j.bodyB : j.bodyB === b.id ? j.bodyA : -1;
+        if (o >= 0 && dist.get(o) === d - 1) down.push(i);
+      });
+      for (const i of down) {
+        const j = joints[i]!;
+        const o = j.bodyA === b.id ? j.bodyB : j.bodyA;
+        passed[i] = passed[i]! + load / down.length;
+        if (!this.bodies[o]!.fixed) carried.set(o, (carried.get(o) ?? 0) + load / down.length);
+      }
+    }
+    return joints.map((j, i) => (passed[i]! > 0 ? passed[i]! : Math.min(mass(j.bodyA), mass(j.bodyB))));
   }
 
   private createImpulse(j: Joint, A: RigidBody, B: RigidBody, anchorA: Vec3, anchorB: Vec3, axis: Vec3): ImpulseJoint {
@@ -441,6 +590,158 @@ export class Simulation {
     }
     handle.setContactsEnabled(false);
     return handle;
+  }
+
+  // ------------------------------------------------------------------------------------------
+  // Joint friction
+
+  /** Joint friction coefficient μ in use (see SimOptions.jointFriction). */
+  get jointFriction(): number {
+    return this.frictionValue;
+  }
+
+  /**
+   * Change the joint friction coefficient μ (≥ 0, finite; see JOINT_FRICTION). Takes effect on the
+   * next fixed step; allowed at any time, also while a body is grabbed.
+   */
+  setJointFriction(mu: number): void {
+    this.alive();
+    const v = checkFriction(mu);
+    if (v === this.frictionValue) return;
+    this.frictionValue = v;
+    this.applyFriction();
+    // The energy guard's reference assumed the old dissipation: start it afresh (as on grab).
+    for (const b of this.bodies) if (!b.fixed && b.rb) this.resetGroup(b.id);
+  }
+
+  /** Friction limits of a joint at the current μ: torque τ_f about and force F_f along its axis. */
+  private frictionLimits(sj: SimJoint): { torque: number; force: number } {
+    const mu = this.frictionValue;
+    if (!(mu > 0) || !Number.isFinite(sj.mj)) return { torque: 0, force: 0 };
+    const force = mu * sj.mj * len(this.gravity);
+    const t = sj.joint.type;
+    return { torque: t === 'prismatic' ? 0 : force * R_BORE, force: t === 'revolute' ? 0 : force };
+  }
+
+  /**
+   * Dry friction on every joint's free axes: a velocity motor with target 0 whose torque/force is
+   * limited to τ_f / F_f (Rapier's maxForce is a force or torque, applied per substep: measured, see
+   * DEVIATIONS §5 "Joint friction"). Sliding, it pulls with exactly that limit against the relative
+   * motion; below the limit it holds the relative velocity at 0 (stiction). With μ = 0 a joint that
+   * never had friction gets no motor at all (the world is exactly the frictionless one); a joint
+   * that had friction keeps its motor rows at limit 0 and target 0, which apply no impulse.
+   * Every call forgets the stiction state (it is re-detected after the next step).
+   */
+  private applyFriction(): void {
+    const raw = this.world.impulseJoints.raw;
+    this.frictionWork.clear();
+    for (const sj of this.joints) {
+      if (!sj.handle) continue;
+      const { torque, force } = this.frictionLimits(sj);
+      if (!sj.motors && torque === 0 && force === 0) continue;
+      const h = sj.handle.handle;
+      for (const [axis, st, limit] of this.frictionAxes(sj, torque, force)) {
+        if (!sj.motors) raw.jointConfigureMotorModel(h, axis, ACCELERATION_BASED);
+        if (!sj.motors || st.target !== 0) raw.jointConfigureMotorVelocity(h, axis, 0, FRICTION_GAIN);
+        raw.jointSetMotorMaxForce(h, axis, limit);
+        st.stuck = false;
+        st.target = 0;
+      }
+      sj.motors = true;
+      this.measureJoint(sj);
+    }
+  }
+
+  /** The free axes of a joint with their stiction state and friction limit. */
+  private frictionAxes(sj: SimJoint, torque: number, force: number): [RawAxis, Stick, number][] {
+    const t = sj.joint.type;
+    const out: [RawAxis, Stick, number][] = [];
+    if (t !== 'prismatic') out.push([ANG_X, sj.ang, torque]);
+    if (t !== 'revolute') out.push([LIN_X, sj.lin, force]);
+    return out;
+  }
+
+  /**
+   * Relative coordinates and speeds of a live joint: angle of B relative to A about the axis since
+   * the build pose (rad, in (−π, π]), B's anchor along A's axis (units), and their rates — the same
+   * quantities and signs as jointStates' omega / speed, which are also the signs of the friction
+   * motors' target velocity (measured).
+   */
+  private jointCoords(sj: SimJoint): { theta: number; omega: number; slide: number; speed: number } {
+    const A = this.bodies[sj.joint.bodyA]!.rb!;
+    const B = this.bodies[sj.joint.bodyB]!.rb!;
+    const qa = quat(A.rotation());
+    const qb = quat(B.rotation());
+    const axA = rotate(qa, sj.axis);
+    const rel = qmul(conj(qa), qb);
+    const theta = 2 * Math.atan2(dot([rel[0], rel[1], rel[2]], sj.axis), rel[3]);
+    const omega = dot(sub(vec(B.angvel()), vec(A.angvel())), axA);
+    if (!sj.sliding) return { theta, omega, slide: 0, speed: 0 };
+    const pa = add(rotate(qa, sj.anchorA), vec(A.translation()));
+    const pb = add(rotate(qb, sj.anchorB), vec(B.translation()));
+    const slide = dot(sub(pb, pa), axA);
+    const speed = dot(sub(vec(B.velocityAtPoint(xyz(pb))), vec(A.velocityAtPoint(xyz(pb)))), axA);
+    return { theta, omega, slide, speed };
+  }
+
+  /** Record a joint's current coordinates as the reference for the next step's friction work. */
+  private measureJoint(sj: SimJoint): void {
+    if (!sj.handle) return;
+    const c = this.jointCoords(sj);
+    sj.ang.x = c.theta;
+    sj.lin.x = c.slide;
+  }
+
+  /**
+   * After every fixed step with μ > 0, for each free axis that has friction:
+   *  - friction work: limit × |change of the coordinate| is added to the step's friction work of the
+   *    body's energy-guard group (a sliding friction motor is saturated, so this is the energy it
+   *    took out; see guardEnergy);
+   *  - stiction: an axis whose relative speed is below STICK_SPEED sticks at its coordinate. While
+   *    stuck its motor's target velocity is −offset / fixedDt (0 within HOLD_DEADBAND): with the
+   *    load below the limit the motor holds and steers the joint back to where it stuck, so the
+   *    slow slip that one Gauss–Seidel row per substep leaves (DEVIATIONS §5) cannot accumulate.
+   *    Once the offset exceeds SLIP the load has overcome the limit: it lets go and the target is 0
+   *    again (pure dry friction). The hold can only pull back an offset of at most SLIP, so it
+   *    returns at most limit·SLIP of energy per stick.
+   */
+  private updateFriction(): void {
+    const raw = this.world.impulseJoints.raw;
+    this.frictionWork.clear();
+    const hold = 1 / this.fixedDt;
+    for (const sj of this.joints) {
+      if (!sj.handle || !sj.motors) continue;
+      const { torque, force } = this.frictionLimits(sj);
+      if (torque === 0 && force === 0) continue;
+      const c = this.jointCoords(sj);
+      const dyn = this.bodies[sj.joint.bodyA]!.fixed ? sj.joint.bodyB : sj.joint.bodyA;
+      let work = 0;
+      for (const [axis, st, limit] of this.frictionAxes(sj, torque, force)) {
+        const angular = axis === ANG_X;
+        const x = angular ? c.theta : c.slide;
+        const rate = angular ? c.omega : c.speed;
+        work += limit * Math.abs(angular ? wrapAngle(x - st.x) : x - st.x);
+        st.x = x;
+        if (!st.stuck && Math.abs(rate) < STICK_SPEED) {
+          st.stuck = true;
+          st.at = x;
+        }
+        let target = 0;
+        if (st.stuck) {
+          const off = angular ? wrapAngle(x - st.at) : x - st.at;
+          if (Math.abs(off) > SLIP) st.stuck = false;
+          else if (Math.abs(off) > HOLD_DEADBAND) target = -off * hold;
+        }
+        if (target !== st.target) {
+          raw.jointConfigureMotorVelocity(sj.handle.handle, axis, target, FRICTION_GAIN);
+          st.target = target;
+        }
+      }
+      if (this.events && work > 0) {
+        const r = this.findGroup(dyn);
+        this.frictionWork.set(r, (this.frictionWork.get(r) ?? 0) + work);
+      }
+    }
   }
 
   // ------------------------------------------------------------------------------------------
@@ -500,6 +801,7 @@ export class Simulation {
       else this.world.step();
       this.stepCount++;
       this.removeFallen();
+      if (this.frictionValue > 0) this.updateFriction();
       if (this.events) this.guardEnergy();
     }
   }
@@ -562,7 +864,9 @@ export class Simulation {
    * scales every spinning body's ω up by ≈ 1e-7 per substep, so a frictionless mechanism slowly
    * gains energy (an arm on an axle climbed from horizontal to vertical in 60 s). After every
    * fixed step, per group (see initGroups): E = kinetic + potential energy, eRef = the lowest E
-   * since the group's reference was (re)set, kPeak = the highest kinetic energy since then. If
+   * since the group's reference was (re)set, each step also lowered by the work the group's joint
+   * friction did in that step (updateFriction; 0 at μ = 0), kPeak = the highest kinetic energy
+   * since then. If
    * E > eRef + max(band·kPeak, floor), all velocities of the group are scaled by one factor s < 1
    * so that E comes back to that cap. `floor` (1e-5 · Σ m·|g|·(1 + |com|)) sits above the f32
    * rounding noise of the potential energy, so a mechanism starting from rest — or balanced on an
@@ -570,7 +874,8 @@ export class Simulation {
    * and every contact's sign, so the motion is unchanged except for its speed. The guard never adds
    * energy: losses (joint solve, impacts, limit stops) lower eRef and stay lost. The reference is
    * (re)set on the first step, while a body of the group is grabbed, after its release, when a body
-   * of the group is removed and when two groups merge, so external work is never undone.
+   * of the group is removed, when two groups merge and when the friction level changes, so
+   * external work is never undone.
    */
   private guardEnergy(): void {
     const ev = this.events!;
@@ -616,6 +921,11 @@ export class Simulation {
         continue;
       }
       if (k > g.kPeak) g.kPeak = k;
+      // Joint friction must have taken out at least the work it did (updateFriction): lower the
+      // reference by it, so f32 spin gain cannot hide behind friction's loss (with μ = 0 this
+      // subtracts nothing and the guard is exactly the frictionless one).
+      const work = this.frictionWork.get(r);
+      if (work) g.eRef -= work;
       if (e < g.eRef) {
         g.eRef = e;
         continue;
@@ -835,7 +1145,9 @@ export class Simulation {
       const base = { index: sj.index, bodyA: j.bodyA, bodyB: j.bodyB, type: j.type };
       const A = this.bodies[j.bodyA]!.rb;
       const B = this.bodies[j.bodyB]!.rb;
-      if (!sj.handle || !A || !B) return { ...base, alive: false, error: 0, slide: 0, tilt: 0 };
+      if (!sj.handle || !A || !B)
+        return { ...base, alive: false, error: 0, slide: 0, tilt: 0, omega: 0, speed: 0, frictionTorque: 0, frictionForce: 0, loadMass: sj.mj };
+      const { torque: frictionTorque, force: frictionForce } = this.frictionLimits(sj);
       const qa = quat(A.rotation());
       const qb = quat(B.rotation());
       const pa = add(rotate(qa, sj.anchorA), vec(A.translation()));
@@ -846,7 +1158,9 @@ export class Simulation {
       const slide = dot(d, axA);
       const error = sj.sliding ? len(sub(d, scale(axA, slide))) : len(d);
       const tilt = Math.atan2(len(cross(axA, axB)), dot(axA, axB));
-      return { ...base, alive: true, error, slide, tilt };
+      const omega = dot(sub(vec(B.angvel()), vec(A.angvel())), axA);
+      const speed = dot(sub(vec(B.velocityAtPoint(xyz(pb))), vec(A.velocityAtPoint(xyz(pb)))), axA);
+      return { ...base, alive: true, error, slide, tilt, omega, speed, frictionTorque, frictionForce, loadMass: sj.mj };
     });
   }
 
@@ -881,6 +1195,18 @@ export class Simulation {
   }
 }
 
+
+/** Validate μ: a number in [0, MAX_JOINT_FRICTION]; −0 becomes 0. */
+function checkFriction(mu: number): number {
+  if (typeof mu !== 'number' || !(mu >= 0 && mu <= MAX_JOINT_FRICTION))
+    throw new Error(`jointFriction must be a number in [0, ${MAX_JOINT_FRICTION}] (got ${mu})`);
+  return mu + 0;
+}
+
+/** Angle wrapped to (−π, π]. */
+function wrapAngle(a: number): number {
+  return a - 2 * Math.PI * Math.ceil((a - Math.PI) / (2 * Math.PI));
+}
 
 function now(): number {
   return typeof performance !== 'undefined' ? performance.now() : Date.now();

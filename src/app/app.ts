@@ -2,7 +2,9 @@
 // physics into the tool of DESIGN.md §7. One instance per page (see src/main.ts).
 //
 // State that is *not* the model (and therefore not in the undo history): the tool state, the
-// selection, the mode (edit / starting / simulate), the kinematics toggle and the playback speed.
+// selection, the mode (edit / starting / simulate), the kinematics toggle, the playback speed and
+// the joint-friction level (a UI preference kept in localStorage under FRICTION_PREF_KEY, never in
+// the model or its file).
 // Every model change goes through History, and History's change listener (`modelChanged`) is the
 // single place that pushes a model to the view, the overlays, the inspector, the counts and the
 // autosave. The file name Save uses, and which "document" (New / Open / example) a model belongs
@@ -50,11 +52,13 @@ import {
   withShift,
 } from '../editor';
 import type { CameraBasis, OpResult, Proposal, StorageLike, Tool, ToolState } from '../editor';
+import { DEFAULT_FRICTION_LEVEL, JOINT_FRICTION } from '../physics';
+import type { FrictionLevel } from '../physics';
 import { Viewport, cameraBasis, defaultCamera, jointGlyphsFromGraph } from '../view';
 import type { ViewportPointerEvent } from '../view';
 import { Banner, aboutDialog, helpDialog } from '../ui/dialogs';
 import type { Dialog } from '../ui/dialogs';
-import { h, isActivationTarget, isTypingTarget } from '../ui/dom';
+import { h, isActivationTarget, isTypingTarget, segButtonsOf } from '../ui/dom';
 import { Inspector } from '../ui/inspector';
 import { PALETTE } from '../ui/palette';
 import { StatusBar } from '../ui/statusbar';
@@ -69,7 +73,29 @@ export type { Mode } from '../ui/topbar';
 /** Debounce of the autosave after a model change (ms). */
 export const AUTOSAVE_DELAY_MS = 400;
 export const DEFAULT_EXAMPLE = 'four-bar';
+/** localStorage key of the joint-friction level preference (DESIGN §5.1; not part of the model). */
+export const FRICTION_PREF_KEY = 'knap.pref.jointFriction';
+/** Status-bar text per friction level: what the level means in plain words. */
+export const FRICTION_MESSAGES: Readonly<Record<FrictionLevel, string>> = {
+  off: 'Joint friction: Off — ideal joints, motion never dies down',
+  low: 'Joint friction: Low — joints slip easily, a swing dies down slowly',
+  realistic: 'Joint friction: Realistic — like real parts, a swing dies down within seconds',
+};
 const RED = '#e0322b';
+
+export function isFrictionLevel(v: unknown): v is FrictionLevel {
+  return typeof v === 'string' && Object.prototype.hasOwnProperty.call(JOINT_FRICTION, v);
+}
+
+/** The stored friction level, or the default when storage is missing, blocked or holds junk. */
+export function readFrictionPref(storage: StorageLike | null): FrictionLevel {
+  try {
+    const v = storage?.getItem(FRICTION_PREF_KEY);
+    return isFrictionLevel(v) ? v : DEFAULT_FRICTION_LEVEL;
+  } catch {
+    return DEFAULT_FRICTION_LEVEL;
+  }
+}
 const BLOCKED = 'Stop the simulation to edit (Esc)';
 /** Keys matched by the character they type, even with Option / AltGr held (see keydown). */
 const CHAR_KEYS: ReadonlySet<string> = new Set(['[', ']', '.', '?']);
@@ -91,6 +117,8 @@ export class App {
   mode: Mode = 'edit';
   showKinematics = false;
   speed = 0.25;
+  /** Joint-friction level (DESIGN §5.1): a remembered UI preference, not part of the model. */
+  friction: FrictionLevel = DEFAULT_FRICTION_LEVEL;
   session: SimSession | null = null;
   fileName: string | null = null;
 
@@ -126,6 +154,7 @@ export class App {
     this.vp = vp;
     this.viewEl = viewEl;
     this.storage = safeLocalStorage();
+    this.friction = readFrictionPref(this.storage);
 
     this.topbar = new TopBar(
       EXAMPLES.map((e) => ({ name: e.name, title: e.title, description: e.description })),
@@ -142,6 +171,7 @@ export class App {
         togglePause: () => this.togglePause(),
         step: () => void this.stepButton(),
         setSpeed: (s) => this.setSpeed(s),
+        setFriction: (f) => this.setFriction(f),
         help: () => this.help.toggle(),
         about: () => this.about.toggle(),
       },
@@ -172,7 +202,7 @@ export class App {
       (name, msg) => this.error(`Could not read ${name}: ${msg}`, true),
     );
 
-    viewEl.append(h('div', { class: 'sim-status' }, this.simBadge, this.topbar.slow), this.banner.el, this.inspector.el);
+    viewEl.append(h('div', { class: 'sim-status' }, this.simBadge, this.topbar.readout, this.topbar.slow), this.banner.el, this.inspector.el);
     root.replaceChildren(this.topbar.el, this.toolbar.el, viewEl, this.status.el);
     document.body.append(this.help.overlay, this.about.overlay);
 
@@ -335,6 +365,7 @@ export class App {
       color: this.tool.color,
       showKinematics: this.showKinematics,
       speed: this.speed,
+      friction: this.friction,
     });
     this.toolbar.update({
       tool: this.tool.tool,
@@ -685,10 +716,16 @@ export class App {
     this.refreshHover();
     const run = (async () => {
       try {
-        const s = await SimSession.start(this.vp, model, this.speed, {
-          fail: (msg) => this.simFailed(msg),
-          readout: (t, slow) => this.topbar.setSimReadout(t, slow),
-        }, opts);
+        const s = await SimSession.start(
+          this.vp,
+          model,
+          this.speed,
+          {
+            fail: (msg) => this.simFailed(msg),
+            readout: (t, slow) => this.topbar.setSimReadout(t, slow),
+          },
+          { ...opts, jointFriction: JOINT_FRICTION[this.friction] },
+        );
         if (this.cancelStart) {
           // Esc / Stop arrived while the world was being built: never show it.
           s.dispose();
@@ -696,8 +733,10 @@ export class App {
           this.info('Simulation cancelled');
           return;
         }
-        // The speed may have been changed while starting (start() took the old one).
+        // The speed and the friction level may have been changed while starting (start() took
+        // the old ones).
         s.setSpeed(this.speed);
+        s.setJointFriction(JOINT_FRICTION[this.friction]);
         this.session = s;
         this.mode = 'simulate';
         this.vp.setGridVisible(false);
@@ -784,6 +823,25 @@ export class App {
     this.refreshUI();
   }
 
+  /**
+   * Joint-friction level (DESIGN §5.1). Allowed in every mode: it is a simulation setting, not an
+   * edit (no undo step, the model and its autosave are untouched). A running simulation uses it
+   * from its next step; one still starting picks it up when ready (see play()). Remembered in
+   * localStorage; a storage failure is ignored (the level then lasts for this page only).
+   */
+  setFriction(level: FrictionLevel): void {
+    if (!isFrictionLevel(level)) throw new Error(`unknown friction level ${String(level)}`);
+    this.friction = level;
+    this.session?.setJointFriction(JOINT_FRICTION[level]);
+    try {
+      this.storage?.setItem(FRICTION_PREF_KEY, level);
+    } catch {
+      /* blocked or full storage: keep the level for this session only */
+    }
+    this.info(FRICTION_MESSAGES[level]);
+    this.refreshUI();
+  }
+
   // ===========================================================================================
   // Keyboard
 
@@ -835,6 +893,15 @@ export class App {
 
     // Space on a keyboard-focused button / checkbox activates it (the browser's default).
     if ((key === ' ' || key === 'Spacebar' || key === 'Enter') && isActivationTarget(e.target)) return;
+    // Arrows on a keyboard-focused segmented control (speed, friction) move the focus within it;
+    // they must not fall through to the edit keys and move the selected part.
+    const seg = segButtonsOf(e.target);
+    if (seg && key.startsWith('Arrow')) {
+      e.preventDefault();
+      const d = key === 'ArrowLeft' || key === 'ArrowUp' ? -1 : 1;
+      seg[(seg.indexOf(e.target as HTMLButtonElement) + d + seg.length) % seg.length]!.focus();
+      return;
+    }
 
     // Simulation keys.
     if (key === ' ' || key === 'Spacebar') {

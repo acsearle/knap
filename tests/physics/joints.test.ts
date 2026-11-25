@@ -97,7 +97,7 @@ describe('cylindrical joint', () => {
         const expected = gs < 0 ? -1 : 2; // axle displacement at rest
         it(`axis ${NAME[k]}, ${order}, gravity ${gs < 0 ? '−' : '+'}${NAME[k]}: slides freely, stops at ${expected}`, async () => {
           const { model, axleBody } = cylModel(k, axleFirst);
-          const s = await sim(model, { gravity: unitAxis(k, gs * G) });
+          const s = await sim(model, { gravity: unitAxis(k, gs * G), jointFriction: 0 }); // free slide: friction off
           const disp = () => where(s, axleBody, [0, 0, 0])[k];
           // Free slide: x = ½·g·t² before the stop (first stop is reached at t = √(2·1/g) ≈ 0.040 s).
           const n1 = Math.round(0.03 / s.fixedDt);
@@ -195,7 +195,7 @@ describe('rotation about a non-principal axis (products of inertia)', () => {
     );
 
   async function run(decoupleInertia: boolean, energyGuard = true) {
-    const s = await sim(model(), { decoupleInertia, energyGuard });
+    const s = await sim(model(), { decoupleInertia, energyGuard, jointFriction: 0 });
     expect(s.graph.joints.map((j) => j.type)).toEqual(['revolute']);
     const mi = s.massInfo(1)!;
     const e0 = s.energy();

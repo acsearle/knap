@@ -37,7 +37,7 @@ function segDist(p: Vec3, a: Vec3, b: Vec3): number {
   return Math.hypot(p[0] - a[0] - t * abx, p[1] - a[1] - t * aby);
 }
 
-const CHECKS: Record<string, () => Check> = {
+const CHECKS: Record<string, (collisionBound?: number) => Check> = {
   pendulum: () => swingCheck(2, 90),
   'triple-pendulum': () => swingCheck(4, 90),
   'four-bar': () => swingCheck(2, 20),
@@ -100,7 +100,7 @@ const CHECKS: Record<string, () => Check> = {
       },
     };
   },
-  collision: () => {
+  collision: (lower = 0.75 - 0.05) => {
     // Peg: axle cells (0,−5, z=1..2) on the frame, radius 0.29. Lower link: part 3, cells
     // (3..6, 0, 2), hole radius 0.46. In the link's own frame the peg centre must stay ≥ 0.75
     // (minus contact tolerance) from the link's centre line, and it must come close (it is hit).
@@ -118,7 +118,7 @@ const CHECKS: Record<string, () => Check> = {
         if (lt) looseMinY = Math.min(looseMinY, where(s, s.bodyOf(6)!, [-1, 3, 0])[1]);
       },
       finish: (s) => {
-        expect(minDist).toBeGreaterThan(0.75 - 0.05); // never passes through the peg
+        expect(minDist).toBeGreaterThan(lower); // never passes through the peg
         expect(minDist).toBeLessThan(0.8); // really struck it
         expect(upperMin).toBeGreaterThan(0.8); // upper link is out of the peg's reach
         // The loose beam lands on the frame's top beam (y = 0) and stays there.
@@ -141,10 +141,16 @@ describe('built-in examples run 10 s', () => {
     expect(EXAMPLES.map((e) => e.name).sort()).toEqual(Object.keys(CHECKS).sort());
   });
 
-  for (const ex of EXAMPLES) {
-    it(ex.name, async () => {
-      const s = await Simulation.create(ex.build());
-      const check = CHECKS[ex.name]!();
+  // Each example at friction off (what the checks were first written for) and at the default level
+  // the app ships (fix after review). The only bound that differs is the collision's transient
+  // depth: where in a 1/480 s step the impact falls decides it (DEVIATIONS §5 "Contacts"), and a
+  // gravity sweep (×(1 + k·2e-3), k = 0…11) measured 0.590–0.731 at off and 0.573–0.745 at realistic
+  // (contact at 0.75); 0.5 keeps that margin and is still far from passing through (0 < d < 0.46).
+  for (const ex of EXAMPLES)
+    for (const level of ['off', 'default'] as const)
+    it(`${ex.name} (friction ${level})`, async () => {
+      const s = await Simulation.create(ex.build(), level === 'off' ? { jointFriction: 0 } : {});
+      const check = CHECKS[ex.name]!(level === 'off' ? undefined : 0.5);
       let jerr = 0;
       let vmax = 0;
       let wmax = 0;
@@ -181,8 +187,7 @@ describe('built-in examples run 10 s', () => {
       const gain = kmax > 0 ? (emax - e0) / kmax : 0;
       expect(gain).toBeLessThan(0.05);
       const summary = check.finish(s);
-      report(`example ${ex.name}: joint error ${jerr.toExponential(2)}, max |v| ${vmax.toFixed(0)}, max |ω| ${wmax.toFixed(0)}, energy rise ${(gain * 100).toFixed(2)}% of KE_max, ${(ms / 10).toFixed(0)} ms/sim-s (incl. checks); ${summary}`);
+      report(`example ${ex.name} (friction ${level}): joint error ${jerr.toExponential(2)}, max |v| ${vmax.toFixed(0)}, max |ω| ${wmax.toFixed(0)}, energy rise ${(gain * 100).toFixed(2)}% of KE_max, ${(ms / 10).toFixed(0)} ms/sim-s (incl. checks); ${summary}`);
       s.dispose();
     }, 60000);
-  }
 });

@@ -133,6 +133,7 @@ export function helpDialog(): Dialog {
           [k('Space'), 'Play; while simulating: pause / resume'],
           [k('.'), 'Step 1/60 s (starts paused if editing)'],
           [k('Esc'), 'Stop: back to the model as edited'],
+          ['Friction Off / Low / Real', 'Joint friction: how quickly pins and axles lose motion; Real = Realistic, the default (remembered)'],
           ['Drag a moving part', 'Pull it with a spring'],
           ['Drag elsewhere', 'Orbit as usual'],
         ]),

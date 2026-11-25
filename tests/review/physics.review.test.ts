@@ -44,7 +44,9 @@ function build(parts: Cell[][], root: number): Model {
   expect(validateModel(m)).toEqual([]);
   return m;
 }
-const sim = (m: Model, o: SimOptions = {}) => Simulation.create(m, o);
+// Written for frictionless joints (period, energy, spin and stability bounds): friction off unless a
+// test says otherwise (joint friction has its own tests in tests/physics/friction.test.ts).
+const sim = (m: Model, o: SimOptions = {}) => Simulation.create(m, { jointFriction: 0, ...o });
 const priv = (s: Simulation) => s as unknown as { world: World; bodies: { rb: RigidBody | null; ref: Vec3 }[] };
 const rbOf = (s: Simulation, body: number) => priv(s).bodies[body]!.rb!;
 const tot = (s: Simulation) => {

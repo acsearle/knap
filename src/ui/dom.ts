@@ -61,6 +61,13 @@ export function isTypingTarget(t: EventTarget | null): boolean {
   return false;
 }
 
+/** The buttons of the segmented control (`.seg`) that button `t` belongs to, or null. */
+export function segButtonsOf(t: EventTarget | null): HTMLButtonElement[] | null {
+  if (!(t instanceof HTMLButtonElement)) return null;
+  const seg = t.closest('.seg');
+  return seg ? Array.from(seg.querySelectorAll('button')) : null;
+}
+
 /**
  * True for a focused control that Space / Enter activates by itself (buttons, checkboxes, menu
  * items): global shortcuts on those keys must leave it to the browser. Text fields are covered by
