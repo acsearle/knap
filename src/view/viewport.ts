@@ -1050,7 +1050,11 @@ export class Viewport {
         this.applyCamera(to);
       } else this.applyCamera(interpolateCamera(this.anim.from, to, easeInOut(t)));
     }
-    this.rafId = null; // applyCamera may have requested; we render now anyway
+    // A frame callback or applyCamera may have requested a frame; we render now anyway. Cancel
+    // it: dropping only the id left that request alive next to the one below, so every frame with
+    // a callback that touched the view (setPartTransform) doubled the pending frames.
+    if (this.rafId !== null) cancelAnimationFrame(this.rafId);
+    this.rafId = null;
     this.renderNow();
     if (this.anim || this.frameCallbacks.size > 0) this.rafId = requestAnimationFrame((t) => this.frame(t));
     else this.lastFrame = 0;

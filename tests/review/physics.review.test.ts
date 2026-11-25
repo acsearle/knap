@@ -8,9 +8,13 @@
 // - bodies attached to the fixed frame below y = −400 were removed: fixed (removalY is relative
 //   to the model); passes.
 // - spinning bodies gain speed: confirmed, an f32 bias inside Rapier's integrator (present on a
-//   free body with no joint, ∝ substeps); not fixable in src/physics. Those tests keep the
-//   physical expectation and are marked `it.fails` (they start failing — i.e. passing — once
-//   the drift is gone); tests/physics/pendulum.test.ts guards the measured size.
+//   free body with no joint, ∝ substeps). Root cause (tuning study, DEVIATIONS §5): Rapier's
+//   per-substep gyroscopic correction (on by default, not switchable from the JS API) rotates ω
+//   through the body's f32 quaternion, whose norm after Rapier's normalisation is ≈ 1 + 6.7e-8 on
+//   average. Not fixable in src/physics; unjointed bodies now run 30 substeps instead of 240, so
+//   they drift ≈ 8× less, but jointed bodies need 240 (fewer lose more energy in the joints).
+//   Those tests keep the physical expectation and are marked `it.fails` (they start failing —
+//   i.e. passing — once the drift is gone); tests/physics/pendulum.test.ts guards the measured size.
 // - symmetric drops onto a flat face are thrown sideways: confirmed, but the cause is Rapier's
 //   uneven impulse distribution over a symmetric 4-point impact (reproduced with two plain
 //   cuboids), and DESIGN §5.3 asks only "comes to rest on / deflects off it and never tunnels

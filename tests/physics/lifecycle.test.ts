@@ -1,5 +1,6 @@
 // Simulation lifecycle, stepping, removal of fallen bodies, grabbing, dispose.
 import { describe, expect, it } from 'vitest';
+import type { RigidBody, World } from '@dimforge/rapier3d-compat';
 import { beam, buildExample, pin } from '../../src/core/examples';
 import { emptyModel } from '../../src/core/model';
 import { initPhysics } from '../../src/physics/rapier';
@@ -153,6 +154,43 @@ describe('stepping', () => {
     // It overruns by at most the last step (< 3 ms normally; generous for a loaded test machine).
     expect(ms).toBeLessThan(5 + 30);
     s.dispose();
+  });
+});
+
+describe('substeps per body (DEVIATIONS §5 "Integration settings")', () => {
+  type Priv = { world: World; bodies: { fixed: boolean; rb: RigidBody }[] };
+  it('jointed bodies run solverIterations substeps, unjointed bodies freeSolverIterations', async () => {
+    const s = await sim(buildExample('collision'));
+    const p = s as unknown as Priv;
+    expect(p.world.numSolverIterations).toBe(30);
+    const jointed = new Set(s.graph.joints.flatMap((j) => [j.bodyA, j.bodyB]));
+    const loose = s.bodyOf(6)!;
+    expect(jointed.has(loose)).toBe(false);
+    for (const b of s.graph.bodies) {
+      const extra = p.bodies[b.id]!.rb.additionalSolverIterations();
+      expect(extra, `body ${b.id}`).toBe(!b.fixed && jointed.has(b.id) ? 210 : 0);
+    }
+    s.dispose();
+    const t = await sim(buildExample('four-bar'), { solverIterations: 20, freeSolverIterations: 50 });
+    expect((t as unknown as Priv).world.numSolverIterations).toBe(20); // clamped to solverIterations
+    t.dispose();
+  });
+
+  it('the free-body count does not change a mechanism at all', async () => {
+    // Jointed bodies run world count + additional = solverIterations whatever the split.
+    const run = async (freeSolverIterations: number) => {
+      const s = await sim(buildExample('collision'), { freeSolverIterations });
+      s.stepFixed(240);
+      const out = s.graph.bodies.map((b) => s.bodyTransform(b.id));
+      s.dispose();
+      return out;
+    };
+    const [a, b] = [await run(30), await run(240)];
+    const probe = await sim(buildExample('collision'));
+    const loose = probe.bodyOf(6)!;
+    probe.dispose();
+    for (let i = 0; i < a.length; i++) if (i !== loose) expect(a[i], `body ${i}`).toEqual(b[i]);
+    expect(a[loose]).not.toEqual(b[loose]); // the loose beam does run at a different substep
   });
 });
 

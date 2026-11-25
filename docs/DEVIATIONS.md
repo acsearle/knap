@@ -220,6 +220,44 @@ had a gap:
 - **Autosave.** An unreadable autosave is moved to `knap.autosave.v1.corrupt`, so it is neither
   lost nor retried on every load. An autosaved empty model restores as "nothing".
 
+## §7 Application (`src/app`, `src/ui`)
+
+- **New / Open / Examples are undoable.** They push the new model onto the history instead of
+  resetting it (`History.reset` is not used), so an accidental New or Open is one `Ctrl/⌘+Z` away.
+  §7.4 only asks for undo of model changes; there is no "unsaved changes" confirm dialog.
+- **Simulate mode freezes editing by disabling, not by stopping.** Tools, palette, New / Open /
+  Examples, Undo / Redo and the inspector's buttons are disabled and greyed; editing keys and
+  `⌘/Ctrl+Z` show "Stop the simulation to edit (Esc)"; clicks in the view edit nothing. Save,
+  Show kinematics, speed and the camera stay available. Stop keeps the selection (the model is
+  the same object, so it is still valid) and does not touch the camera.
+- **Pause turns the frame loop off.** While paused nothing renders continuously (the view
+  renders on demand); Step (`.`) advances 1/60 s = 8 fixed steps. Step in edit mode starts the
+  simulation paused.
+- **"Can't keep up"** is shown when `Simulation.step` dropped steps (its per-call cap) *or* when
+  frames arrive more than 10 ms later than the viewport's clamped dt (the page cannot draw fast
+  enough), held for 1.2 s. It sits over the view next to the SIMULATING badge so the top bar
+  never changes width.
+- **Simulation failure.** Exceptions from stepping, non-finite poses, a NaN joint error or a joint
+  error above 2 units stop the simulation on the next microtask with a banner
+  ("Simulation stopped: …"); the model is restored as on Stop.
+- **Keys.** Space = Play / Pause, `.` = Step, Esc = Stop while simulating (else Select tool, or
+  deselect if Select is already active), `K` = Show kinematics, `D` = Duplicate, `?` = controls,
+  `⌘/Ctrl+S` Save, `⌘/Ctrl+O` Open. All other `Ctrl/⌘/Alt` combinations are left to the browser;
+  nothing fires while focus is in a text field. Shift pressed or released re-resolves the hover
+  without a pointer move.
+- **Hover is re-resolved on camera changes** (wheel zoom, snaps) from the last pointer position, so
+  the ghost never lags behind the view.
+- **New's camera.** An empty model cannot be fitted, so New sets the default iso camera with a
+  12-unit view (Home / Fit frame a small default box).
+- **Selection vs tools.** Switching to a build or erase tool clears the selection; the inspector
+  appears only for a selection. Undo that removes the selected part clears the selection, and redo
+  does not restore it.
+- **Viewport frame-loop fix** (`src/view/viewport.ts`, a bug that blocked simulate mode): a frame
+  callback that touched the view (`setPartTransform` → `requestRender`) left a second
+  `requestAnimationFrame` pending, so every simulated frame doubled the pending frames and the
+  page rendered exponentially often (SwiftShader froze within seconds). `frame()` now cancels the
+  pending request before rendering. Test: `tests/view/frameloop.test.ts`.
+
 ## §6 Rendering & camera (`src/view`)
 
 - **Outline technique.** It is the suggested post-process, but the "part id" buffer holds *smooth
@@ -343,7 +381,23 @@ had a gap:
     could still blow up. This is not tested, and it is a known limitation.
 - **Integration settings.**
   - Fixed step 1/480 s.
-  - `numSolverIterations` 240. These are TGS substeps, so the substep is h = 1/115200 s.
+  - **Bodies with a joint run 240 TGS substeps per step** (h = 1/115200 s). Everything in
+    contact with such a body runs at that count too.
+  - **Bodies without a joint run 30 substeps per step** (h = 1/14400 s). This covers loose parts
+    that touch only each other or fixed bodies. The option is `freeSolverIterations`, clamped to
+    `solverIterations`.
+    - How: Rapier runs each connected component of dynamic bodies (linked by joints or active
+      contacts; fixed bodies do not link) at `numSolverIterations` plus the largest
+      `additionalSolverIterations` among its bodies (`island_manager/substep_groups.rs`). The
+      world count is 30, and every jointed body asks for 210 more.
+    - Mechanisms are bit-identical to running everything at 240. Tested in
+      `tests/physics/lifecycle.test.ts`.
+    - Effect on the collision example: 405 → 300 ms of stepping per simulated second in Node.
+      Free-body spin drift (below) drops ≈ 8×. Resting contacts are calmer: residual speed
+      ≤ 1e-4, tilt ≤ 3e-5 rad, against up to 2e-3 rad before.
+    - Contacts change slightly. Flat parts rest 0.911–0.914 below each other's centre instead of
+      0.914–0.916; the exact touching distance is 0.92. The deepest transient penetration of the
+      40-cell drop is 0.656 instead of 0.659 (the bound is 0.57).
   - 1 PGS iteration and `lengthUnit` 1.
   - No damping and no sleeping (`setCanSleep(false)`).
   - **Rapier's hard CCD is off (`maxCcdSubsteps = 0`, fix after review); free bodies use soft
@@ -353,21 +407,88 @@ had a gap:
     (seen at 10 units/s with thin pieces, at ≈ 180 units/s with the shapes above). Dynamic
     bodies without joints get `softCcdPrediction` = 1.25 × 400 units/s × fixedDt (one step at
     the speed cap). Predictive contacts respect the joint's contact exclusion.
-- **Why 240 substeps: Rapier's joint solving loses kinetic energy at about ω²·h per second.**
-  - Example: a body swinging at 10 rad/s about a pivot loses 4.6 % of its KE every 2 s at
-    h = 1/1920 s.
-  - At real scale the triple pendulum reaches |ω| ≈ 190 rad/s. It is chaotic, so its loss also
-    jumps with tiny mass changes.
-  - Triple pendulum, energy change over 10 s relative to E0 − E_min, with the shapes and
-    inertia from before the review: N = 160 → −14.7 %, 192 → −9.5 %, 224 → −6.6 %,
-    240 → −5.3 %, 256 → −6.9 %, 320 → −1.3 %. With the current shapes: 160 → −12.0 %,
-    192 → −7.6 %, 224 → −5.3 %, 240 → −3.7 %, 288 → −3.0 %.
-  - Four-bar at N = 240: −0.9 %.
-  - Going finer, f32 round-off *adds* energy: see "Free rotation gains speed" below. These
-    gains are slow, roughly linear and bounded in the tests. §5.3 does not test them.
-- **Cost of the default settings, stepping only.** Measured in headless Chromium 159 on the dev
-  machine, in ms of stepping per simulated second (re-measured after the review fixes; within
-  ±5 % of the numbers before them):
+- **Tuning study: no setting with fewer substeps is as accurate (measured, Node, Rapier
+  0.21.0).** The harness is a stand-alone script built on `Simulation`; it is not part of the
+  repo.
+  - Columns:
+    - Triple pendulum: energy change relative to E0 − E_min, min over the run.
+    - Four-bar: max joint error, loop-closure error and final energy as % of KE_max, over 10 s.
+    - Slide stop: final displacement error.
+    - Spin: ω drift in % per second, over 5 s without gravity. Cases: symmetric axle in a pin
+      hole at 100 rad/s; centre-pinned 5-hole link at 100; end-pinned 5-hole link at 30; free
+      3×3×3 block at 100. The block numbers are from before the free-body split.
+  - The rows here and the pendulum period error and energy figures below were measured before
+    the free-body split. Jointed rows still hold, because jointed bodies did not change.
+
+  | step × substeps | substeps/s | triple 10 s | triple 30 s | four-bar jerr / loop / E | slide | spin %/s axle / centre / end / block |
+  |---|---|---|---|---|---|---|
+  | 1/480 × 240 (default) | 115 200 | −3.7 % | −13.6 % | 7.6e-6 / 1.1e-3 / +2.0 % | 2e-7 | +0.76 / +1.35 / +0.26 / +1.97 |
+  | 1/960 × 120 | 115 200 | −5.2 % | −14.2 % | 7.8e-6 / 1.1e-3 / +2.0 % | 2e-7 | same |
+  | 1/1920 × 60 | 115 200 | −5.0 % | −18.5 % | 7.6e-6 / 1.2e-3 / +2.0 % | 2e-7 | same |
+  | 1/4800 × 24 | 115 200 | −6.5 % | −15.0 % | 7.7e-6 / 2.3e-3 / +1.9 % | 3e-7 | same |
+  | 1/9600 × 12 | 115 200 | −9.8 % | −20.4 % | 7.7e-6 / 9.5e-4 / +1.9 % | 3e-7 | same |
+  | 1/480 × 60 | 28 800 | −34.9 % | −59.3 % | 1.1e-4 / 0.01 / −11.6 % | 2e-7 | +0.20 / +0.34 / −0.89 / +0.47 |
+  | 1/1920 × 15 | 28 800 | −23.7 % | −51.4 % | 1.1e-4 / 0.01 / −11.6 % | 3e-7 | same |
+  | 1/9600 × 1 | 9 600 | −59.5 % | −80.1 % | 9.7e-4 / 0.03 / −31.1 % | 4e-7 | +0.06 / +0.11 / −2.53 / +0.16 |
+  | 1/960 × 8 | 7 680 | −48.6 % | −81.5 % | 1.5e-3 / 0.04 / −36.5 % | 2e-7 | +0.05 / +0.09 / −3.04 / +0.13 |
+  | 1/1920 × 4 | 7 680 | −63.0 % | −83.8 % | 1.5e-3 / 0.04 / −36.5 % | 2e-7 | same |
+  | 1/2400 × 2 | 4 800 | −75.5 % | −88.6 % | 3.9e-3 / 0.07 / −49.7 % | 3e-7 | +0.02 / +0.05 / −4.33 / +0.07 |
+  | 1/4800 × 1 | 4 800 | −66.2 % | −88.5 % | 3.9e-3 / 0.08 / −49.7 % | 2e-7 | same |
+  | 1/480 × 320 | 153 600 | −2.8 % | — | 4.8e-6 / 2.7e-3 / +4.5 % | — | +0.98 / +1.82 / +0.54 / +2.69 |
+  | 1/480 × 480 | 230 400 | +2.9 % | — | 2.4e-6 / 4.3e-4 / +8.1 % | — | +1.90 / +3.20 / +1.00 / +4.54 |
+  | 1/480 × 120, 2 PGS | 57 600 | −10.9 % | — | 1.3e-5 / 3.5e-3 / −4.2 % | — | +0.31 / +0.60 / −0.26 / +0.92 |
+  | 1/480 × 60, 4 PGS | 28 800 | −31.1 % | — | 2.5e-5 / 5.9e-3 / −11.6 % | — | +0.20 / +0.34 / −0.89 / +0.48 |
+  | 1/480 × 240, 2 PGS | 115 200 | −6.0 % | — | 3.8e-6 / 6.9e-4 / +2.0 % | — | same as default |
+
+  - **Only the substep length h matters, not how substeps are split into outer steps.** At a
+    fixed number of substeps per second, the joint error, four-bar energy and spin drift are the
+    same to 2–3 digits. Only the chaotic triple pendulum differs.
+  - Cost is not lower either. Collision example in Node, ms per simulated s (under load):
+    1/480 × 240 → 405–446, 1/960 × 120 → 459, 1/1920 × 60 → 477, 1/4800 × 24 → 494,
+    1/9600 × 12 → 603. Many small outer steps add collision detection and gain nothing.
+  - The pendulum period is right in every row (error ≤ 1.1e-3 %, against the 3 % bound).
+  - Extra PGS iterations reduce the joint error but not the energy loss, and they cost about as
+    much as substeps.
+  - **Where the pendulum's energy goes: Rapier's joint solve dissipates ∝ ω²·h.**
+    - Rapier integrates every body's centre of mass along a straight line within a substep and
+      rotates it about the centre of mass (`integrate_linearized`).
+    - So a pinned link's anchor leaves the pivot by about ½(ωh)²·d per substep, where d is the
+      distance from the pivot to the centre of mass.
+    - The next substep's biased velocity solve pulls the anchor back, and the unbiased
+      stabilisation pass then removes that correction velocity. This is a perfectly inelastic
+      projection.
+    - In the table, 4× the substep length gives roughly 4–6× the loss.
+    - This happens inside the solver, which we cannot reach from JS: the joint softness (1e6 Hz,
+      ζ = 1), `warmstart_joints` (default off) and `num_internal_stabilization_iterations` are
+      not exposed by the 0.21 JS bindings.
+  - **The triple pendulum has no robust margin at 240.** Same model with gravity scaled by
+    (1 + k·1e-6), k = 1…20, 10 s:
+    - 240 substeps: −3.1 … −11.7 %, median −5.2 %. Two of 20 runs pass the §5.3 limit of −10 %.
+    - 288 substeps: worst −8.9 % (12 runs).
+    - 320 substeps: −0.7 … −4.0 %, at most +0.4 % (20 runs).
+    - The §5.3 test passes at 240 (−3.7 %) because of its particular trajectory, which is chaotic.
+  - **320 substeps was not adopted.** It costs +33 %, and the spin gain grows with the substep
+    count. Over 30 s at 320 the pendulum rises +15.2 % of KE_max, the four-bar +12.4 % and the
+    parallelogram +11.3 %. That fails the review's 30 s bound of +10 %. At 288: +13.0 %, +9.4 %
+    and +10.1 %. At 240 the worst is +9.6 % (pendulum).
+  - So 240 is the only count that keeps both the loss bound and the gain bound. It does so with
+    little margin on either side, because the two errors pull in opposite directions as h
+    changes.
+  - **Tolerance scales.**
+    - `lengthUnit` scales only the contact tolerances and the speed caps, not the joints. At
+      `lengthUnit` 2 every number above is unchanged, except that the linear speed cap rises to
+      800 units/s.
+    - At `lengthUnit` 0.5 the cap falls to 200 units/s, so impacts are slower and shallower.
+    - At `lengthUnit` 10 the four-bar stalls on speculative contacts: −109 % of KE_max.
+    - `normalizedAllowedLinearError` 0.001 or 0.02, `normalizedPredictionDistance` 0.01 or 0.05
+      and `contact_natural_frequency` 60 or 120 change none of the tested numbers.
+    - In Rapier 0.21 the JS setter only affects dynamic–dynamic contacts. Contacts with fixed
+      bodies use `static_contact_softness` (60 Hz, ζ = 10), which is not exposed.
+    - None of these was changed.
+- **Cost of the default settings, stepping only.**
+  - Measured in headless Chromium 159 on the dev machine, in ms of stepping per simulated
+    second. These are the numbers from before the free-body split. Every example except
+    collision steps exactly as before.
 
   | Example | ms per simulated s |
   |---|---|
@@ -377,31 +498,55 @@ had a gap:
   | parallelogram | 193 |
   | sliding axle | 101 |
   | weld test | 57 |
-  | collision | 342 |
+  | collision | 342 → ≈ 250 (est.) |
 
-  - At 1× and 60 Hz that is 0.9–3.2 ms per frame. The collision example takes 5.7 ms, which is
-    over the ≈ 4 ms budget, because resting contacts are solved in every substep.
+  - Collision after the split, Node, best of 3, two runs each: 405 → 295–301 ms. The other
+    examples in Node are unchanged at 88–259 ms.
+  - The ≈ 250 ms browser figure scales the Chromium number by that Node ratio. It was not
+    measured in a browser.
+  - At 1× and 60 Hz that is 0.9–3.2 ms per frame, and ≈ 4.2 ms (est.) for collision, still
+    just over the ≈ 4 ms budget. Most of what remains is the two jointed links, which run 240
+    substeps.
+  - In Node the collision example at 1× with the default 8 ms budget simulates 1.95 s of 2 s
+    (drops 23 steps).
   - At the default ¼× every example takes ≤ 1.4 ms per frame.
-  - Node (vitest) measured 1.2–1.7× slower, on a machine shared with other test runs.
   - `step()` caps the work per call: at most `maxStepsPerCall` (16) fixed steps and
     `stepBudgetMs` (8 ms) of wall-clock time. It drops the rest and counts it in `droppedSteps`
     and `droppedTime`. So an overloaded 1× runs slower than real time instead of spiralling.
-- **Free rotation gains speed (known limitation, found in review).** Rapier's f32 integration
-  adds a small relative bias to every dynamic body's angular velocity in every substep: about
-  1e-7–3e-7, independent of ω (measured from 0.01 to 300 rad/s), present on a free body with no
-  joint and no gravity, proportional to the substep count (1/480 s × 240: +1.5 %/s for a cube;
-  ×60 → ¼ of that; 1/960 s × 480: +18 %/s). Its size and sign depend on how the inertia is
-  represented (−0.65 to +3.8 %/s on the same body with different but equivalent principal
-  frames), so it cannot be compensated from outside. At the default settings, without gravity
-  over 5 s: a symmetric axle in a pin hole +3.8 % of ω, a 5-hole link pinned at its centre
-  +6.7 %, an end-pinned link +1.3 %; over 10 s the examples rise by at most 3.4 % of their
-  peak KE (pendulum), over 30 s by at most 9.6 %. Fewer substeps shrink it but lose more
-  energy in the joints (triple pendulum over 10 s: 160 → −12.0 %, 192 → −7.6 %, 240 → −3.7 %),
-  and §5.3 bounds that loss, so 240 stays. `decoupleInertia` is now skipped for a body whose
-  products with the joint axis are already negligible (< 1e-6 of the trace), so it no longer
-  changes a symmetric body's representation (the review saw it double the axle's drift; that
-  was this representation dependence, not a physical effect). Guarded in
-  `tests/physics/pendulum.test.ts` at ≈ 1.5× the measured drift.
+- **Free rotation gains speed (known limitation; root cause found in the tuning study).**
+  - The cause is Rapier's per-substep gyroscopic correction (`gyroscopic_corrected_angvel`).
+    - It is on by default, and the 0.21 JS API cannot switch it off.
+    - It rotates ω into the principal frame with the body's f32 quaternion and back again.
+    - glam's `Quat * Vec3` assumes a unit quaternion, so each pass scales ω by |q|².
+    - Rapier's f32 `normalize()` leaves |q|² ≈ 1 + 6.7e-8 on average for rotations about one
+      axis (77 % of samples are above 1), and ≈ 1 + 5.1e-8 for random orientations.
+    - So ω grows by ≈ 1e-7 per substep. The rounding of I·(1/I) adds up to ±4e-8, depending on
+      the principal inertia values.
+  - An f32 emulation of exactly this path reproduces Rapier to 4 digits:
+    - +1.1514 %/s for a free body with I = 4 at 100 rad/s about z.
+    - +1.5037 %/s at 10 rad/s.
+    - +1.4265 %/s with I = 3.
+    - 0 when the rotation stays the identity.
+  - It is independent of joints and ∝ substeps. Its size depends on ω, on the inertia values
+    and on the principal frame, so no damping constant cancels it.
+  - Tried and rejected: a principal frame whose norm² is 1 − 6.7e-8, plus principal inertia
+    values nudged by ulps so that I·fl(1/I) rounds to 1.
+    - In emulation it moves the drift to −0.1 … −1.2 %/s.
+    - In Rapier it moves the centre-pinned link from +1.35 to −1.9 %/s.
+    - It over-corrects by different amounts for different ω and inertias, and it depends on the
+      rounding of this exact Rapier/glam build. It would hide the bias, not remove it.
+  - Measured now, % per second of ω, 5 s, no gravity:
+    - Jointed bodies (240 substeps): axle in a pin hole +0.76, centre-pinned link +1.35,
+      end-pinned link +0.26.
+    - Unjointed bodies (30 substeps): 3×3×3 block +0.24 (was +1.97), 5-hole beam +0.17 (was
+      +1.35).
+  - Over 30 s the examples rise by at most 9.6 % of their peak KE (pendulum). Guarded in
+    `tests/physics/pendulum.test.ts` at ≈ 1.5× the measured drift.
+  - `decoupleInertia` is skipped for a body whose products with the joint axis are already
+    negligible (< 1e-6 of the trace), so it does not change a symmetric body's representation.
+  - The real fix belongs in Rapier: rotate with a matrix, or divide by |q|², or expose
+    `enable_gyroscopic_forces`. In a planar mechanism every body spins about a principal axis,
+    so the gyroscopic term is exactly zero there and switching it off would be exact.
 - **Symmetric fast impacts on a flat face throw the part sideways (Rapier, found in review).**
   A flat face landing squarely on another at 300–400 units/s gets uneven impulses over its
   4 contact points (264/178/287/161 for two plain cuboids crossed at 311 units/s), so it leaves

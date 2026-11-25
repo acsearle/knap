@@ -1,20 +1,13 @@
-// Smoke test: the production bundle loads, both WASM modules initialise, WebGL2 is available.
+// Smoke test: the production bundle loads, the app reports ready, WebGL2 is available.
 export default async function ({ page, url, shot, assert, step }) {
   await step('load page', () => page.goto(url));
   assert((await page.title()) === 'knap', 'page title is "knap"');
 
-  const status = page.locator('#status');
-  await step('wait for status', () =>
-    page.waitForFunction(() => {
-      const s = document.getElementById('status');
-      return s && (s.dataset.state === 'ok' || s.dataset.state === 'error');
-    }, null, { timeout: 30000 }),
+  await step('wait for app ready', () =>
+    page.waitForFunction(() => document.body.dataset.ready === 'true', null, { timeout: 30000 }),
   );
-  const text = (await status.textContent()) ?? '';
-  console.log(`  [smoke] status: ${text}`);
-  assert(text.includes('manifold ok volume=1'), `manifold status in "${text}"`);
-  assert(text.includes('rapier ok'), `rapier status in "${text}"`);
-  assert(text.includes('webgl2 ok'), `webgl2 status in "${text}"`);
+  assert(await page.evaluate(() => !!window.__knap && window.__knap.getModel().parts.length > 0),
+    'app started with a non-empty model');
 
   // Independently confirm WebGL2 renders (draw + readPixels), not just that a context exists.
   const pixel = await page.evaluate(() => {

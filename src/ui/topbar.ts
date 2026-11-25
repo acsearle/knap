@@ -1,0 +1,232 @@
+// Top bar: app name, File (New / Open… / Save / Examples ▾), Undo / Redo, colour palette,
+// Show kinematics, simulate controls (Play/Stop, Pause, Step, speed, time, "can't keep up"),
+// help and about.
+import { button, h, icon, setText } from './dom';
+import { ICONS } from './icons';
+import { PALETTE } from './palette';
+
+export interface ExampleEntry {
+  name: string;
+  title: string;
+  description: string;
+}
+
+export interface TopBarHandlers {
+  newModel(): void;
+  open(): void;
+  save(): void;
+  loadExample(name: string): void;
+  undo(): void;
+  redo(): void;
+  pickColor(color: string): void;
+  setShowKinematics(on: boolean): void;
+  playStop(): void;
+  togglePause(): void;
+  step(): void;
+  setSpeed(speed: number): void;
+  help(): void;
+  about(): void;
+}
+
+export type Mode = 'edit' | 'starting' | 'simulate';
+
+export interface TopBarState {
+  mode: Mode;
+  paused: boolean;
+  canUndo: boolean;
+  canRedo: boolean;
+  color: string;
+  showKinematics: boolean;
+  speed: number;
+}
+
+export const SPEEDS: readonly { value: number; label: string }[] = [
+  { value: 1, label: '1×' },
+  { value: 0.5, label: '½×' },
+  { value: 0.25, label: '¼×' },
+  { value: 0.1, label: '⅒×' },
+];
+
+const MOD = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl+';
+
+export class TopBar {
+  readonly el: HTMLElement;
+  private readonly newBtn: HTMLButtonElement;
+  private readonly openBtn: HTMLButtonElement;
+  private readonly saveBtn: HTMLButtonElement;
+  private readonly examplesBtn: HTMLButtonElement;
+  private readonly examplesMenu: HTMLElement;
+  private readonly undoBtn: HTMLButtonElement;
+  private readonly redoBtn: HTMLButtonElement;
+  private readonly swatches: HTMLButtonElement[] = [];
+  private readonly kinInput: HTMLInputElement;
+  private readonly playBtn: HTMLButtonElement;
+  private readonly pauseBtn: HTMLButtonElement;
+  private readonly stepBtn: HTMLButtonElement;
+  private readonly speedBtns: HTMLButtonElement[] = [];
+  private readonly readout: HTMLElement;
+  /** The "can't keep up" pill; the host places it (over the viewport, next to the mode badge). */
+  readonly slow: HTMLElement;
+
+  constructor(examples: readonly ExampleEntry[], private readonly on: TopBarHandlers) {
+    this.newBtn = button([icon(ICONS.file), 'New'], { class: 'btn', title: 'New empty model', 'data-action': 'new', onclick: () => on.newModel() });
+    this.openBtn = button([icon(ICONS.open), 'Open…'], { class: 'btn', title: `Open a .knap.json file (${MOD}O)`, 'data-action': 'open', onclick: () => on.open() });
+    this.saveBtn = button([icon(ICONS.save), 'Save'], { class: 'btn', title: `Download the model as .knap.json (${MOD}S)`, 'data-action': 'save', onclick: () => on.save() });
+
+    this.examplesMenu = h('div', { class: 'menu', role: 'menu', hidden: true, 'data-role': 'examples-menu' });
+    for (const ex of examples) {
+      this.examplesMenu.append(
+        h(
+          'button',
+          {
+            type: 'button',
+            class: 'menu-item',
+            role: 'menuitem',
+            'data-example': ex.name,
+            onclick: () => {
+              this.closeMenus();
+              on.loadExample(ex.name);
+            },
+          },
+          h('span', { class: 'title' }, ex.title),
+          h('span', { class: 'desc' }, ex.description),
+        ),
+      );
+    }
+    this.examplesBtn = button(['Examples', icon(ICONS.caret, 'icon caret')], {
+      class: 'btn',
+      title: 'Load a built-in example',
+      'aria-haspopup': 'menu',
+      'aria-expanded': 'false',
+      'data-action': 'examples',
+      onclick: (e) => {
+        e.stopPropagation();
+        this.toggleMenu();
+      },
+    });
+    const examplesWrap = h('div', { class: 'menu-wrap' }, this.examplesBtn, this.examplesMenu);
+    document.addEventListener('pointerdown', (e) => {
+      if (!examplesWrap.contains(e.target as Node)) this.closeMenus();
+    });
+
+    this.undoBtn = button(icon(ICONS.undo), { class: 'btn icon-only', title: `Undo (${MOD}Z)`, 'aria-label': 'Undo', 'data-action': 'undo', onclick: () => on.undo() });
+    this.redoBtn = button(icon(ICONS.redo), {
+      class: 'btn icon-only',
+      title: `Redo (${MOD === '⌘' ? '⇧⌘Z' : 'Ctrl+Y'})`,
+      'aria-label': 'Redo',
+      'data-action': 'redo',
+      onclick: () => on.redo(),
+    });
+
+    const palette = h('div', { class: 'palette tool-palette', role: 'group', 'aria-label': 'Colour for new parts', 'data-role': 'palette' });
+    for (const s of PALETTE) {
+      const b = h('button', {
+        type: 'button',
+        class: 'swatch',
+        title: `${s.name} — colour for new parts`,
+        'aria-label': s.name,
+        'data-color': s.color,
+        style: `background:${s.color}`,
+        onclick: () => on.pickColor(s.color),
+      });
+      this.swatches.push(b);
+      palette.append(b);
+    }
+
+    this.kinInput = h('input', { type: 'checkbox', 'data-action': 'kinematics' });
+    this.kinInput.addEventListener('change', () => on.setShowKinematics(this.kinInput.checked));
+    const kin = h('label', { class: 'toggle', title: 'Tint parts by rigid body and show joint axes (K)' }, this.kinInput, 'Show kinematics');
+
+    this.playBtn = button([icon(ICONS.play), 'Play'], { class: 'btn primary play', title: 'Simulate (Space)', 'data-action': 'play', onclick: () => on.playStop() });
+    this.pauseBtn = button(icon(ICONS.pause), { class: 'btn icon-only', title: 'Pause / resume (Space)', 'aria-label': 'Pause', 'data-action': 'pause', onclick: () => on.togglePause() });
+    this.stepBtn = button(icon(ICONS.step), { class: 'btn icon-only', title: 'Step 1/60 s of simulated time (.)', 'aria-label': 'Step', 'data-action': 'step', onclick: () => on.step() });
+    const seg = h('div', { class: 'seg', role: 'group', 'aria-label': 'Playback speed', title: 'Playback speed (simulated time per real time)' });
+    for (const s of SPEEDS) {
+      const b = h('button', { type: 'button', 'data-speed': String(s.value), onclick: () => on.setSpeed(s.value) }, s.label);
+      this.speedBtns.push(b);
+      seg.append(b);
+    }
+    this.readout = h('span', { class: 'readout', 'data-role': 'sim-time', title: 'Simulated time' }, 't = –');
+    this.slow = h('span', { class: 'slow', hidden: true, 'data-role': 'sim-slow', title: 'The computer cannot simulate this model fast enough: it runs slower than the chosen speed.' }, 'can’t keep up — running slower than the chosen speed');
+
+    const helpBtn = button(icon(ICONS.help), { class: 'btn icon-only', title: 'Mouse and keyboard controls (?)', 'aria-label': 'Controls', 'data-action': 'help', onclick: () => on.help() });
+    const aboutBtn = button(icon(ICONS.info), { class: 'btn icon-only', title: 'About knap', 'aria-label': 'About', 'data-action': 'about', onclick: () => on.about() });
+
+    this.el = h(
+      'header',
+      { class: 'topbar' },
+      h('span', { class: 'brand' }, 'knap'),
+      this.newBtn,
+      this.openBtn,
+      this.saveBtn,
+      examplesWrap,
+      h('span', { class: 'sep' }),
+      this.undoBtn,
+      this.redoBtn,
+      h('span', { class: 'sep' }),
+      palette,
+      h('span', { class: 'sep' }),
+      kin,
+      h('span', { class: 'spacer' }),
+      h('span', { class: 'simgroup' }, this.playBtn, this.pauseBtn, this.stepBtn, seg, this.readout),
+      h('span', { class: 'sep' }),
+      helpBtn,
+      aboutBtn,
+    );
+  }
+
+  get menuOpen(): boolean {
+    return !this.examplesMenu.hidden;
+  }
+
+  toggleMenu(): void {
+    const open = this.examplesMenu.hidden;
+    this.examplesMenu.hidden = !open;
+    this.examplesBtn.setAttribute('aria-expanded', String(open));
+    if (open) (this.examplesMenu.querySelector('button') as HTMLButtonElement | null)?.focus({ preventScroll: true });
+  }
+
+  closeMenus(): void {
+    if (this.examplesMenu.hidden) return;
+    this.examplesMenu.hidden = true;
+    this.examplesBtn.setAttribute('aria-expanded', 'false');
+  }
+
+  update(s: TopBarState): void {
+    const editing = s.mode === 'edit';
+    for (const b of [this.newBtn, this.openBtn, this.examplesBtn]) b.disabled = !editing;
+    if (!editing) this.closeMenus();
+    this.undoBtn.disabled = !editing || !s.canUndo;
+    this.redoBtn.disabled = !editing || !s.canRedo;
+    for (const b of this.swatches) {
+      b.disabled = !editing;
+      b.classList.toggle('on', b.dataset.color === s.color);
+    }
+    this.kinInput.checked = s.showKinematics;
+
+    const running = s.mode !== 'edit';
+    this.playBtn.replaceChildren(icon(running ? ICONS.stop : ICONS.play), s.mode === 'starting' ? 'Starting…' : running ? 'Stop' : 'Play');
+    this.playBtn.classList.toggle('running', running);
+    this.playBtn.title = running ? 'Stop and return to the model as edited (Esc)' : 'Simulate (Space)';
+    this.playBtn.disabled = s.mode === 'starting';
+    this.playBtn.dataset.action = running ? 'stop' : 'play';
+    this.pauseBtn.disabled = s.mode !== 'simulate';
+    this.pauseBtn.classList.toggle('on', s.mode === 'simulate' && s.paused);
+    this.pauseBtn.setAttribute('aria-pressed', String(s.mode === 'simulate' && s.paused));
+    this.pauseBtn.replaceChildren(icon(s.mode === 'simulate' && s.paused ? ICONS.play : ICONS.pause));
+    this.pauseBtn.title = s.paused ? 'Resume (Space)' : 'Pause (Space)';
+    this.stepBtn.disabled = s.mode === 'starting' || (s.mode === 'simulate' && !s.paused);
+    for (const b of this.speedBtns) b.classList.toggle('on', Number(b.dataset.speed) === s.speed);
+    this.readout.classList.toggle('live', running);
+    if (!running) {
+      setText(this.readout, 't = –');
+      this.slow.hidden = true;
+    }
+  }
+
+  /** Per-frame simulation readout (cheap: touches the DOM only on change). */
+  setSimReadout(time: number, slow: boolean): void {
+    setText(this.readout, `t = ${time.toFixed(2)} s`);
+    if (this.slow.hidden === slow) this.slow.hidden = !slow;
+  }
+}

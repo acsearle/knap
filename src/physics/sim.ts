@@ -64,8 +64,16 @@ export interface SimOptions {
   gravity?: Vec3;
   /** Fixed step in simulated seconds. Default 1/480. */
   fixedDt?: number;
-  /** Rapier solver iterations (= TGS substeps) per fixed step. Default 240 (see DEVIATIONS §5). */
+  /**
+   * Rapier solver iterations (= TGS substeps) per fixed step for every body that has a joint, and
+   * for everything in contact with such a body. Default 240 (see DEVIATIONS §5).
+   */
   solverIterations?: number;
+  /**
+   * Substeps per fixed step for dynamic bodies without joints that touch only other such bodies or
+   * fixed bodies (loose parts lying around or falling). Default 30; clamped to solverIterations.
+   */
+  freeSolverIterations?: number;
   /** Rapier internal PGS iterations per substep. Default 1. */
   pgsIterations?: number;
   /** step() runs at most this many fixed steps per call; the rest is dropped (see droppedTime). Default 16. */
@@ -98,6 +106,7 @@ const DEFAULTS = {
   speed: 0.25,
   fixedDt: 1 / 480,
   solverIterations: 240,
+  freeSolverIterations: 30,
   pgsIterations: 1,
   maxStepsPerCall: 16,
   stepBudgetMs: 8,
@@ -186,6 +195,8 @@ export class Simulation {
   readonly removalY: number;
   private grabState: Grab | null = null;
   private disposed = false;
+  /** World substep count (= free-body substeps); jointed bodies add solverIterations − this. */
+  private readonly baseIterations: number;
 
   /** Analyse `model` (which must be valid) and build its Rapier world. */
   static async create(model: Model, opts: SimOptions = {}): Promise<Simulation> {
@@ -214,7 +225,14 @@ export class Simulation {
     const world = new RAPIER.World(xyz(this.gravity));
     this.world = world;
     world.timestep = o.fixedDt;
-    world.numSolverIterations = o.solverIterations;
+    // Substeps are set per connected component (Rapier runs every component of dynamic bodies
+    // linked by joints or touching contacts at the world count plus the largest
+    // additionalSolverIterations among its bodies). The world count is the free-body count, and
+    // every jointed body adds the difference (buildBodies), so mechanisms — and anything touching
+    // them — run exactly solverIterations substeps, while loose parts that only touch each other
+    // or fixed bodies run freeSolverIterations. See DEVIATIONS §5 "Integration settings".
+    this.baseIterations = Math.max(1, Math.min(o.freeSolverIterations, o.solverIterations));
+    world.numSolverIterations = this.baseIterations;
     world.numInternalPgsIterations = o.pgsIterations;
     world.integrationParameters.maxCcdSubsteps = 0; // hard CCD off; free bodies use soft CCD
     // lengthUnit stays 1 (a cell is ~1 unit, the size Rapier's default tolerances are made
@@ -236,6 +254,12 @@ export class Simulation {
   private buildBodies(model: Model): void {
     const partById = new Map(model.parts.map((p) => [p.id, p]));
     const o = this.opts;
+    const jointed = new Set<number>();
+    for (const j of this.graph.joints) {
+      jointed.add(j.bodyA);
+      jointed.add(j.bodyB);
+    }
+    const extra = Math.max(0, o.solverIterations - this.baseIterations);
     for (const b of this.graph.bodies) {
       const parts = b.partIds.map((id) => partById.get(id)!).filter((p) => p && p.cells.length > 0);
       let ref: Vec3 = [0, 0, 0];
@@ -249,6 +273,7 @@ export class Simulation {
       const desc = b.fixed
         ? RAPIER.RigidBodyDesc.fixed()
         : RAPIER.RigidBodyDesc.dynamic().setCanSleep(false).setAngularDamping(o.angularDamping);
+      if (!b.fixed && jointed.has(b.id)) desc.setAdditionalSolverIterations(extra);
       desc.setTranslation(ref[0], ref[1], ref[2]);
       const rb = this.world.createRigidBody(desc);
       for (const p of parts) {
@@ -278,11 +303,6 @@ export class Simulation {
     // in the constructor (maxCcdSubsteps = 0): it ran its time-of-impact clamp on jointed pairs
     // even though their contacts are disabled, stalling a sliding axle in its hole for a step
     // whenever it moved faster than its thinnest collider piece (see DEVIATIONS §5).
-    const jointed = new Set<number>();
-    for (const j of this.graph.joints) {
-      jointed.add(j.bodyA);
-      jointed.add(j.bodyB);
-    }
     for (const sb of this.bodies)
       if (!sb.fixed && !jointed.has(sb.id)) sb.rb!.setSoftCcdPrediction(SPEED_CAP * o.fixedDt * 1.25);
     this.decoupleInertia();

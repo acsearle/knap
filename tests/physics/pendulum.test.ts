@@ -1,6 +1,7 @@
 // §5.3 pendulum period, and exactness of the part transforms.
 import { describe, expect, it } from 'vitest';
-import { axle, beam, holes, pin } from '../../src/core/examples';
+import { axle, beam, cell, holes, pin } from '../../src/core/examples';
+import type { Cell } from '../../src/core/types';
 import { axisAngle, rotate, sub, add } from '../../src/physics/math';
 import type { Vec3 } from '../../src/physics/math';
 import { G, mk, report, sim, where } from './helpers';
@@ -51,28 +52,39 @@ describe('pendulum period', () => {
 });
 
 describe('free spin (known limitation, DEVIATIONS §5)', () => {
-  // Rapier's f32 integration adds a small relative bias to every body's angular velocity in each
-  // substep (≈ 1e-7–3e-7, independent of ω, present on a free body without any joint), so at 240
-  // substeps a freely spinning part speeds up by roughly 0.3–1.5 % of ω per second. These are
+  // Rapier's per-substep gyroscopic correction rotates ω into the principal frame and back with
+  // the body's f32 rotation quaternion, whose norm after Rapier's normalisation is ≈ 1 + 6.7e-8 on
+  // average, so ω grows by ≈ 1e-7 per substep (independent of ω; present on a free body without
+  // any joint). Jointed bodies run 240 substeps per 1/480 s step, so a freely spinning link speeds
+  // up by roughly 0.3–1.4 % of ω per second; unjointed bodies run 30 and drift ≈ 8× less. These are
   // regression guards at ≈ 1.5× the measured drift, not the physical expectation (0 %).
+  const block: Cell[] = [];
+  for (let x = 0; x < 3; x++) for (let y = 0; y < 3; y++) for (let z = 0; z < 3; z++) block.push(cell([x + 20, y, z], 'pinHole', 2));
   const spinCases = [
     { label: 'symmetric axle in a pin hole (cylindrical)', parts: () => [holes([0, 0, 0], [1, 0, 0], 2), axle([0, 0, -2], [0, 0, 2])], pivot: [0, 0, 0] as Vec3, w0: 100, bound: 0.06 },
     { label: 'centred 5-hole link on a pin', parts: () => [beam([0, 0, 0], [0, -1, 0]), beam([-2, 0, 1], [2, 0, 1]), pin([0, 0, 0], [0, 0, 1])], pivot: [0, 0, 1] as Vec3, w0: 100, bound: 0.1 },
     { label: 'end-pinned 5-hole link', parts: () => [beam([0, 0, 0], [0, -1, 0]), beam([0, 0, 1], [4, 0, 1]), pin([0, 0, 0], [0, 0, 1])], pivot: [0, 0, 1] as Vec3, w0: 30, bound: 0.02 },
+    // Unjointed bodies (freeSolverIterations = 30 substeps): measured +1.2 % and +0.84 % in 5 s.
+    // The block's inertia is isotropic, so Rapier's principal frame is arbitrary and the f32
+    // round trip also leaks ≈ 1.3e-3 rad/s into the other axes (bound 2e-3).
+    { label: 'free 3×3×3 block (no joint)', parts: () => [beam([0, 0, 0], [1, 0, 0]), block], pivot: null, w0: 100, bound: 0.018, offAxis: 2e-3 },
+    { label: 'free 5-hole beam (no joint)', parts: () => [beam([0, 0, 0], [1, 0, 0]), beam([20, 0, 0], [24, 0, 0])], pivot: null, w0: 100, bound: 0.0125 },
   ];
   for (const c of spinCases)
     it(`${c.label}: ω drift over 5 s without gravity stays within ${c.bound * 100}%`, async () => {
       const s = await sim(mk(c.parts(), 1), { gravity: [0, 0, 0] });
       const rb = (s as unknown as { bodies: { rb: { setAngvel(v: object, w: boolean): void; setLinvel(v: object, w: boolean): void } }[] }).bodies[1]!.rb;
-      const r = sub(s.massInfo(1)!.com, c.pivot);
       rb.setAngvel({ x: 0, y: 0, z: c.w0 }, true);
-      rb.setLinvel({ x: -c.w0 * r[1], y: c.w0 * r[0], z: 0 }, true);
+      if (c.pivot) {
+        const r = sub(s.massInfo(1)!.com, c.pivot);
+        rb.setLinvel({ x: -c.w0 * r[1], y: c.w0 * r[0], z: 0 }, true);
+      }
       s.stepFixed(Math.round(5 / s.fixedDt));
       const w = s.bodyVelocity(1)!.w;
       const drift = w[2] / c.w0 - 1;
       report(`free spin, ${c.label}: ω ${c.w0} → ${w[2].toFixed(3)} rad/s in 5 s (${(drift * 100).toFixed(2)}%)`);
       expect(Math.abs(drift)).toBeLessThan(c.bound);
-      expect(Math.hypot(w[0], w[1])).toBeLessThan(1e-3);
+      expect(Math.hypot(w[0], w[1])).toBeLessThan(('offAxis' in c ? c.offAxis : undefined) ?? 1e-3);
       s.dispose();
     });
 });
