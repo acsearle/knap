@@ -1,0 +1,22 @@
+
+===== regime metre (vsteps 10, psteps 2, csteps 1) =====
+B6a: energy change after 10 s -73.859 % of mgL (range -74.381 .. 0.000), worst hinge separation 0.0062 studs, cost 7.16 ms per sim s
+B6b: energy change at 2/4/6/8/10 s -40.27 / -53.78 / -61.76 / -66.96 / -70.74 % of swing energy; worst in-plane hinge separation 0.0594 studs; cost 18.69 ms per sim s
+B7 gyro=false: after 30 s E 6.49e-6 % (2.16e-7 %/s), |L| 2.08e-6 % (6.94e-8 %/s); range E -3.95e-5..3.16e-5 %, |L| -4.11e-5..3.05e-5 %; |w| end 20.000 rad/s; L direction turned 70.785 deg
+B7 gyro=true: after 30 s E -3.066 % (-0.1022 %/s), |L| 0.225 % (0.0075 %/s); range E -3.16..0.00 %, |L| 0.00..0.22 %; |w| end 16.782 rad/s; L direction turned 2.804 deg
+B8 target 100 rad/s: I1 846.8480 I2 3.31e+4 (internal); 16:40 no gear position correction; worst phase err from integrated w 3.79e-6 rad; from body poses 1.95e-5 rad (4.97e-5 teeth of the 16); KE drift after release 7.81e-5 %/s
+   t=0.5 w1 100.00 w2 -40.000 ratio 2.500000 phase err (int. w) -4.72e-7 rad, (pose) -1.10e-6 rad = -2.79e-6 teeth
+   released at t=0.502 s, KE/work 1.00000
+   t=1.0 w1 100.42 w2 -40.167 ratio 2.500000 phase err (int. w) 5.91e-7 rad, (pose) 2.49e-6 rad = 6.34e-6 teeth
+   t=1.5 w1 100.42 w2 -40.167 ratio 2.500000 phase err (int. w) 1.45e-6 rad, (pose) 7.66e-6 rad = 1.95e-5 teeth
+   t=2.0 w1 100.42 w2 -40.167 ratio 2.500000 phase err (int. w) 1.79e-6 rad, (pose) 1.18e-5 rad = 3.00e-5 teeth
+   t=2.5 w1 100.42 w2 -40.167 ratio 2.500000 phase err (int. w) 2.52e-6 rad, (pose) 1.30e-5 rad = 3.32e-5 teeth
+   t=3.0 w1 100.42 w2 -40.167 ratio 2.500000 phase err (int. w) 3.78e-6 rad, (pose) 1.94e-5 rad = 4.94e-5 teeth
+B8 target 300 rad/s: I1 846.8480 I2 3.31e+4 (internal); 16:40 no gear position correction; worst phase err from integrated w 1.37e-5 rad; from body poses 9.04e-6 rad (2.30e-5 teeth of the 16); KE drift after release -4.92e-5 %/s
+   released at t=0.500 s, KE/work 1.00000
+   t=0.5 w1 300.00 w2 -120.000 ratio 2.500000 phase err (int. w) 1.30e-7 rad, (pose) 3.41e-6 rad = 8.69e-6 teeth
+   t=1.0 w1 300.00 w2 -120.000 ratio 2.500000 phase err (int. w) -3.56e-6 rad, (pose) 2.52e-6 rad = 6.43e-6 teeth
+   t=1.5 w1 300.00 w2 -120.000 ratio 2.499999 phase err (int. w) -4.30e-6 rad, (pose) 3.80e-6 rad = 9.69e-6 teeth
+   t=2.0 w1 300.00 w2 -120.000 ratio 2.500000 phase err (int. w) -9.50e-6 rad, (pose) -5.33e-6 rad = -1.36e-5 teeth
+   t=2.5 w1 300.00 w2 -120.000 ratio 2.500000 phase err (int. w) -1.04e-5 rad, (pose) -7.67e-6 rad = -1.95e-5 teeth
+   t=3.0 w1 300.00 w2 -120.000 ratio 2.500000 phase err (int. w) -1.36e-5 rad, (pose) -6.43e-6 rad = -1.64e-5 teeth

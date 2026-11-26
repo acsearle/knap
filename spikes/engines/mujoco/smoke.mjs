@@ -1,0 +1,11 @@
+import load from '@mujoco/mujoco';
+const t0=performance.now();
+const mj = await load();
+console.log('load ms', (performance.now()-t0).toFixed(0), 'version', mj.mj_versionString?.());
+const xml=`<mujoco><option timestep="0.002"/><worldbody><geom type="plane" size="1 1 0.1"/><body pos="0 0 1"><freejoint/><geom type="box" size="0.1 0.1 0.1"/></body></worldbody></mujoco>`;
+const m = mj.MjModel.from_xml_string(xml);
+const d = new mj.MjData(m);
+for(let i=0;i<500;i++) mj.mj_step(m,d);
+console.log('qpos', Array.from(d.qpos).map(x=>x.toFixed(4)), 'ncon', d.ncon, 'sizeof mjtNum', d.qpos.BYTES_PER_ELEMENT);
+console.log(Object.keys(mj).filter(k=>/^mj(s_|_spec|_compile|_recompile)/.test(k)).join(' '));
+process.exit(0);

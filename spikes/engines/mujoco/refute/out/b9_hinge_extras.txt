@@ -1,0 +1,11 @@
+mass 1.777 g, gravity torque at horizontal 4.185e-4 N m
+frictionloss 1.2 x tauG: q after 10 s = 1.467e+0 rad, qdot 3.07e-2
+frictionloss 1.05 x tauG: q after 10 s = 1.467e+0 rad, qdot 3.07e-2
+frictionloss 0.9 x tauG: q after 10 s = 1.524e+0 rad, qdot 1.39e-2
+position servo forcerange 2 x tauG: q after 10 s = 2.000e-2 rad, actuator force -1.000 tauG
+position servo forcerange 0.5 x tauG: q after 10 s = 1.795e+0 rad, actuator force -0.500 tauG
+velocity motor target 2 rad/s, max 3 tauG: qdot after 2 s = 1.9199, force 0.798 tauG
+range [-0.5, 0.5]: max q 0.6163 (overshoot 1.16e-1 rad), end q 0.50490
+ratchet emulation (rewrite m.jnt_range each step): range written=3.1407, worst back-slip below the pawl 2.24e-2 rad, end q 3.1184
+hanging reaction force via cfrc_int: (0.0000, 0.0000, 1.0000) x m g
+sensors available: jointlimitfrc, jointactuatorfrc, force/torque sites, qfrc_constraint, efc_force, mj_contactForce

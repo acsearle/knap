@@ -1,0 +1,18 @@
+== B6a single pendulum: dE % of m g L, highest link COM z in the last 2 s (release height 0)
+Euler 1/480: dE -0.6371 % (mj 0.6375), max COM z last 2 s 4.54e-4 studs, 1.80 ms/sim s
+implicitfast 1/480: dE -0.6371 % (mj 0.6375), max COM z last 2 s 4.54e-4 studs, 1.89 ms/sim s
+RK4 1/480: dE -0.0000 % (mj -0.0000), max COM z last 2 s -3.32e-7 studs, 2.76 ms/sim s
+== B6b triple pendulum: dE % of m g (3+9+15) at 10 s
+Euler 1/480: dE -92.042 % (mj -92.196), 1.04 ms/sim s
+implicitfast 1/480: dE -92.042 % (mj -92.196), 1.13 ms/sim s
+RK4 1/480: dE -0.245 % (mj -0.245), 3.42 ms/sim s
+Euler 1/4800: dE -37.705 % (mj -37.769), 8.93 ms/sim s
+RK4 1/4800: dE -0.000 % (mj -0.000), 32.27 ms/sim s
+Euler 1/480 dE % per second: 19.2 -41.8 -61.6 -80.7 -87.3 -89.6 -90.6 -91.5 -92.0 -92.2
+RK4 1/480 dE % per second:   -0.002 -0.005 -0.044 -0.052 -0.067 -0.113 -0.186 -0.225 -0.234 -0.245
+== B8
+implicitfast eq solref default load 0: reach 100 at 1.000 s, K/W 0.99978, K end/K rel 1.000000, max ratio err 1.28e-2 rad = 3.26e-2 teeth (16T), omega ratio end -2.50000
+implicitfast eq solref 0.005 1 load 0: reach 100 at 1.000 s, K/W 0.99999, K end/K rel 1.000000, max ratio err 8.44e-4 rad = 2.15e-3 teeth (16T), omega ratio end -2.50000
+implicitfast eq solref default load 0.5: reach 100 at 2.002 s, K/W 0.99974, K end/K rel 1.000000, max ratio err 1.38e-2 rad = 3.53e-2 teeth (16T), omega ratio end -2.50000
+implicitfast eq solref 0.005 1 load 0.5: reach 100 at 2.000 s, K/W 0.99998, K end/K rel 1.000000, max ratio err 8.89e-4 rad = 2.26e-3 teeth (16T), omega ratio end -2.50000
+Euler eq solref default load 0: reach 100 at 1.000 s, K/W 0.99978, K end/K rel 1.000000, max ratio err 1.28e-2 rad = 3.26e-2 teeth (16T), omega ratio end -2.50000

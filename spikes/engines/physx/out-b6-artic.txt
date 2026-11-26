@@ -1,0 +1,12 @@
+B6 artic units stud, TGS, pos iters 4, vel iters 1, dt 1/480
+B6a artic n=1: mass 1.777 g; dE every 2 s (% of swing energy 6538.8): 32.24 62.91 86.88 104.94 124.38; worst hinge separation 1.49e-6 studs; cost 9.7 ms per simulated s (incl. JS readout each step)
+B6b artic n=3: mass 5.332 g; dE every 2 s (% of swing energy 58848.8): 5.29 -52.16 -50.79 -38.29 -30.27; worst hinge separation 3.73e-6 studs; cost 8.3 ms per simulated s (incl. JS readout each step)
+B6 artic units stud, TGS, pos iters 32, vel iters 1, dt 1/480
+B6a artic n=1: mass 1.777 g; dE every 2 s (% of swing energy 6538.8): 41.08 78.17 101.51 131.56 155.78; worst hinge separation 1.48e-6 studs; cost 12.8 ms per simulated s (incl. JS readout each step)
+B6b artic n=3: mass 5.332 g; dE every 2 s (% of swing energy 58848.8): -10.87 -34.11 -48.78 -70.02 -77.75; worst hinge separation 4.22e-6 studs; cost 15.3 ms per simulated s (incl. JS readout each step)
+B6 artic units stud, TGS, pos iters 4, vel iters 1, dt 1/1920
+B6a artic n=1: mass 1.777 g; dE every 2 s (% of swing energy 6538.8): 7.47 15.32 22.39 30.93 38.52; worst hinge separation 1.49e-6 studs; cost 25.9 ms per simulated s (incl. JS readout each step)
+B6b artic n=3: mass 5.332 g; dE every 2 s (% of swing energy 58848.8): -2.52 -12.67 -26.34 -36.38 -42.51; worst hinge separation 3.81e-6 studs; cost 30.6 ms per simulated s (incl. JS readout each step)
+B6 artic units stud, PGS, pos iters 4, vel iters 1, dt 1/480
+B6a artic n=1: mass 1.777 g; dE every 2 s (% of swing energy 6538.8): -0.13 -0.26 -0.38 -0.51 -0.64; worst hinge separation 1.36e-6 studs; cost 7.5 ms per simulated s (incl. JS readout each step)
+B6b artic n=3: mass 5.332 g; dE every 2 s (% of swing energy 58848.8): -40.06 -68.15 -74.80 -74.93 -73.09; worst hinge separation 3.73e-6 studs; cost 7.1 ms per simulated s (incl. JS readout each step)

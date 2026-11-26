@@ -1,0 +1,14 @@
+B10 default (Euler): 57.7 ms per simulated s (120.2 us per 1/480 step), ncon 80, bit-identical rerun: true
+B10 tuned (implicitfast, elliptic, impratio 10): 73.8 ms per simulated s (153.8 us per 1/480 step), ncon 100, bit-identical rerun: true
+B10 tuned + RK4: 176.3 ms per simulated s (367.3 us per 1/480 step), ncon 80, bit-identical rerun: true
+B10 tuned + noslip 20: 112.5 ms per simulated s (234.3 us per 1/480 step), ncon 100, bit-identical rerun: true
+B10 tuned + RK4 + noslip 20: 537.8 ms per simulated s (1120.3 us per 1/480 step), ncon 100, bit-identical rerun: true
+compile 20-body (boxes+cylinders): from_xml_string+MjData median 2.37 ms (min 1.95); parseXMLString 1.66 ms + mj_compile(spec) 0.50 ms
+compile 20-body (20 distinct 16-18-gon meshes): from_xml_string+MjData median 11.42 ms (min 10.88); parseXMLString 3.45 ms + mj_compile(spec) 7.20 ms
+B10 default (Euler): 55.8 ms per simulated s (116.3 us per 1/480 step), ncon 80, bit-identical rerun: true
+B10 tuned (implicitfast, elliptic, impratio 10): 71.6 ms per simulated s (149.1 us per 1/480 step), ncon 100, bit-identical rerun: true
+B10 tuned + RK4: 181.4 ms per simulated s (377.8 us per 1/480 step), ncon 80, bit-identical rerun: true
+B10 tuned + noslip 20: 113.2 ms per simulated s (235.9 us per 1/480 step), ncon 100, bit-identical rerun: true
+B10 tuned + RK4 + noslip 20: 508.6 ms per simulated s (1059.7 us per 1/480 step), ncon 100, bit-identical rerun: true
+compile 20-body (boxes+cylinders): from_xml_string+MjData median 3.19 ms (min 2.15); parseXMLString 1.90 ms + mj_compile(spec) 1.01 ms
+compile 20-body (20 distinct 16-18-gon meshes): from_xml_string+MjData median 11.66 ms (min 11.34); parseXMLString 3.59 ms + mj_compile(spec) 7.49 ms

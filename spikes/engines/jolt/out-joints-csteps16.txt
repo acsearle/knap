@@ -1,0 +1,2 @@
+B6a: energy change after 10 s -14.391 % of mgL (range -14.391 .. 0.000), worst hinge separation 2.54e-5 studs, cost 55.33 ms per sim s
+B6b: energy change at 2/4/6/8/10 s -6.76 / -20.29 / -35.47 / -42.05 / -51.12 % of swing energy; worst in-plane hinge separation 0.0017 studs; cost 261.25 ms per sim s

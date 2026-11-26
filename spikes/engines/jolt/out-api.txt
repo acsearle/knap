@@ -1,0 +1,27 @@
+
+===== regime si-def =====
+B9 friction (HingeConstraint.SetMaxFrictionTorque = 1.2 mgL): angle after 1 s -4.17e-5 rad
+B9 friction (HingeConstraint.SetMaxFrictionTorque = 0.8 mgL): angle after 1 s -1.1296 rad
+B9 motor (EMotorState_Velocity, MotorSettings.mMaxTorqueLimit = 0.7 mgL, target +2 rad/s): angle after 0.25 s -1.4041 rad (unloaded would be +0.5), motor lambda/dt 0.7000 mgL (limit 0.7000 mgL)
+B9 motor (EMotorState_Velocity, MotorSettings.mMaxTorqueLimit = 1.5 mgL, target +2 rad/s): angle after 0.25 s 0.4878 rad (unloaded would be +0.5), motor lambda/dt 0.8853 mgL (limit 1.5000 mgL)
+B9 limits (SetLimits(-0.3, 0.3)): lowest angle -0.3039 rad, final -0.3000, limit lambda/dt 0.9553 mgL
+B9 reaction (GetTotalLambdaPosition()/dt): F = [0.0000, 1.0000, 0.0000] x m g (expect magnitude 1)
+B10 cost (triple pendulum + 20-cube pile, csteps 1, vsteps 10): 184.8 ms CPU per real second simulated = 385.1 us per 1/480 s step; pile top y 5.97
+
+===== regime si-scaled =====
+B9 friction (HingeConstraint.SetMaxFrictionTorque = 1.2 mgL): angle after 1 s -4.17e-5 rad
+B9 friction (HingeConstraint.SetMaxFrictionTorque = 0.8 mgL): angle after 1 s -1.1296 rad
+B9 motor (EMotorState_Velocity, MotorSettings.mMaxTorqueLimit = 0.7 mgL, target +2 rad/s): angle after 0.25 s -1.4041 rad (unloaded would be +0.5), motor lambda/dt 0.7000 mgL (limit 0.7000 mgL)
+B9 motor (EMotorState_Velocity, MotorSettings.mMaxTorqueLimit = 1.5 mgL, target +2 rad/s): angle after 0.25 s 0.4878 rad (unloaded would be +0.5), motor lambda/dt 0.8853 mgL (limit 1.5000 mgL)
+B9 limits (SetLimits(-0.3, 0.3)): lowest angle -0.3039 rad, final -0.3000, limit lambda/dt 0.9553 mgL
+B9 reaction (GetTotalLambdaPosition()/dt): F = [0.0000, 1.0000, 0.0000] x m g (expect magnitude 1)
+B10 cost (triple pendulum + 20-cube pile, csteps 1, vsteps 10): 47.5 ms CPU per real second simulated = 99.0 us per 1/480 s step; pile top y 5.97
+
+===== regime metre =====
+B9 friction (HingeConstraint.SetMaxFrictionTorque = 1.2 mgL): angle after 1 s -4.17e-5 rad
+B9 friction (HingeConstraint.SetMaxFrictionTorque = 0.8 mgL): angle after 1 s -1.1296 rad
+B9 motor (EMotorState_Velocity, MotorSettings.mMaxTorqueLimit = 0.7 mgL, target +2 rad/s): angle after 0.25 s -1.4041 rad (unloaded would be +0.5), motor lambda/dt 0.7000 mgL (limit 0.7000 mgL)
+B9 motor (EMotorState_Velocity, MotorSettings.mMaxTorqueLimit = 1.5 mgL, target +2 rad/s): angle after 0.25 s 0.4878 rad (unloaded would be +0.5), motor lambda/dt 0.8854 mgL (limit 1.5000 mgL)
+B9 limits (SetLimits(-0.3, 0.3)): lowest angle -0.3039 rad, final -0.3000, limit lambda/dt 0.9553 mgL
+B9 reaction (GetTotalLambdaPosition()/dt): F = [0.0000, 1.0000, 0.0000] x m g (expect magnitude 1)
+B10 cost (triple pendulum + 20-cube pile, csteps 1, vsteps 10): 47.7 ms CPU per real second simulated = 99.3 us per 1/480 s step; pile top y 5.97

@@ -1,0 +1,4 @@
+default 40 bodies box: 111.5 ms per sim s (232 us/step), max ncon 184, lowest body z 0.452 studs
+default 40 bodies mesh: 208.9 ms per sim s (435 us/step), max ncon 170, lowest body z 0.453 studs
+tuned 40 bodies box: 132.2 ms per sim s (275 us/step), max ncon 178, lowest body z 0.458 studs
+tuned 40 bodies mesh: 202.8 ms per sim s (422 us/step), max ncon 160, lowest body z 0.458 studs

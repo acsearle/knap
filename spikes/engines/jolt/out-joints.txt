@@ -1,0 +1,64 @@
+
+===== regime si-def (vsteps 10, psteps 2, csteps 1) =====
+B6a: energy change after 10 s -73.859 % of mgL (range -74.381 .. 0.000), worst hinge separation 0.0062 studs, cost 6.32 ms per sim s
+B6b: energy change at 2/4/6/8/10 s -44.17 / -55.93 / -62.88 / -67.73 / -71.37 % of swing energy; worst in-plane hinge separation 0.0621 studs; cost 20.47 ms per sim s
+B7 gyro=false: after 30 s E -1.48e-5 % (-4.95e-7 %/s), |L| -2.01e-5 % (-6.72e-7 %/s); range E -4.36e-5..3.38e-5 %, |L| -4.44e-5..3.26e-5 %; |w| end 20.000 rad/s; L direction turned 70.785 deg
+B7 gyro=true: after 30 s E -3.080 % (-0.1027 %/s), |L| 0.217 % (0.0072 %/s); range E -3.17..0.00 %, |L| -1.41e-6..0.22 %; |w| end 17.078 rad/s; L direction turned 2.957 deg
+B8 target 100 rad/s: I1 2.77e-8 I2 1.08e-6 (internal); 16:40; worst phase err from integrated w 2.89e-6 rad; from body poses 3.1416 rad (8.0000 teeth of the 16); KE drift after release never released
+   t=0.5 w1 47.12 w2 -18.850 ratio 2.500000 phase err (int. w) -8.91e-9 rad, (pose) -3.1416 rad = -8.0000 teeth
+   t=1.0 w1 47.12 w2 -18.850 ratio 2.500000 phase err (int. w) -6.76e-7 rad, (pose) -3.1415 rad = -7.9998 teeth
+   t=1.5 w1 47.12 w2 -18.850 ratio 2.500000 phase err (int. w) -1.43e-6 rad, (pose) -4.66e-6 rad = -1.19e-5 teeth
+   t=2.0 w1 47.12 w2 -18.850 ratio 2.500000 phase err (int. w) -2.56e-6 rad, (pose) -1.74e-5 rad = -4.43e-5 teeth
+   t=2.5 w1 47.12 w2 -18.850 ratio 2.500000 phase err (int. w) -2.55e-6 rad, (pose) -3.1416 rad = -8.0000 teeth
+   t=3.0 w1 47.12 w2 -18.850 ratio 2.500000 phase err (int. w) -2.75e-6 rad, (pose) -3.1415 rad = -7.9998 teeth
+B8 target 300 rad/s: I1 2.77e-8 I2 1.08e-6 (internal); 16:40; worst phase err from integrated w 4.41e-6 rad; from body poses 3.1416 rad (8.0000 teeth of the 16); KE drift after release never released
+   t=0.5 w1 47.12 w2 -18.850 ratio 2.500000 phase err (int. w) 1.55e-7 rad, (pose) 3.1416 rad = 8.0000 teeth
+   t=1.0 w1 47.12 w2 -18.850 ratio 2.500000 phase err (int. w) -2.98e-7 rad, (pose) 3.1416 rad = 8.0000 teeth
+   t=1.5 w1 47.12 w2 -18.850 ratio 2.500000 phase err (int. w) -2.23e-6 rad, (pose) 4.41e-6 rad = 1.12e-5 teeth
+   t=2.0 w1 47.12 w2 -18.850 ratio 2.500000 phase err (int. w) -3.15e-6 rad, (pose) 5.49e-6 rad = 1.40e-5 teeth
+   t=2.5 w1 47.12 w2 -18.850 ratio 2.500000 phase err (int. w) -3.69e-6 rad, (pose) 3.1416 rad = 8.0000 teeth
+   t=3.0 w1 47.12 w2 -18.850 ratio 2.500000 phase err (int. w) -4.41e-6 rad, (pose) 3.1416 rad = 8.0000 teeth
+
+===== regime si-scaled (vsteps 10, psteps 2, csteps 1) =====
+B6a: energy change after 10 s -73.859 % of mgL (range -74.381 .. 0.000), worst hinge separation 0.0062 studs, cost 4.92 ms per sim s
+B6b: energy change at 2/4/6/8/10 s -40.27 / -53.78 / -61.76 / -66.96 / -70.74 % of swing energy; worst in-plane hinge separation 0.0594 studs; cost 17.70 ms per sim s
+B7 gyro=false: after 30 s E -1.48e-5 % (-4.95e-7 %/s), |L| -2.01e-5 % (-6.72e-7 %/s); range E -4.36e-5..3.38e-5 %, |L| -4.44e-5..3.26e-5 %; |w| end 20.000 rad/s; L direction turned 70.785 deg
+B7 gyro=true: after 30 s E -3.080 % (-0.1027 %/s), |L| 0.217 % (0.0072 %/s); range E -3.17..0.00 %, |L| -1.41e-6..0.22 %; |w| end 17.078 rad/s; L direction turned 2.957 deg
+B8 target 100 rad/s: I1 2.77e-8 I2 1.08e-6 (internal); 16:40; worst phase err from integrated w 4.69e-6 rad; from body poses 3.1416 rad (8.0000 teeth of the 16); KE drift after release -2.74e-4 %/s
+   released at t=0.500 s, KE/work 1.00000
+   t=0.5 w1 100.00 w2 -40.000 ratio 2.500000 phase err (int. w) -3.11e-7 rad, (pose) -0.0362 rad = -0.0922 teeth
+   t=1.0 w1 100.00 w2 -40.000 ratio 2.500000 phase err (int. w) -8.63e-7 rad, (pose) -3.1414 rad = -7.9996 teeth
+   t=1.5 w1 100.00 w2 -40.000 ratio 2.500000 phase err (int. w) -1.40e-6 rad, (pose) -5.40e-6 rad = -1.37e-5 teeth
+   t=2.0 w1 100.00 w2 -40.000 ratio 2.500000 phase err (int. w) -2.31e-6 rad, (pose) -3.1416 rad = -8.0000 teeth
+   t=2.5 w1 100.00 w2 -40.000 ratio 2.500000 phase err (int. w) -3.25e-6 rad, (pose) -5.24e-6 rad = -1.33e-5 teeth
+   t=3.0 w1 100.00 w2 -40.000 ratio 2.500000 phase err (int. w) -4.67e-6 rad, (pose) -0.6918 rad = -1.7616 teeth
+B8 target 300 rad/s: I1 2.77e-8 I2 1.08e-6 (internal); 16:40; worst phase err from integrated w 4.39e-6 rad; from body poses 3.1416 rad (8.0000 teeth of the 16); KE drift after release 3.99e-6 %/s
+   released at t=0.500 s, KE/work 1.00000
+   t=0.5 w1 300.00 w2 -120.000 ratio 2.500000 phase err (int. w) -4.76e-8 rad, (pose) 3.0532 rad = 7.7748 teeth
+   t=1.0 w1 300.00 w2 -120.000 ratio 2.500000 phase err (int. w) 1.50e-6 rad, (pose) 2.67e-4 rad = 6.80e-4 teeth
+   t=1.5 w1 300.00 w2 -120.000 ratio 2.500000 phase err (int. w) 1.75e-6 rad, (pose) 0.0362 rad = 0.0922 teeth
+   t=2.0 w1 300.00 w2 -120.000 ratio 2.500000 phase err (int. w) 8.35e-7 rad, (pose) 3.1415 rad = 7.9998 teeth
+   t=2.5 w1 300.00 w2 -120.000 ratio 2.500000 phase err (int. w) 2.03e-6 rad, (pose) 3.1321 rad = 7.9758 teeth
+   t=3.0 w1 300.00 w2 -120.000 ratio 2.500000 phase err (int. w) 4.32e-6 rad, (pose) 1.4527 rad = 3.6993 teeth
+
+===== regime metre (vsteps 10, psteps 2, csteps 1) =====
+B6a: energy change after 10 s -73.859 % of mgL (range -74.381 .. 0.000), worst hinge separation 0.0062 studs, cost 4.88 ms per sim s
+B6b: energy change at 2/4/6/8/10 s -40.27 / -53.78 / -61.76 / -66.96 / -70.74 % of swing energy; worst in-plane hinge separation 0.0594 studs; cost 17.91 ms per sim s
+B7 gyro=false: after 30 s E 6.49e-6 % (2.16e-7 %/s), |L| 2.08e-6 % (6.94e-8 %/s); range E -3.95e-5..3.16e-5 %, |L| -4.11e-5..3.05e-5 %; |w| end 20.000 rad/s; L direction turned 70.785 deg
+B7 gyro=true: after 30 s E -3.066 % (-0.1022 %/s), |L| 0.225 % (0.0075 %/s); range E -3.16..0.00 %, |L| 0.00..0.22 %; |w| end 16.782 rad/s; L direction turned 2.804 deg
+B8 target 100 rad/s: I1 846.8480 I2 3.31e+4 (internal); 16:40; worst phase err from integrated w 5.55e-6 rad; from body poses 3.1416 rad (8.0000 teeth of the 16); KE drift after release 8.51e-5 %/s
+   t=0.5 w1 100.00 w2 -40.000 ratio 2.500000 phase err (int. w) 1.08e-8 rad, (pose) -0.0362 rad = -0.0922 teeth
+   released at t=0.502 s, KE/work 1.00000
+   t=1.0 w1 100.42 w2 -40.167 ratio 2.500000 phase err (int. w) 1.49e-6 rad, (pose) -3.1415 rad = -7.9997 teeth
+   t=1.5 w1 100.42 w2 -40.167 ratio 2.500000 phase err (int. w) 3.01e-6 rad, (pose) -5.01e-6 rad = -1.28e-5 teeth
+   t=2.0 w1 100.42 w2 -40.167 ratio 2.500000 phase err (int. w) 4.08e-6 rad, (pose) -3.1416 rad = -8.0000 teeth
+   t=2.5 w1 100.42 w2 -40.167 ratio 2.500000 phase err (int. w) 5.44e-6 rad, (pose) -4.69e-6 rad = -1.20e-5 teeth
+   t=3.0 w1 100.42 w2 -40.167 ratio 2.500000 phase err (int. w) 5.46e-6 rad, (pose) -0.0743 rad = -0.1892 teeth
+B8 target 300 rad/s: I1 846.8480 I2 3.31e+4 (internal); 16:40; worst phase err from integrated w 2.11e-5 rad; from body poses 3.1416 rad (8.0000 teeth of the 16); KE drift after release 1.53e-5 %/s
+   released at t=0.500 s, KE/work 1.00000
+   t=0.5 w1 300.00 w2 -120.000 ratio 2.500000 phase err (int. w) 7.60e-7 rad, (pose) 3.0532 rad = 7.7748 teeth
+   t=1.0 w1 300.00 w2 -120.000 ratio 2.500000 phase err (int. w) -4.73e-6 rad, (pose) 2.67e-4 rad = 6.79e-4 teeth
+   t=1.5 w1 300.00 w2 -120.000 ratio 2.500000 phase err (int. w) -7.96e-6 rad, (pose) 0.0362 rad = 0.0922 teeth
+   t=2.0 w1 300.00 w2 -120.000 ratio 2.500000 phase err (int. w) -1.17e-5 rad, (pose) 3.1415 rad = 7.9998 teeth
+   t=2.5 w1 300.00 w2 -120.000 ratio 2.500000 phase err (int. w) -1.59e-5 rad, (pose) 3.1321 rad = 7.9758 teeth
+   t=3.0 w1 300.00 w2 -120.000 ratio 2.500000 phase err (int. w) -2.11e-5 rad, (pose) 1.4527 rad = 3.6993 teeth

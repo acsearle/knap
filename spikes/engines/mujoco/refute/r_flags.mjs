@@ -1,0 +1,11 @@
+import load from '@mujoco/mujoco';
+const mj = await load();
+const m = mj.MjModel.from_xml_string('<mujoco><worldbody><body><freejoint/><geom type="box" size=".1 .1 .1"/></body></worldbody></mujoco>');
+const E = mj.mjtDisableBit, F = mj.mjtEnableBit;
+const dis = m.opt.disableflags, en = m.opt.enableflags;
+const names = (en_, val) => Object.keys(en_).filter(k => en_[k] && typeof en_[k].value === 'number').map(k => [k, en_[k].value]).filter(([k, v]) => v && (val & v)).map(([k]) => k);
+console.log('disableflags', dis, names(E, dis), 'enableflags', en, names(F, en));
+console.log('disable bits available:', Object.keys(E).filter(k=>k.startsWith('mjDSBL')).join(' '));
+console.log('enable bits available:', Object.keys(F).filter(k=>k.startsWith('mjENBL')).join(' '));
+console.log('mj_version', mj.mj_versionString?.());
+process.exit(0);

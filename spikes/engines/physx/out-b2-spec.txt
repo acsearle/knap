@@ -1,0 +1,5 @@
+B2/B3 units stud, TGS, pos iters 4, vel iters 1, dt 1/480 (CCD off; PhysX contact offset default 0.02 x length)
+B2 plane 150 studs/s: deepest penetration 3.86e-5 studs, max rebound vy 0.023, sideways 0.0281 studs/s, spin 0.0747 rad/s, final y 0.4600
+B2 plane 300 studs/s: deepest penetration 2.10e-4 studs, max rebound vy -0.029, sideways 0.0275 studs/s, spin 0.0728 rad/s, final y 0.4600
+B2 box 150 studs/s: deepest penetration 0.0011 studs, max rebound vy -0.006, sideways 0.0200 studs/s, spin 0.0577 rad/s, final y 0.4600
+B2 box 300 studs/s: deepest penetration 0.0018 studs, max rebound vy 0.190, sideways 0.0197 studs/s, spin 0.0562 rad/s, final y 0.4600

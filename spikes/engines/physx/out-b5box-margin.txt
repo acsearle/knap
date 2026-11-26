@@ -1,0 +1,7 @@
+b5box units stud, TGS, pos iters 4, vel iters 1, dt 1/480
+margin 0.02 (cylinder core radius r - margin, length - 2 margin)
+box half (5, 0.5) centre x 0:  v0 0: vx end 0.368 max|vx| 0.369 x 0.727 min y 1.0000 | v0 1: vx end 0.699 max|vx| 1.078 x 2.643 min y 1.0000
+box half (20, 0.5) centre x 0:  v0 0: vx end 0.101 max|vx| 0.112 x 0.006 min y 1.0000 | v0 1: vx end 0.382 max|vx| 1.152 x 1.570 min y 1.0000
+box half (20, 5) centre x 0:  v0 0: vx end 0.064 max|vx| 0.096 x -1.14e-4 min y 1.0000 | v0 1: vx end 1.371 max|vx| 1.381 x 3.952 min y 1.0000
+box half (50, 0.5) centre x 0:  v0 0: vx end -0.689 max|vx| 1.040 x -1.155 min y 1.0000 | v0 1: vx end 0.460 max|vx| 1.626 x 2.330 min y 1.0000
+box half (250, 0.5) centre x 0:  v0 0: vx end 0.274 max|vx| 1.828 x -1.738 min y 0.9999 | v0 1: vx end -0.317 max|vx| 1.558 x 0.520 min y 1.0000

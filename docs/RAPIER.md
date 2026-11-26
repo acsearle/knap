@@ -5,6 +5,10 @@ collision library, and what the code does about each. Every number was measured 
 the full records are in `docs/DEVIATIONS.md` (§5) and `spikes/*/REPORT.md`. Units: 1 unit = 8 mm,
 g = 1226.25 units/s², fixed step 1/480 s.
 
+See also [ENGINES.md](ENGINES.md): Rapier re-measured in other unit systems (contact softness is
+g/(2πf)², and can be made 125× stiffer with existing setters), and the same battery run on Jolt,
+PhysX, MuJoCo, Bullet and Havok.
+
 ## Solver and joints
 
 - **Joints lose energy, roughly ∝ ω²·h (cause known).** Within a substep Rapier moves each body's centre of mass in a straight line and rotates it about the COM (`integrate_linearized`). A pinned link's anchor therefore drifts off the pivot by about ½(ωh)²·d. The next substep's biased solve pulls it back and the stabilisation pass removes that velocity, so the correction is a perfectly inelastic projection. Losses measured on the triple pendulum over 10 s: −3.7 % at 1/480×240, −34.9 % at ×60, −59.5 % at 9 600 substeps/s.
@@ -80,6 +84,7 @@ g = 1226.25 units/s², fixed step 1/480 s.
   - **Workaround:** the wheel hull is 32 wedges × 2 slabs (shapes.ts `wheelHullPieces`, `WHEEL_SEGMENTS` 32, `WHEEL_SLABS` 2), 64 convex-hull colliders per wheel.
   - **Cost:** ×1.15 on the Cart and up to ×2.4 while a wheel rests on a part. An r 4 wheel 1 off the hub on a loose beam still reaches 0.067.
 - **Contacts between two dynamic bodies are soft (`contact_natural_frequency` 30 Hz). Resting depth grows with the load per contact point.**
+  - Re-examined (ENGINES.md §1): resting depth is g/(2πf)² with f = 30 Hz between moving bodies and 60 Hz against fixed ones, 0.035 and 0.0086 studs at this project's gravity. Not adopted yet: `contact_natural_frequency` 335–671, anchored bodies as kinematic instead of fixed, and `lengthUnit` 11.18 with compensated tolerances give 6.8e-5 and lift the 400 studs/s clamp to 4472.
   - Upright wheels on a loose beam sank 0.03–0.06 (0.002–0.003 on a fixed beam); a parked cart 0.165.
   - The natural frequency is what matters: 5×5 plate on a loose beam, 0.019 at 30 Hz, 0.0012 at 120 Hz. Substeps, PGS iterations and the guard made no difference.
   - **Workaround:** two slabs double the contact points (upright r 2.5: 0.0077; parked: 0.023). The frequency was not changed because it is global and would alter every recorded trajectory. Contact skin and dominance groups were not tried.

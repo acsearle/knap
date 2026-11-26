@@ -1,0 +1,6 @@
+b5hullfloor units stud, TGS, pos iters 4, vel iters 1, dt 1/480
+mesh box half x 5: v0 0: vx end 0.019 max|vx| 0.346 x 0.047 min y 1.0000 | v0 1: vx end 2.183 max|vx| 2.186 x 3.881 min y 0.9967
+mesh box half x 20: v0 0: vx end 8.97e-6 max|vx| 3.20e-5 x -5.12e-6 min y 1.0000 | v0 1: vx end 1.733 max|vx| 1.776 x 5.095 min y 0.9995
+mesh box half x 250: v0 0: vx end 3.248 max|vx| 15.391 x 10.016 min y -3983.0208 | v0 1: vx end 10.181 max|vx| 12.678 x 24.865 min y -2128.5396
+corebox box half x 5: v0 0: vx end -1.023 max|vx| 1.023 x -1.416 min y 0.9999 | v0 1: vx end 0.995 max|vx| 1.058 x 2.644 min y 1.0000
+corebox box half x 20: v0 0: vx end -0.005 max|vx| 0.005 x -0.001 min y 1.0000 | v0 1: vx end 1.541 max|vx| 1.636 x 4.632 min y 1.0000

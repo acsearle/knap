@@ -1,0 +1,12 @@
+metre cache true B5a box floor v0=0.1: vx 1..5 s 0.396 0.481 0.481 0.481 0.481
+metre cache true B5a box floor v0=0.3: vx 1..5 s 0.480 0.480 0.480 0.480 0.480
+metre cache true B5c: wheel vx 1..4 s 0.114@x0.74 0.249@x0.93 0.353@x1.22 0.481@x1.65; beam vx 3.36e-6
+metre cache false B5a box floor v0=0.1: vx 1..5 s 0.100 0.100 0.100 0.100 0.100
+metre cache false B5a box floor v0=0.3: vx 1..5 s 0.300 0.300 0.300 0.300 0.300
+metre cache false B5c: wheel vx 1..4 s 0.003@x0.70 0.006@x0.71 0.009@x0.71 0.012@x0.72; beam vx 3.08e-8
+si-scaled cache true B5a box floor v0=0.1: vx 1..5 s 0.396 0.481 0.481 0.481 0.481
+si-scaled cache true B5a box floor v0=0.3: vx 1..5 s 0.480 0.480 0.480 0.480 0.480
+si-scaled cache true B5c: wheel vx 1..4 s 0.115@x0.74 0.250@x0.93 0.355@x1.23 0.481@x1.65; beam vx 3.39e-6
+si-scaled cache false B5a box floor v0=0.1: vx 1..5 s 0.100 0.100 0.100 0.100 0.100
+si-scaled cache false B5a box floor v0=0.3: vx 1..5 s 0.300 0.300 0.300 0.300 0.300
+si-scaled cache false B5c: wheel vx 1..4 s 0.003@x0.70 0.006@x0.71 0.009@x0.71 0.012@x0.72; beam vx -1.02e-8

@@ -1,0 +1,2 @@
+B10 units stud, TGS, pos iters 4, vel iters 1, dt 1/480: 29.6 ms CPU per real second simulated (0.0617 ms per 1/480 s); pile top y 4.137
+B10 units stud, TGS, pos iters 32, vel iters 1, dt 1/480: 91.2 ms CPU per real second simulated (0.1901 ms per 1/480 s); pile top y 4.140

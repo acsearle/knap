@@ -1,0 +1,12 @@
+default box maxSpeed=98.0 minZ=0.232 firstBad=0.215s end v=0.00
+default plane maxSpeed=100.0 minZ=0.314 firstBad=0.262s end v=0.00
+tuned box maxSpeed=1846.5 minZ=-1385.613 firstBad=0.527s end v=1846.53
+tuned plane maxSpeed=100.0 minZ=0.442 firstBad=0.575s end v=4.13
+tuned but pyramidal box maxSpeed=1824.9 minZ=-1353.588 firstBad=0.546s end v=1824.90
+tuned but pyramidal plane maxSpeed=100.0 minZ=0.749 firstBad=none end v=19.36
+tuned but impratio 1 box maxSpeed=1846.2 minZ=-1385.163 firstBad=0.527s end v=1846.21
+tuned but impratio 1 plane maxSpeed=100.0 minZ=0.406 firstBad=0.596s end v=0.00
+tuned but Euler box maxSpeed=1833.0 minZ=-1365.491 firstBad=0.537s end v=1833.00
+tuned but Euler plane maxSpeed=100.0 minZ=0.534 firstBad=none end v=9.69
+tuned, dt/4 box maxSpeed=97.5 minZ=0.419 firstBad=0.670s end v=0.00
+tuned, dt/4 plane maxSpeed=100.0 minZ=0.432 firstBad=0.211s end v=0.00

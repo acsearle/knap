@@ -1,0 +1,9 @@
+b5box units stud, TGS, pos iters 4, vel iters 1, dt 1/480
+box half (2, 0.5) centre x 0:  v0 0: vx end 16.311 max|vx| 16.311 x 14.176 min y -312.2881 | v0 1: vx end 16.675 max|vx| 16.675 x 25.123 min y -1125.8640
+box half (5, 0.5) centre x 0:  v0 0: vx end 0.780 max|vx| 0.798 x 0.547 min y 0.9996 | v0 1: vx end 2.073 max|vx| 2.073 x 4.461 min y 0.9999
+box half (20, 0.5) centre x 0:  v0 0: vx end 0.005 max|vx| 0.005 x 0.004 min y 1.0000 | v0 1: vx end 1.356 max|vx| 1.377 x 4.050 min y 0.9998
+box half (20, 5) centre x 0:  v0 0: vx end 2.171 max|vx| 2.187 x 2.058 min y 0.9996 | v0 1: vx end 2.104 max|vx| 2.124 x 5.664 min y 0.9996
+box half (20, 0.5) centre x 15:  v0 0: vx end 0.003 max|vx| 0.004 x 0.006 min y 1.0000 | v0 1: vx end 0.917 max|vx| 1.002 x 2.797 min y 1.0000
+box half (50, 0.5) centre x 0:  v0 0: vx end -1.790 max|vx| 1.968 x -3.207 min y 0.9871 | v0 1: vx end 1.599 max|vx| 2.123 x 1.975 min y 0.9876
+box half (250, 0.5) centre x 0:  v0 0: vx end -7.517 max|vx| 14.088 x -14.894 min y -190.3389 | v0 1: vx end 4.299 max|vx| 24.088 x 13.507 min y -4167.6235
+box half (250, 0.5) centre x 240:  v0 0: vx end 3.507 max|vx| 4.330 x -3.205 min y -475.1882 | v0 1: vx end -5.664 max|vx| 6.285 x -1.666 min y 0.0267

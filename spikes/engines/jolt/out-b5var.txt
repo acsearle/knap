@@ -1,0 +1,5 @@
+si-def                               vx at 1..5 s 11.378 16.793 20.515 20.515 20.515
+si-def, body pair cache off          vx at 1..5 s 1.000 1.000 1.000 1.000 1.000
+si-def, cache dist scaled only       vx at 1..5 s 1.000 1.000 1.000 1.000 1.000
+si-def, cache off + max ang 2000     vx at 1..5 s 1.000 1.000 1.000 1.000 1.000
+metre, body pair cache dist x125^2   vx at 1..5 s 11.381 16.801 20.833 20.833 20.833

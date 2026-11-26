@@ -1,0 +1,10 @@
+== B4a default settings (prism rotated 0.05 rad, box yaws vary)
+x=0 y=0 yaw=0.00 sink=2.13e-3 tiltDeg=0.00e+0 ncon 4..4 moved=7.9e-17
+x=0.2 y=0.1 yaw=0.30 sink=2.13e-3 tiltDeg=8.54e-7 ncon 4..4 moved=0.0e+0
+x=0.37 y=0 yaw=0.70 sink=2.13e-3 tiltDeg=0.00e+0 ncon 4..4 moved=1.7e-17
+x=0 y=-0.38 yaw=1.10 sink=2.13e-3 tiltDeg=0.00e+0 ncon 4..4 moved=3.2e-17
+x=-0.27 y=0.27 yaw=0.40 sink=2.13e-3 tiltDeg=0.00e+0 ncon 4..4 moved=0.0e+0
+x=0.4 y=0.05 yaw=0.20 sink=2.13e-3 tiltDeg=8.54e-7 ncon 4..4 moved=0.0e+0
+== B4a tuned
+x=0.37 y=0 yaw=0.70 sink=4.15e-4 tiltDeg=2.26e-6 ncon 4..4 moved=3.9e-10
+x=0.4 y=0.05 yaw=0.20 sink=4.15e-4 tiltDeg=1.71e-6 ncon 4..4 moved=5.0e-10

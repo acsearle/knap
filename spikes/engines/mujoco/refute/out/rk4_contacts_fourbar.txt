@@ -1,0 +1,14 @@
+tuned+RK4 B1a sink 4.15e-4 drift 5.65e-11
+tuned+RK4 B4a spot 0.35: sink 4.15e-4 ncon 4
+tuned+RK4 wheel r1 roll 1 studs/s on box, after 2 s: 99.986 % kept, sink 8.26e-4
+tuned+RK4 wheel r1 roll 100 studs/s on box, after 2 s: 99.986 % kept, sink 8.26e-4
+tuned+RK4+noslip B1a sink 4.15e-4 drift 1.35e-9
+tuned+RK4+noslip B4a spot 0.35: sink 4.15e-4 ncon 4
+tuned+RK4+noslip wheel r1 roll 1 studs/s on box, after 2 s: 99.986 % kept, sink 8.26e-4
+tuned+RK4+noslip wheel r1 roll 100 studs/s on box, after 2 s: 99.986 % kept, sink 8.26e-4
+four-bar (connect equality) implicitfast: energy change -3.884 % of sum(m g L), worst loop gap 5.03e-2 studs, crank angle end 1.933, cost 4.8 ms/sim-s
+four-bar (connect equality) RK4: energy change -19.237 % of sum(m g L), worst loop gap 2.63e-2 studs, crank angle end 1.575, cost 10.2 ms/sim-s
+four-bar RK4 dt 1/960: energy change -19.238 % of sum(m g L), worst loop gap 2.57e-2 studs, crank angle end 1.576, cost 19.3 ms/sim-s
+four-bar RK4, eq solimp 0.99 0.9999: energy change -5.658 % of sum(m g L), worst loop gap 3.30e-3 studs, crank angle end 4.392, cost 10.6 ms/sim-s
+four-bar RK4, eq solref 0.005 0.2 (underdamped): energy change -3.594 % of sum(m g L), worst loop gap 8.99e-3 studs, crank angle end 2.798, cost 7.7 ms/sim-s
+four-bar RK4 dt 1/1920, eq solref 0.00105 1 solimp 0.99 0.9999: energy change -0.219 % of sum(m g L), worst loop gap 1.78e-4 studs, crank angle end 5.766, cost 26.5 ms/sim-s

@@ -1,0 +1,9 @@
+B9 units stud, TGS, pos iters 4, vel iters 1, dt 1/480
+friction (drive v=0, force limit 1.2 x gravity torque): angle after 2 s -0.46110 rad, w -0.12091 -> should hold
+friction (drive v=0, force limit 0.8 x gravity torque): angle after 2 s -0.46110 rad, w -0.12091 -> should slip
+motor (target 50 rad/s, max torque = mgL): w every 0.2 s -49.95 -50.01 -50.02 -50.01 -49.94; expected slope 279.67 rad/s^2 until 50 (sign: drive velocity is -w_z here)
+limit [-0.5, 0.5]: angle range seen -0.5045 .. 0.0000, end -0.5004
+one-sided limit [0, 3.1]: gravity pushes toward negative angle; min angle -0.0012 (holds if ~0)
+reaction force (hanging at rest): getForce linear (-1.46e-4, -2179.5862, -1.06e-10) g*stud/s^2, weight m*g = 2179.5862; angular (3.20e-10, 2.78e-16, -5.13e-4)
+articulation joint friction (static=dynamic 1.2 x gravity torque): angle after 2 s -0.01264 rad, w 0.00000 -> should hold
+articulation joint friction (static=dynamic 0.8 x gravity torque): angle after 2 s -1.14155 rad, w 0.00000 -> should slip

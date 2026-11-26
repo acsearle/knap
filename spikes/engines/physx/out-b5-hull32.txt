@@ -1,0 +1,11 @@
+B5 hull32 units stud, TGS, pos iters 4, vel iters 1, dt 1/480
+B5a r1 box v0 0: vx at 0.05 0.1 0.25 0.5 1 2 3 4 5 s = 0.0021 0.0019 0.0022 0.0019 0.0017 0.0020 0.0020 0.0019 0.0019 studs/s; sink -2.93e-5; x 1.24e-5; z drift -5.44e-5
+B5a r1 box v0 1: vx at 0.05 0.1 0.25 0.5 1 2 3 4 5 s = 0.5149 0.0175 -0.0061 0.0023 0.0018 0.0020 0.0021 0.0020 0.0023 studs/s; sink -2.94e-5; x 1.18e-5; z drift -5.47e-5
+B5a r1 plane v0 0: vx at 0.05 0.1 0.25 0.5 1 2 3 4 5 s = 0.0021 0.0019 0.0020 0.0019 0.0019 0.0019 0.0020 0.0021 0.0020 studs/s; sink -2.94e-5; x 1.16e-5; z drift -5.47e-5
+B5a r1 plane v0 1: vx at 0.05 0.1 0.25 0.5 1 2 3 4 5 s = 0.5149 0.0070 -0.0056 0.0020 0.0019 0.0019 0.0020 0.0020 0.0020 studs/s; sink -2.96e-5; x 1.21e-5; z drift -5.45e-5
+B5b r1 box 100 studs/s: speed kept 1.15% , max sink while rolling 1.90e-4, y wobble, z drift -9.6215, tilt 12.711 deg
+B5b r1 plane 100 studs/s: speed kept 1.05% , max sink while rolling 1.05e-4, y wobble, z drift -3.7947, tilt 4.128 deg
+   wheel x every 0.5 s: -9.33e-4 7.05e-4 4.68e-5 5.68e-4
+B5c r2.5 on loose beam (box): sink into beam 0.0014, beam into floor 4.61e-4, wheel x 5.68e-4 vx 0.0176, stays
+   wheel x every 0.5 s: -0.005 -0.005 -0.005 -0.005
+B5c r2.5 on loose beam (plane): sink into beam 0.0011, beam into floor 3.28e-4, wheel x -0.0051 vx 0.0135, stays

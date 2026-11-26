@@ -1,0 +1,17 @@
+B8 units stud, TGS, pos iters 4, vel iters 1, dt 1/480 target 100 rad/s
+setHinges ok: true
+I1 0.4335 I2 16.9351 g*stud^2, torque 314.3164 g*stud^2/s^2
+t 0.5 w1 50.00 w2 -20.00 ratio w1/w2 -2.5000 phase err 2.11e-6 rad = 5.36e-6 teeth; KE 3928.9 work 3912.6
+t 1.0 w1 100.00 w2 -40.00 ratio w1/w2 -2.5000 phase err 9.75e-6 rad = 2.48e-5 teeth; KE 15715.9 work 15683.1
+released at t 1.000 s: KE 15715.9 work 15683.1 (KE/work 1.0021)
+t 1.5 w1 100.00 w2 -40.00 ratio w1/w2 -2.5000 phase err -1.60e-4 rad = -4.08e-4 teeth; KE 15715.8 work 15683.1
+t 2.0 w1 100.00 w2 -40.00 ratio w1/w2 -2.5000 phase err -8.47e-4 rad = -0.0022 teeth; KE 15715.9 work 15683.1
+t 2.5 w1 100.00 w2 -40.00 ratio w1/w2 -2.5000 phase err 0.00100 rad = 0.0026 teeth; KE 15715.7 work 15683.1
+t 3.0 w1 100.00 w2 -40.00 ratio w1/w2 -2.5000 phase err 0.00242 rad = 0.0062 teeth; KE 15715.6 work 15683.1
+t 3.5 w1 100.00 w2 -40.00 ratio w1/w2 -2.5000 phase err 0.00292 rad = 0.0074 teeth; KE 15715.6 work 15683.1
+t 4.0 w1 100.00 w2 -40.00 ratio w1/w2 -2.5000 phase err -5.13e-4 rad = -0.0013 teeth; KE 15715.7 work 15683.1
+t 4.5 w1 100.00 w2 -40.00 ratio w1/w2 -2.5000 phase err -0.00656 rad = -0.0167 teeth; KE 15715.7 work 15683.1
+t 5.0 w1 100.00 w2 -40.00 ratio w1/w2 -2.5000 phase err -0.01264 rad = -0.0322 teeth; KE 15715.7 work 15683.1
+t 5.5 w1 100.00 w2 -40.00 ratio w1/w2 -2.5000 phase err -0.01861 rad = -0.0474 teeth; KE 15715.7 work 15683.1
+t 6.0 w1 100.00 w2 -40.00 ratio w1/w2 -2.5000 phase err -0.02090 rad = -0.0532 teeth; KE 15715.7 work 15683.1
+max |phase error| 0.02090 rad = 0.0532 teeth of the 16; KE end / work 1.0021; hinge drift g1 0.0000 g2 0.0000 studs; 10.9 ms per simulated s

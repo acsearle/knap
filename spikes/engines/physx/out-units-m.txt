@@ -1,0 +1,47 @@
+B1 units m, TGS, pos iters 4, vel iters 1, dt 1/480
+B1a box: sink 1.59e-5 studs, drift at end 0.0155 studs/s (|v| max after 0.1s 0.0273), xz moved 5.49e-5
+B1a plane: sink 5.72e-6 studs, drift at end 0.0211 studs/s (|v| max after 0.1s 0.0364), xz moved 6.15e-5
+B1b box: cube into beam 4.59e-4, beam into floor 1.52e-4, cube drift 0.0174 studs/s, beam drift 0.0232
+B1b plane: cube into beam 4.55e-4, beam into floor 1.03e-4, cube drift 0.0348 studs/s, beam drift 0.0429
+B1c box top x1: total compression 0.0058 studs, top offset 0.0088, stands
+B1c plane top x1: total compression 0.0058 studs, top offset 0.0076, stands
+B1c box top x10: total compression 0.0220 studs, top offset 0.0362, stands
+B1c plane top x10: total compression 0.0217 studs, top offset 0.0333, stands
+b5box units m, TGS, pos iters 4, vel iters 1, dt 1/480
+margin 0 (cylinder core radius r - margin, length - 2 margin)
+box half (5, 0.5) centre x 0:  v0 0: vx end -0.144 max|vx| 0.334 x 9.44e-5 min y 1.0000 | v0 1: vx end 1.626 max|vx| 1.631 x 3.641 min y 0.9999
+box half (20, 0.5) centre x 0:  v0 0: vx end 2.96e-5 max|vx| 3.19e-5 x 3.14e-5 min y 1.0000 | v0 1: vx end 1.398 max|vx| 1.543 x 4.255 min y 0.9967
+box half (20, 5) centre x 0:  v0 0: vx end 0.205 max|vx| 0.253 x 0.065 min y 1.0000 | v0 1: vx end 1.973 max|vx| 2.022 x 5.385 min y 0.9994
+box half (50, 0.5) centre x 0:  v0 0: vx end 0.814 max|vx| 2.095 x 2.754 min y 0.7737 | v0 1: vx end 2.420 max|vx| 2.668 x 6.801 min y 0.7778
+box half (250, 0.5) centre x 0:  v0 0: vx end -14.825 max|vx| 15.552 x -32.464 min y -1924.3807 | v0 1: vx end 4.850 max|vx| 5.765 x 13.905 min y -3315.8605
+B5 core units m, TGS, pos iters 4, vel iters 1, dt 1/480
+B5a r1 box v0 0: vx at 0.05 0.1 0.25 0.5 1 2 3 4 5 s = 6.80e-6 -1.05e-5 -1.18e-6 5.06e-6 -3.70e-6 1.87e-5 2.96e-5 -5.65e-6 -5.97e-6 studs/s; sink -2.86e-5; x 4.70e-5; z drift -6.20e-5
+B5a r1 box v0 1: vx at 0.05 0.1 0.25 0.5 1 2 3 4 5 s = 0.9845 1.1289 1.5152 1.4691 1.4637 1.4139 1.3980 1.3981 1.3946 studs/s; sink -3.24e-5; x 7.0466; z drift -5.69e-4
+B5a r1 plane v0 0: vx at 0.05 0.1 0.25 0.5 1 2 3 4 5 s = 4.87e-6 9.74e-6 2.44e-5 4.88e-5 9.78e-5 1.96e-4 2.95e-4 3.95e-4 4.96e-4 studs/s; sink -2.86e-5; x 0.0012; z drift 5.39e-5
+B5a r1 plane v0 1: vx at 0.05 0.1 0.25 0.5 1 2 3 4 5 s = 1.0000 1.0000 1.0001 1.0000 1.0001 1.0003 1.0004 1.0003 1.0001 studs/s; sink -2.74e-5; x 5.0002; z drift 1.63e-4
+B5b r1 box 100 studs/s: speed kept 11.57% , max sink while rolling 1184.8772, y wobble, z drift -19.4367, tilt 143.886 deg
+B5b r1 plane 100 studs/s: speed kept 100.00% , max sink while rolling 0.0000, y wobble, z drift 0.3038, tilt 0.131 deg
+   wheel x every 0.5 s: 0.016 0.086 0.193 0.281
+B5c r2.5 on loose beam (box): sink into beam 0.0015, beam into floor 4.32e-4, wheel x 0.2814 vx 0.1441, MOVES
+   wheel x every 0.5 s: 0.019 0.100 0.220 0.369
+B5c r2.5 on loose beam (plane): sink into beam 0.0015, beam into floor 2.79e-4, wheel x 0.3695 vx 0.3252, MOVES
+B6 joint units m, TGS, pos iters 4, vel iters 1, dt 1/480
+B6a joint n=1: mass 1.777 g; dE every 2 s (% of swing energy 6538.8): -0.04 -0.08 -0.12 -0.16 -0.20; worst hinge separation 4.62e-4 studs; cost 7.9 ms per simulated s (incl. JS readout each step)
+B6b joint n=3: mass 5.332 g; dE every 2 s (% of swing energy 58848.8): -1.66 -4.05 -6.10 -13.52 -15.74; worst hinge separation 0.0319 studs; cost 8.5 ms per simulated s (incl. JS readout each step)
+B6 joint units m, TGS, pos iters 32, vel iters 1, dt 1/480
+B6a joint n=1: mass 1.777 g; dE every 2 s (% of swing energy 6538.8): -0.00 -0.01 -0.01 -0.01 -0.02; worst hinge separation 2.24e-5 studs; cost 10.9 ms per simulated s (incl. JS readout each step)
+B6b joint n=3: mass 5.332 g; dE every 2 s (% of swing energy 58848.8): -0.02 -0.14 -0.24 -0.44 -0.48; worst hinge separation 0.0022 studs; cost 18.5 ms per simulated s (incl. JS readout each step)
+B6 artic units m, TGS, pos iters 4, vel iters 1, dt 1/480
+B6a artic n=1: mass 1.777 g; dE every 2 s (% of swing energy 6538.8): 32.24 62.91 86.88 104.94 124.38; worst hinge separation 1.50e-6 studs; cost 8.8 ms per simulated s (incl. JS readout each step)
+B6b artic n=3: mass 5.332 g; dE every 2 s (% of swing energy 58848.8): 5.20 -30.52 -53.64 -67.04 -76.34; worst hinge separation 3.88e-6 studs; cost 8.2 ms per simulated s (incl. JS readout each step)
+B7 units m, TGS, pos iters 4, vel iters 1, dt 1/480
+gyroscopic off (default): principal I 2.16e-8,2.30e-7,2.38e-7 (CM frame q 0.000,0.000,0.056,0.998)
+  5s E -0.01% |L| -0.00% Ldir 10.61deg | 10s E -0.01% |L| -0.00% Ldir 20.70deg | 15s E -0.02% |L| -0.01% Ldir 29.51deg | 20s E -0.02% |L| -0.01% Ldir 36.24deg | 25s E -0.03% |L| -0.01% Ldir 40.13deg | 30s E -0.03% |L| -0.01% Ldir 40.67deg
+  rate: E -9.66e-4 %/s, |L| -3.51e-4 %/s, L direction moved 40.67 deg in 30 s; |w| end 19.990; 4.30 ms per simulated s
+gyroscopic ON (eENABLE_GYROSCOPIC_FORCES): principal I 2.16e-8,2.30e-7,2.38e-7 (CM frame q 0.000,0.000,0.056,0.998)
+  5s E -0.87% |L| 0.06% Ldir 2.63deg | 10s E -0.96% |L| 0.13% Ldir 1.89deg | 15s E -0.90% |L| 0.19% Ldir 1.13deg | 20s E -0.79% |L| 0.26% Ldir 0.34deg | 25s E -0.66% |L| 0.33% Ldir 0.47deg | 30s E -0.55% |L| 0.39% Ldir 0.78deg
+  rate: E -0.018 %/s, |L| 0.013 %/s, L direction moved 0.78 deg in 30 s; |w| end 19.134; 3.75 ms per simulated s
+max |phase error| 0.01189 rad = 0.0303 teeth of the 16; KE end / work 1.0021; hinge drift g1 1.12e-7 g2 1.55e-7 studs; 10.7 ms per simulated s
+k 1.2 (limit read back 1.200 x): angle every 0.4 s -0.0955 -0.1901 -0.2831 -0.3737 -0.4611
+k 10 (limit read back 10.000 x): angle every 0.4 s -0.0955 -0.1901 -0.2831 -0.3737 -0.4611
+k 1000000 (limit read back 1000000.033 x): angle every 0.4 s -0.0955 -0.1901 -0.2831 -0.3737 -0.4611

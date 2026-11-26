@@ -1,0 +1,21 @@
+--- default lam=1 (units studs, studs/s)
+B1a sink=2.134e-3 drift=6.651e-11 ncon=4.000e+0
+B1b cubeIntoBeam=2.352e-3 beamIntoFloor=2.352e-3 drift=4.308e-11
+B1c uniform compression=5.269e-2 lateral=1.943e-14 stands=true
+B1c top10x compression=1.817e-1 lateral=2.879e-6 stands=true
+--- default lam=125 (units studs, studs/s)
+B1a sink=9.612e-4 drift=8.667e-14 ncon=4.000e+0
+B1b cubeIntoBeam=1.056e-3 beamIntoFloor=1.056e-3 drift=1.482e-12
+B1c uniform compression=2.395e-2 lateral=9.986e-15 stands=true
+B1c top10x compression=9.293e-2 lateral=1.818e-11 stands=true
+--- tuned lam=1 (units studs, studs/s)
+B1a sink=4.153e-4 drift=1.359e-9 ncon=4.000e+0
+B1b cubeIntoBeam=3.318e-4 beamIntoFloor=4.576e-4 drift=1.759e-6
+B1c uniform compression=9.767e-3 lateral=9.108e-9 stands=true
+B1c top10x compression=2.641e-2 lateral=1.147e-8 stands=true
+--- tuned lam=125 (units studs, studs/s)
+B1a sink=4.153e-4 drift=3.440e-12 ncon=4.000e+0
+B1b cubeIntoBeam=4.576e-4 beamIntoFloor=4.576e-4 drift=1.220e-10
+B1c uniform compression=9.767e-3 lateral=1.200e-10 stands=true
+B1c top10x compression=2.641e-2 lateral=2.445e-12 stands=true
+B1a default lam=1 density x1000: sink 2.134e-3

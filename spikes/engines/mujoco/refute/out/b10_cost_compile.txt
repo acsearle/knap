@@ -1,0 +1,7 @@
+B10 default (Euler): 206.3 ms per simulated s (429.8 us per 1/480 step), ncon 80, bit-identical rerun: true
+B10 tuned (implicitfast, elliptic, impratio 10): 76.4 ms per simulated s (159.2 us per 1/480 step), ncon 100, bit-identical rerun: true
+B10 tuned + RK4: 177.2 ms per simulated s (369.2 us per 1/480 step), ncon 80, bit-identical rerun: true
+B10 tuned + noslip 20: 118.6 ms per simulated s (247.1 us per 1/480 step), ncon 100, bit-identical rerun: true
+B10 tuned + RK4 + noslip 20: 512.6 ms per simulated s (1068.0 us per 1/480 step), ncon 100, bit-identical rerun: true
+compile 20-body (boxes+cylinders): from_xml_string+MjData median 2.33 ms (min 1.94); parseXMLString 1.65 ms + mj_compile(spec) 0.45 ms
+compile 20-body (20 distinct 16-18-gon meshes): from_xml_string+MjData median 12.11 ms (min 11.75); parseXMLString 3.67 ms + mj_compile(spec) 7.72 ms

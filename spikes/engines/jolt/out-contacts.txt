@@ -1,0 +1,72 @@
+
+===== regime si-def =====
+B1a box: sink 1.89e-8 studs, drift |v| 3.89e-8 studs/s, horiz moved 3.46e-6, contacts 4
+B1a plane: sink -1.02e-8 studs, drift |v| 4.14e-8 studs/s, horiz moved 3.46e-6, contacts 4
+B1b: cube into beam 4.81e-6, beam into floor 1.64e-7 studs, beam |v| 9.44e-6, cube |v| 2.17e-5
+B1c top x1: total compression 0.0045 studs, top horiz offset 0.0061, max tilt 0.159 deg, stands true
+B1c top x10: total compression 0.0257 studs, top horiz offset 0.0346, max tilt 0.818 deg, stands true
+B2 plane 150: deepest pen 1.75e-5 studs, max rebound vy -4.79e-6 studs/s, max sideways 0.0747 studs/s, max spin 0.0222 rad/s, final y 0.4600
+B2 plane 300: deepest pen 1.32e-5 studs, max rebound vy 8.85e-6 studs/s, max sideways 6.00e-4 studs/s, max spin 6.21e-5 rad/s, final y 0.4600
+B2 box 150: deepest pen 1.75e-5 studs, max rebound vy -3.55e-6 studs/s, max sideways 0.0747 studs/s, max spin 0.0222 rad/s, final y 0.4600
+B2 box 300: deepest pen 1.32e-5 studs, max rebound vy 8.76e-6 studs/s, max sideways 6.10e-4 studs/s, max spin 5.69e-5 rad/s, final y 0.4600
+B3: speed at 0.5/1.0/1.5 s 613.13 / 1226.25 / 1839.37 (g t: 613.13 / 1226.25 / 1839.38)
+B4a 32-gon top: (0,0) tilt 0.058deg sink -7.27e-5 fell false n=4 | (0.2,0) tilt 0.058deg sink -7.27e-5 fell false n=4 | (0,0.3) tilt 0.058deg sink -7.28e-5 fell false n=4 | (0.35,0.1) tilt 0.184deg sink -1.82e-4 fell false n=4 | (-0.3,-0.2) tilt 0.104deg sink -1.91e-4 fell false n=4 | (0.38,0) tilt 0.147deg sink -1.53e-4 fell false n=4 | (0.25,0.25) tilt 0.419deg sink -1.82e-4 fell false n=4
+B4b plane 16-gon: tilt 0.000 deg, sink -0.0039, contacts 4, |v| 1.38e-8
+B4b plane 32-gon: tilt 2.04e-4 deg, sink 5.17e-4, contacts 4, |v| 3.37e-5
+B4b box 16-gon: tilt 0.000 deg, sink -0.0039, contacts 4, |v| 2.91e-8
+B4b box 32-gon: tilt 2.04e-4 deg, sink 5.17e-4, contacts 4, |v| 3.37e-5
+B5a box v0=0: vx at 1..5 s -1.21e-6 -2.41e-6 -3.62e-6 -4.82e-6 -6.03e-6 studs/s; x moved -3.80e-7, max sink 4.18e-7, contacts 2
+B5a box v0=1: vx at 1..5 s 11.3780 16.7933 20.5148 20.5148 20.5148 studs/s; x moved 82.1423, max sink 4225.0224, contacts 0
+B5a plane v0=0: vx at 1..5 s -3.79e-11 -7.61e-11 -1.14e-10 -1.52e-10 -1.90e-10 studs/s; x moved -3.80e-7, max sink 3.02e-7, contacts 2
+B5a plane v0=1: vx at 1..5 s 11.3780 16.7933 16.7932 16.7931 16.7931 studs/s; x moved 72.3818, max sink 0.1959, contacts 2
+B5b plane: speed kept 47.12 %, omega*r 47.12, max sink 1.85e-7, max hop -6.89e-8, lateral vz 9.60e-6
+B5b box: speed kept 47.12 %, omega*r 47.12, max sink 7.67e-7, max hop 4.75e-8, lateral vz -0.0040
+B5c: wheel into beam end 1.1988 (max 1.1988), beam into floor 1.21e-4, wheel x moved -28.0008, vx -34.9262, stays false, contacts 2
+
+===== regime si-scaled =====
+B1a box: sink 1.89e-8 studs, drift |v| 3.89e-8 studs/s, horiz moved 3.46e-6, contacts 4
+B1a plane: sink -1.02e-8 studs, drift |v| 4.14e-8 studs/s, horiz moved 3.46e-6, contacts 4
+B1b: cube into beam 4.81e-6, beam into floor 1.64e-7 studs, beam |v| 9.44e-6, cube |v| 2.17e-5
+B1c top x1: total compression 0.0045 studs, top horiz offset 0.0050, max tilt 0.145 deg, stands true
+B1c top x10: total compression 0.0214 studs, top horiz offset 0.0424, max tilt 0.878 deg, stands true
+B2 plane 150: deepest pen 0.1410 studs, max rebound vy 1.06e-7 studs/s, max sideways 0.0301 studs/s, max spin 0.0044 rad/s, final y 0.4400
+B2 plane 300: deepest pen 0.1303 studs, max rebound vy 4.70e-8 studs/s, max sideways 8.80e-4 studs/s, max spin 1.47e-4 rad/s, final y 0.4400
+B2 box 150: deepest pen 0.1410 studs, max rebound vy 1.30e-7 studs/s, max sideways 0.0301 studs/s, max spin 0.0044 rad/s, final y 0.4400
+B2 box 300: deepest pen 0.1303 studs, max rebound vy 5.05e-8 studs/s, max sideways 8.80e-4 studs/s, max spin 1.47e-4 rad/s, final y 0.4400
+B3: speed at 0.5/1.0/1.5 s 613.13 / 1226.25 / 1839.37 (g t: 613.13 / 1226.25 / 1839.38)
+B4a 32-gon top: (0,0) tilt 0.058deg sink -7.27e-5 fell false n=4 | (0.2,0) tilt 0.058deg sink -7.27e-5 fell false n=4 | (0,0.3) tilt 0.058deg sink -7.27e-5 fell false n=4 | (0.35,0.1) tilt 0.058deg sink -7.28e-5 fell false n=4 | (-0.3,-0.2) tilt 0.058deg sink -7.27e-5 fell false n=4 | (0.38,0) tilt 0.058deg sink -7.27e-5 fell false n=4 | (0.25,0.25) tilt 0.058deg sink -7.27e-5 fell false n=4
+B4b plane 16-gon: tilt 6.59e-5 deg, sink 3.68e-7, contacts 4, |v| 1.82e-5
+B4b plane 32-gon: tilt 0.000 deg, sink 3.68e-7, contacts 4, |v| 3.94e-8
+B4b box 16-gon: tilt 6.59e-5 deg, sink 3.68e-7, contacts 4, |v| 4.00e-8
+B4b box 32-gon: tilt 0.000 deg, sink 1.89e-8, contacts 4, |v| 5.12e-8
+B5a box v0=0: vx at 1..5 s -1.21e-6 -2.41e-6 -3.62e-6 -4.82e-6 -6.03e-6 studs/s; x moved -3.80e-7, max sink 4.18e-7, contacts 2
+B5a box v0=1: vx at 1..5 s 1.0000 1.0000 1.0000 1.0000 1.0000 studs/s; x moved 5.0001, max sink 1.85e-7, contacts 2
+B5a plane v0=0: vx at 1..5 s -3.79e-11 -7.61e-11 -1.14e-10 -1.52e-10 -1.90e-10 studs/s; x moved -3.80e-7, max sink 3.02e-7, contacts 2
+B5a plane v0=1: vx at 1..5 s 1.0000 1.0001 1.0001 1.0001 1.0000 studs/s; x moved 5.0001, max sink 1.85e-7, contacts 2
+B5b plane: speed kept 100.00 %, omega*r 100.00, max sink -1.56e-6, max hop 2.03e-6, lateral vz -0.0884
+B5b box: speed kept 100.00 %, omega*r 100.00, max sink -1.56e-6, max hop 2.03e-6, lateral vz 0.0867
+B5c: wheel into beam end 4.62e-4 (max 4.75e-4), beam into floor 6.41e-5, wheel x moved 0.2278, vx 0.2501, stays true, contacts 2
+
+===== regime metre =====
+B1a box: sink -6.79e-8 studs, drift |v| 6.04e-8 studs/s, horiz moved 3.44e-6, contacts 4
+B1a plane: sink -8.34e-9 studs, drift |v| 8.34e-8 studs/s, horiz moved 3.44e-6, contacts 4
+B1b: cube into beam 4.84e-6, beam into floor 1.70e-7 studs, beam |v| 9.78e-6, cube |v| 1.66e-5
+B1c top x1: total compression 0.0045 studs, top horiz offset 0.0050, max tilt 0.145 deg, stands true
+B1c top x10: total compression 0.0324 studs, top horiz offset 0.0337, max tilt 1.294 deg, stands true
+B2 plane 150: deepest pen 0.1410 studs, max rebound vy 1.06e-7 studs/s, max sideways 0.0301 studs/s, max spin 0.0044 rad/s, final y 0.4400
+B2 plane 300: deepest pen 0.1303 studs, max rebound vy 8.33e-8 studs/s, max sideways 8.80e-4 studs/s, max spin 1.47e-4 rad/s, final y 0.4400
+B2 box 150: deepest pen 0.1410 studs, max rebound vy 1.21e-7 studs/s, max sideways 0.0301 studs/s, max spin 0.0044 rad/s, final y 0.4400
+B2 box 300: deepest pen 0.1303 studs, max rebound vy 6.30e-8 studs/s, max sideways 8.80e-4 studs/s, max spin 1.47e-4 rad/s, final y 0.4400
+B3: speed at 0.5/1.0/1.5 s 613.12 / 1226.25 / 1839.38 (g t: 613.13 / 1226.25 / 1839.38)
+B4a 32-gon top: (0,0) tilt 0.000deg sink -1.19e-8 fell false n=4 | (0.2,0) tilt 0.000deg sink -1.19e-8 fell false n=4 | (0,0.3) tilt 0.000deg sink -1.19e-8 fell false n=4 | (0.35,0.1) tilt 0.000deg sink -1.19e-8 fell false n=4 | (-0.3,-0.2) tilt 0.000deg sink -1.19e-8 fell false n=4 | (0.38,0) tilt 0.000deg sink -1.19e-8 fell false n=4 | (0.25,0.25) tilt 0.000deg sink -1.19e-8 fell false n=4
+B4b plane 16-gon: tilt 6.59e-5 deg, sink 3.49e-7, contacts 4, |v| 2.79e-5
+B4b plane 32-gon: tilt 0.000 deg, sink 2.15e-8, contacts 4, |v| 5.66e-8
+B4b box 16-gon: tilt 6.59e-5 deg, sink 3.79e-7, contacts 4, |v| 1.86e-5
+B4b box 32-gon: tilt 0.000 deg, sink 1.11e-7, contacts 4, |v| 2.87e-8
+B5a box v0=0: vx at 1..5 s -1.23e-6 -2.47e-6 -3.70e-6 -4.94e-6 -6.17e-6 studs/s; x moved 0.0000, max sink 4.77e-7, contacts 2
+B5a box v0=1: vx at 1..5 s 1.0000 1.0000 1.0000 1.0000 1.0000 studs/s; x moved 4.9999, max sink 2.98e-7, contacts 2
+B5a plane v0=0: vx at 1..5 s -4.26e-11 -8.55e-11 -1.28e-10 -1.71e-10 -2.14e-10 studs/s; x moved 0.0000, max sink 4.17e-7, contacts 2
+B5a plane v0=1: vx at 1..5 s 1.0000 1.0001 1.0001 1.0001 1.0000 studs/s; x moved 5.0000, max sink 1.79e-7, contacts 2
+B5b plane: speed kept 100.00 %, omega*r 100.00, max sink -1.55e-6, max hop 2.03e-6, lateral vz -0.0883
+B5b box: speed kept 100.00 %, omega*r 100.00, max sink -1.55e-6, max hop 1.91e-6, lateral vz 0.0868
+B5c: wheel into beam end 4.61e-4 (max 4.75e-4), beam into floor 6.43e-5, wheel x moved 0.2252, vx 0.2489, stays true, contacts 2

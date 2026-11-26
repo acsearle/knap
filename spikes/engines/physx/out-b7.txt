@@ -1,0 +1,7 @@
+B7 units stud, TGS, pos iters 4, vel iters 1, dt 1/480
+gyroscopic off (default): principal I 0.338,3.598,3.724 (CM frame q 0.000,0.000,0.056,0.998)
+  5s E -0.01% |L| -0.00% Ldir 10.59deg | 10s E -0.01% |L| -0.00% Ldir 20.67deg | 15s E -0.02% |L| -0.01% Ldir 29.47deg | 20s E -0.02% |L| -0.01% Ldir 36.19deg | 25s E -0.03% |L| -0.01% Ldir 40.12deg | 30s E -0.04% |L| -0.02% Ldir 40.68deg
+  rate: E -0.001 %/s, |L| -5.33e-4 %/s, L direction moved 40.68 deg in 30 s; |w| end 19.990; 4.68 ms per simulated s
+gyroscopic ON (eENABLE_GYROSCOPIC_FORCES): principal I 0.338,3.598,3.724 (CM frame q 0.000,0.000,0.056,0.998)
+  5s E -0.88% |L| 0.06% Ldir 2.63deg | 10s E -0.97% |L| 0.13% Ldir 1.89deg | 15s E -0.92% |L| 0.18% Ldir 1.26deg | 20s E -0.83% |L| 0.24% Ldir 0.21deg | 25s E -0.72% |L| 0.30% Ldir 0.32deg | 30s E -0.62% |L| 0.35% Ldir 1.28deg
+  rate: E -0.021 %/s, |L| 0.012 %/s, L direction moved 1.28 deg in 30 s; |w| end 18.776; 3.82 ms per simulated s

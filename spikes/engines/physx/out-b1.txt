@@ -1,0 +1,9 @@
+B1 units stud, TGS, pos iters 4, vel iters 1, dt 1/480
+B1a box: sink 1.55e-5 studs, drift at end 0.0202 studs/s (|v| max after 0.1s 0.0305), xz moved 5.54e-5
+B1a plane: sink 5.56e-6 studs, drift at end 0.0283 studs/s (|v| max after 0.1s 0.0409), xz moved 6.27e-5
+B1b box: cube into beam 4.58e-4, beam into floor 1.51e-4, cube drift 0.0088 studs/s, beam drift 0.0263
+B1b plane: cube into beam 4.55e-4, beam into floor 1.01e-4, cube drift 0.0249 studs/s, beam drift 0.0771
+B1c box top x1: total compression 0.0058 studs, top offset 0.0088, stands
+B1c plane top x1: total compression 0.0058 studs, top offset 0.0076, stands
+B1c box top x10: total compression 0.0220 studs, top offset 0.0363, stands
+B1c plane top x10: total compression 0.0217 studs, top offset 0.0334, stands

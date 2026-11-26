@@ -1,0 +1,6 @@
+B7 Euler dt=1/480: K: -3.333e+0 %/s (range -100.0000..69146.0855 %), |L|: -3.333e+0 %/s, cost 14.98 ms/sim-s
+B7 implicitfast dt=1/480: K: -3.054e+0 %/s (range -91.6176..0.0000 %), |L|: -3.080e+0 %/s, cost 6.30 ms/sim-s
+B7 implicit dt=1/480: K: -3.054e+0 %/s (range -91.6176..0.0000 %), |L|: -3.080e+0 %/s, cost 4.10 ms/sim-s
+B7 RK4 dt=1/480: K: 1.265e-7 %/s (range -0.0000..0.0000 %), |L|: -3.740e-7 %/s, cost 11.28 ms/sim-s
+B7 Euler dt=1/1920: K: 2.516e+1 %/s (range 0.0000..738.0969 %), |L|: 6.717e+0 %/s, cost 5.50 ms/sim-s
+B7 RK4 lam=125: K: 1.265e-7 %/s (range -0.0000..0.0000 %), |L|: -3.740e-7 %/s, cost 6.53 ms/sim-s

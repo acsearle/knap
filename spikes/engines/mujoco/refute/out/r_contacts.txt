@@ -1,0 +1,43 @@
+== B4a default settings (prism rotated 0.05 rad, box yaws vary)
+x=0 y=0 yaw=0.00 sink=2.13e-3 tiltDeg=0.00e+0 ncon 4..4 moved=7.9e-17
+x=0.2 y=0.1 yaw=0.30 sink=2.13e-3 tiltDeg=8.54e-7 ncon 4..4 moved=0.0e+0
+x=0.37 y=0 yaw=0.70 sink=2.13e-3 tiltDeg=0.00e+0 ncon 4..4 moved=1.7e-17
+x=0 y=-0.38 yaw=1.10 sink=2.13e-3 tiltDeg=0.00e+0 ncon 4..4 moved=3.2e-17
+x=-0.27 y=0.27 yaw=0.40 sink=2.13e-3 tiltDeg=0.00e+0 ncon 4..4 moved=0.0e+0
+x=0.4 y=0.05 yaw=0.20 sink=2.13e-3 tiltDeg=8.54e-7 ncon 4..4 moved=0.0e+0
+== B4a tuned
+x=0.37 y=0 yaw=0.70 sink=4.15e-4 tiltDeg=2.26e-6 ncon 4..4 moved=3.9e-10
+x=0.4 y=0.05 yaw=0.20 sink=4.15e-4 tiltDeg=1.71e-6 ncon 4..4 moved=5.0e-10
+== B5 default settings
+box v0=0 h=0.60 T=5: v samples 1.22886e-10 1.02664e-10 7.27682e-11 1.54131e-10  vmin 4.37300e-13 vmax 0.238411 slipMax 2.4e-1 sinkMax 1.96e-2 axisTilt 1.3e-14deg ncon {1,2}
+box v0=1 h=0.60 T=5: v samples 0.999280 0.999280 0.999280 0.999280  vmin 0.999255 vmax 1.02564 slipMax 2.1e-2 sinkMax 1.96e-2 axisTilt 2.2e-14deg ncon {1,2}
+box v0=0.05 h=0.60 T=5: v samples 0.0499643 0.0499643 0.0499643 0.0499643  vmin 0.0499643 vmax 0.243572 slipMax 1.9e-1 sinkMax 1.96e-2 axisTilt 9.5e-14deg ncon {1,2}
+box v0=100 h=0.00 T=2: v samples 99.9280 99.9280 99.9280 99.9280  vmin 99.7552 vmax 99.9280 slipMax 7.3e-1 sinkMax 1.96e-2 axisTilt 0.0e+0deg ncon {1,2}
+box v0=100 h=0.60 T=2: v samples 99.9280 99.9280 99.9280 99.9280  vmin 99.7552 vmax 99.9280 slipMax 7.3e-1 sinkMax 1.96e-2 axisTilt 1.3e-12deg ncon {1,2}
+plane v0=0 h=0.60 T=5: v samples 1.22886e-10 1.02664e-10 7.27668e-11 1.54146e-10  vmin 4.39586e-13 vmax 0.238411 slipMax 2.4e-1 sinkMax 1.96e-2 axisTilt 9.5e-15deg ncon {2}
+plane v0=1 h=0.60 T=5: v samples 0.999280 0.999280 0.999280 0.999280  vmin 0.999255 vmax 1.02564 slipMax 2.1e-2 sinkMax 1.96e-2 axisTilt 2.9e-14deg ncon {2}
+plane v0=0.05 h=0.60 T=5: v samples 0.0499643 0.0499643 0.0499643 0.0499643  vmin 0.0499643 vmax 0.243572 slipMax 1.9e-1 sinkMax 1.96e-2 axisTilt 8.6e-14deg ncon {2}
+plane v0=100 h=0.00 T=2: v samples 99.9280 99.9280 99.9280 99.9280  vmin 99.7552 vmax 99.9280 slipMax 7.3e-1 sinkMax 1.96e-2 axisTilt 0.0e+0deg ncon {2}
+plane v0=100 h=0.60 T=2: v samples 99.9280 99.9280 99.9280 99.9280  vmin 99.7552 vmax 99.9280 slipMax 7.3e-1 sinkMax 1.96e-2 axisTilt 1.2e-11deg ncon {2}
+== B5 tuned
+box v0=1 h=0.60 T=5: v samples 0.999861 0.999861 0.999861 0.999861  vmin 0.999860 vmax 0.999861 slipMax 4.2e-4 sinkMax 5.45e-3 axisTilt 1.4e-9deg ncon {1,2}
+box v0=100 h=0.60 T=2: v samples 99.9861 99.9861 99.9861 99.9861  vmin 99.9858 vmax 99.9861 slipMax 4.2e-2 sinkMax 5.45e-3 axisTilt 3.1e-10deg ncon {1,2}
+plane v0=1 h=0.60 T=5: v samples 0.999861 0.999861 0.999861 0.999861  vmin 0.999860 vmax 0.999861 slipMax 4.2e-4 sinkMax 5.45e-3 axisTilt 6.3e-10deg ncon {2}
+plane v0=100 h=0.60 T=2: v samples 99.9861 99.9861 99.9861 99.9861  vmin 99.9858 vmax 99.9861 slipMax 4.2e-2 sinkMax 5.45e-3 axisTilt 1.5e-9deg ncon {2}
+== B2 default / tuned / tuned with overdamped solref 0.005 2 / direct solref -k -b
+default box v=150 phase=0: deepest 0.872 rebound 16.5 studs/s (11.0 %), end z-0.46 -2.13e-3
+default box v=150 phase=0.13: deepest 627.578 rebound 0.0 studs/s (0.0 %), end z-0.46 -6.28e+2
+default box v=300 phase=0: deepest 782.653 rebound 0.0 studs/s (0.0 %), end z-0.46 -7.83e+2
+default box v=300 phase=0.13: deepest 783.775 rebound 0.0 studs/s (0.0 %), end z-0.46 -7.84e+2
+tuned box v=150 phase=0: deepest 0.066 rebound 5.5 studs/s (3.7 %), end z-0.46 -4.15e-4
+tuned box v=150 phase=0.13: deepest 0.226 rebound 18.7 studs/s (12.5 %), end z-0.46 -4.15e-4
+tuned box v=300 phase=0: deepest 0.374 rebound 31.0 studs/s (10.3 %), end z-0.46 -4.15e-4
+tuned box v=300 phase=0.13: deepest 0.266 rebound 22.1 studs/s (7.4 %), end z-0.46 -4.15e-4
+tuned d=2 box v=150 phase=0: deepest 0.073 rebound 1.7 studs/s (1.1 %), end z-0.46 -1.62e-3
+tuned d=2 box v=150 phase=0.13: deepest 0.254 rebound 5.9 studs/s (3.9 %), end z-0.46 -1.62e-3
+tuned d=2 box v=300 phase=0: deepest 0.417 rebound 9.7 studs/s (3.2 %), end z-0.46 -1.62e-3
+tuned d=2 box v=300 phase=0.13: deepest 0.295 rebound 6.9 studs/s (2.3 %), end z-0.46 -1.62e-3
+tuned d=4 box v=150 phase=0: deepest 0.076 rebound 0.5 studs/s (0.3 %), end z-0.46 -4.90e-3
+tuned d=4 box v=150 phase=0.13: deepest 0.266 rebound 1.6 studs/s (1.1 %), end z-0.46 -4.94e-3
+tuned d=4 box v=300 phase=0: deepest 0.439 rebound 2.7 studs/s (0.9 %), end z-0.46 -4.99e-3
+tuned d=4 box v=300 phase=0.13: deepest 0.312 rebound 1.9 studs/s (0.6 %), end z-0.46 -4.95e-3

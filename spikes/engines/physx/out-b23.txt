@@ -1,0 +1,7 @@
+B2/B3 units stud, TGS, pos iters 4, vel iters 1, dt 1/480 (CCD off; PhysX contact offset default 0.02 x length)
+B2 plane 150 studs/s: deepest penetration 0.1183 studs, max rebound vy 0.447, sideways 0.0281 studs/s, spin 0.0752 rad/s, final y 0.4600
+B2 plane 300 studs/s: deepest penetration 0.2433 studs, max rebound vy 2.733, sideways 0.0283 studs/s, spin 0.0758 rad/s, final y 0.4600
+B2 box 150 studs/s: deepest penetration 0.1183 studs, max rebound vy -0.005, sideways 0.0197 studs/s, spin 0.0560 rad/s, final y 0.4600
+B2 box 300 studs/s: deepest penetration 0.2433 studs, max rebound vy 0.072, sideways 0.0198 studs/s, spin 0.0573 rad/s, final y 0.4600
+B3 free fall: t 0.5 v 613.13 (g t 613.13); t 1.0 v 1226.25 (g t 1226.25); t 1.5 v 1839.38 (g t 1839.38)
+  default rigid-dynamic max linear velocity 10000000272564224 , max angular 100 (the battery scripts set 1e9 for both)

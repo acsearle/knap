@@ -1,0 +1,5 @@
+frictionloss 0 tauG + noslip: q(2s)=3.1376 qdot=-1.227  -dE/frictionWork=-  cost 2.49 ms/sim-s
+frictionloss 0.5 tauG + noslip: q(2s)=1.9036 qdot=0.000  -dE/frictionWork=0.9930  cost 132.10 ms/sim-s
+frictionloss 0.9 tauG + noslip: q(2s)=0.7886 qdot=0.000  -dE/frictionWork=0.9995  cost 12.93 ms/sim-s
+frictionloss 1 tauG + noslip: q(2s)=0.0000 qdot=0.000  -dE/frictionWork=-  cost 5.47 ms/sim-s
+frictionloss 1.01 tauG + noslip: q(2s)=-0.0000 qdot=-0.000  -dE/frictionWork=-0.9891  cost 25.49 ms/sim-s

@@ -1,0 +1,13 @@
+B4 units stud, TGS, pos iters 4, vel iters 1, dt 1/480
+32-gon hull: verts 64 polygons 34
+B4a spot (0,0) r=0.00: tilt 0.086 deg, sink 8.13e-5, fell no, moved 7.53e-5, contacts 4-4
+B4a spot (0.3,0) r=0.30: tilt 0.086 deg, sink 8.13e-5, fell no, moved 7.53e-5, contacts 4-4
+B4a spot (0,0.3) r=0.30: tilt 0.086 deg, sink 8.13e-5, fell no, moved 7.53e-5, contacts 4-4
+B4a spot (-0.35,0.1) r=0.36: tilt 0.086 deg, sink 8.13e-5, fell no, moved 7.53e-5, contacts 4-4
+B4a spot (0.38,0.2) r=0.43: tilt 0.062 deg, sink 6.67e-5, fell no, moved 5.38e-5, contacts 4-4
+B4a spot (-0.2,-0.38) r=0.43: tilt 0.086 deg, sink 6.65e-5, fell no, moved 7.52e-5, contacts 4-4
+B4a spot (0.42,0) r=0.42: tilt 0.112 deg, sink 9.57e-5, fell no, moved 9.74e-5, contacts 4-4
+B4b 16-gon on plane: tilt 0.008 deg, sink 1.57e-5, contacts 4-4
+B4b 16-gon on box: tilt 0.008 deg, sink 1.56e-5, contacts 4-4
+B4b 32-gon on plane: tilt 0.008 deg, sink 1.52e-5, contacts 4-4
+B4b 32-gon on box: tilt 0.008 deg, sink 1.52e-5, contacts 4-4

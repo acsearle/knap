@@ -1,0 +1,26 @@
+b9fric units stud, TGS, pos iters 4, vel iters 1, dt 1/480
+k no drive (limit read back 5.204081854781065e+34 x): angle every 0.4 s -0.2608 -1.0149 -2.0203 -2.8199 -3.1386
+k 0 (limit read back 0.000 x): angle every 0.4 s -0.2608 -1.0149 -2.0203 -2.8199 -3.1386
+k 0.5 (limit read back 0.500 x): angle every 0.4 s -0.0955 -0.1901 -0.2831 -0.3737 -0.4611
+k 0.8 (limit read back 0.800 x): angle every 0.4 s -0.0955 -0.1901 -0.2831 -0.3737 -0.4611
+k 1.2 (limit read back 1.200 x): angle every 0.4 s -0.0955 -0.1901 -0.2831 -0.3737 -0.4611
+k 10 (limit read back 10.000 x): angle every 0.4 s -0.0955 -0.1901 -0.2831 -0.3737 -0.4611
+k 1000000 (limit read back 1000000.018 x): angle every 0.4 s -0.0955 -0.1901 -0.2831 -0.3737 -0.4611
+b9fric units stud, TGS, pos iters 4, vel iters 1, dt 1/480
+limit passed as impulse per step: k x tg x dt
+k no drive (limit read back 5.204081854781065e+34 x): angle every 0.4 s -0.2608 -1.0149 -2.0203 -2.8199 -3.1386
+k 0 (limit read back 0.000 x): angle every 0.4 s -0.2608 -1.0149 -2.0203 -2.8199 -3.1386
+k 0.5 (limit read back 0.001 x): angle every 0.4 s -1.8822 -1.8541 -1.8286 -1.8053 -1.7841
+k 0.8 (limit read back 0.002 x): angle every 0.4 s -1.1439 -1.1818 -1.2165 -1.2483 -1.2773
+k 1.2 (limit read back 0.003 x): angle every 0.4 s -0.0955 -0.1901 -0.2831 -0.3737 -0.4611
+k 10 (limit read back 0.021 x): angle every 0.4 s -0.0955 -0.1901 -0.2831 -0.3737 -0.4611
+k 1000000 (limit read back 2083.333 x): angle every 0.4 s -0.0955 -0.1901 -0.2831 -0.3737 -0.4611
+b9fric units stud, PGS, pos iters 4, vel iters 1, dt 1/480
+limit passed as impulse per step: k x tg x dt
+k no drive (limit read back 5.204081854781065e+34 x): angle every 0.4 s -0.2973 -0.7860 -1.2692 -1.6555 -1.9293
+k 0 (limit read back 0.000 x): angle every 0.4 s -0.2973 -0.7860 -1.2692 -1.6555 -1.9293
+k 0.5 (limit read back 0.001 x): angle every 0.4 s -1.8750 -1.8497 -1.8265 -1.8052 -1.7857
+k 0.8 (limit read back 0.002 x): angle every 0.4 s -1.1422 -1.1773 -1.2096 -1.2394 -1.2668
+k 1.2 (limit read back 0.003 x): angle every 0.4 s -0.0876 -0.1747 -0.2604 -0.3442 -0.4256
+k 10 (limit read back 0.021 x): angle every 0.4 s -0.0876 -0.1747 -0.2604 -0.3442 -0.4256
+k 1000000 (limit read back 2083.333 x): angle every 0.4 s -0.0876 -0.1747 -0.2604 -0.3442 -0.4256

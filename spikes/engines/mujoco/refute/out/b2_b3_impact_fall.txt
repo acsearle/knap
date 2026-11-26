@@ -1,0 +1,14 @@
+B2 default v=150 startgap+0: deepest=161.3762 rebound=0.000 sideways=4.37e-15 spin=1.36e-14 zEnd-HC=-1.61e+2
+B2 default v=150 startgap+0.1: deepest=149.0309 rebound=0.000 sideways=1.41e-14 spin=3.80e-14 zEnd-HC=-1.49e+2
+B2 default v=150 startgap+0.2: deepest=0.9098 rebound=17.181 sideways=2.19e-14 spin=5.25e-14 zEnd-HC=-2.13e-3
+B2 default v=300 startgap+0: deepest=266.2983 rebound=0.000 sideways=1.65e-15 spin=9.89e-15 zEnd-HC=-2.66e+2
+B2 default v=300 startgap+0.1: deepest=266.4696 rebound=0.000 sideways=2.71e-15 spin=1.26e-14 zEnd-HC=-2.66e+2
+B2 default v=300 startgap+0.2: deepest=237.7223 rebound=0.000 sideways=1.01e-16 spin=3.79e-16 zEnd-HC=-2.38e+2
+B3 default: 0.5s: 613.125 (g t = 613.13), 1s: 1226.250 (g t = 1226.25), 1.5s: 1839.375 (g t = 1839.38)
+B2 tuned v=150 startgap+0: deepest=0.2720 rebound=22.510 sideways=0.00e+0 spin=0.00e+0 zEnd-HC=-4.15e-4
+B2 tuned v=150 startgap+0.1: deepest=0.1894 rebound=15.693 sideways=0.00e+0 spin=0.00e+0 zEnd-HC=-4.15e-4
+B2 tuned v=150 startgap+0.2: deepest=0.1069 rebound=8.886 sideways=0.00e+0 spin=0.00e+0 zEnd-HC=-4.15e-4
+B2 tuned v=300 startgap+0: deepest=0.5803 rebound=48.716 sideways=0.00e+0 spin=0.00e+0 zEnd-HC=-4.15e-4
+B2 tuned v=300 startgap+0.1: deepest=0.4974 rebound=41.168 sideways=0.00e+0 spin=0.00e+0 zEnd-HC=-4.15e-4
+B2 tuned v=300 startgap+0.2: deepest=0.4149 rebound=34.361 sideways=0.00e+0 spin=0.00e+0 zEnd-HC=-4.15e-4
+B3 tuned: 0.5s: 613.125 (g t = 613.13), 1s: 1226.250 (g t = 1226.25), 1.5s: 1839.375 (g t = 1839.38)

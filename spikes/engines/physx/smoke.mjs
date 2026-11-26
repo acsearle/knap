@@ -1,0 +1,10 @@
+import * as P from './lib.mjs';
+const { PX, TL } = P;
+console.log('version', TL.PHYSICS_VERSION?.toString(16), 'TGS', PX.PxSolverTypeEnum.eTGS, PX.PxSceneFlagEnum.eENABLE_PCM);
+const s = P.makeScene();
+P.addPlane(s, 0);
+const b = P.addDynamic(s, [{ geom: P.boxGeom(0.46, 0.46, 0.46) }], [0, 0.46, 0]);
+console.log('mass g', P.massG(b));
+for (let i = 0; i < 960; i++) s.step();
+console.log(P.pos(b), P.lv(b));
+process.exit(0);

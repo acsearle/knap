@@ -1,0 +1,3 @@
+B6 joint units stud, PGS, pos iters 4, vel iters 1, dt 1/480
+B6a joint n=1: mass 1.777 g; dE every 2 s (% of swing energy 6538.8): -35.74 -53.23 -63.28 -69.54 -73.72; worst hinge separation 0.0035 studs; cost 6.8 ms per simulated s (incl. JS readout each step)
+B6b joint n=3: mass 5.332 g; dE every 2 s (% of swing energy 58848.8): -31.33 -67.19 -76.64 -80.56 -82.82; worst hinge separation 0.0461 studs; cost 6.9 ms per simulated s (incl. JS readout each step)

@@ -1,0 +1,13 @@
+B6a Euler dt=1/480: dE(10s)=0.6375% of ref, range [-1.511, 1.546]%, worst hinge sep=0.00e+0 studs, cost=19.9 ms per sim s
+B6b Euler dt=1/480: dE(10s)=-92.1964% of ref, range [-92.210, 20.357]%, worst hinge sep=0.00e+0 studs, cost=10.8 ms per sim s
+B6a implicitfast dt=1/480: dE(10s)=0.6375% of ref, range [-1.511, 1.546]%, worst hinge sep=0.00e+0 studs, cost=0.5 ms per sim s
+B6b implicitfast dt=1/480: dE(10s)=-92.1964% of ref, range [-92.210, 20.357]%, worst hinge sep=0.00e+0 studs, cost=7.5 ms per sim s
+B6a implicit dt=1/480: dE(10s)=0.6375% of ref, range [-1.511, 1.546]%, worst hinge sep=0.00e+0 studs, cost=3.9 ms per sim s
+B6b implicit dt=1/480: dE(10s)=71.6290% of ref, range [-23.055, 238485.392]%, worst hinge sep=0.00e+0 studs, cost=3.9 ms per sim s
+B6a RK4 dt=1/480: dE(10s)=-0.0000% of ref, range [-0.000, 0.000]%, worst hinge sep=0.00e+0 studs, cost=2.5 ms per sim s
+B6b RK4 dt=1/480: dE(10s)=-0.2453% of ref, range [-0.236, 0.000]%, worst hinge sep=0.00e+0 studs, cost=16.8 ms per sim s
+B6b RK4 dt=1/960: dE(10s)=-0.0096% of ref, range [-0.017, 0.001]%, worst hinge sep=0.00e+0 studs, cost=18.2 ms per sim s
+B6b implicitfast dt=1/960: dE(10s)=-79.2642% of ref, range [-79.338, 8.380]%, worst hinge sep=0.00e+0 studs, cost=3.5 ms per sim s
+B6b RK4 dt=1/1920: dE(10s)=-0.0003% of ref, range [-0.005, 0.001]%, worst hinge sep=0.00e+0 studs, cost=25.2 ms per sim s
+B6b implicitfast dt=1/1920: dE(10s)=-49.5072% of ref, range [-49.539, 5.292]%, worst hinge sep=0.00e+0 studs, cost=8.1 ms per sim s
+B6b RK4 lam=125: dE(10s)=-0.1926% of ref, range [-0.202, 0.000]%, worst hinge sep=0.00e+0 studs, cost=4.3 ms per sim s
