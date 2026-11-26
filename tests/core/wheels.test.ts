@@ -155,7 +155,7 @@ describe('version, serialisation, deserialisation (§2.4)', () => {
     rejects(file(`{"x":0,"y":0,"z":0,"kind":"pinHole","axis":2}`, '"ground":"yes",'), /ground: expected true or false \(got "yes"\)/);
     rejects(file(`{"x":0,"y":0,"z":0,"kind":"pinHole","axis":2}`, '"fixRoot":0,'), /fixRoot: expected true or false \(got 0\)/);
     rejects(file(`{"x":0,"y":0,"z":0,"kind":"pinHole","axis":2}`, '"ground":null,'), /ground: expected true or false/);
-    rejects('{"version":3,"parts":[]}', /unsupported version 3 \(expected 1 or 2\)/);
+    rejects('{"version":4,"parts":[]}', /unsupported version 4 \(expected 1, 2 or 3\)/);
   });
   it('rejects a file whose wheel overlaps another part', () => {
     const json = JSON.stringify(raw([{ id: 1, cells: [W(0, 0, 0, 1.5)] }, { id: 2, cells: beam(2, 1) }]));

@@ -1,0 +1,147 @@
+== shaft mu 0 k 1 w 5 {}: joints revolute(0-1) m 9.87 τf 0.0; revolute(0-4) m 2.67 τf 0.0; revolute(0-5) m 2.67 τf 0.0; revolute(1-2) m 5.51 τf 0.0; revolute(2-3) m 2.67 τf 0.0
+   meshes engaged at some point: 3; engagements 1,0,0,3,4,0; max phase err 0.0098 teeth; peak output α 3451 rad/s²; max(E−E0−W_drive) 0.27 (W_drive 247.3); guardRemoved 90.17
+   t 0.25 sun 4.97 arm 7.99° A 4.74 B 0.00 | E−E0−W -13.5
+   t 0.50 sun 5.00 arm 7.94° A 5.09 B 0.00 | E−E0−W -13.2
+   t 0.75 sun 5.00 arm 7.60° A 5.12 B 0.00 | E−E0−W -13.2
+   t 1.00 sun 5.00 arm 7.27° A 4.31 B 0.00 | E−E0−W -13.2
+   t 1.25 sun -5.01 arm -7.81° A 0.53 B -4.68 | E−E0−W -47.1
+   t 1.50 sun -5.00 arm -7.86° A 0.54 B -5.12 | E−E0−W -46.5
+   t 1.75 sun -5.00 arm -7.43° A 0.54 B -5.15 | E−E0−W -46.5
+   t 2.00 sun -5.00 arm -7.03° A 0.54 B -4.35 | E−E0−W -46.5
+   t 2.25 sun 4.97 arm 6.18° A 7.20 B -0.43 | E−E0−W -78.5
+   t 2.50 sun 5.00 arm -1.45° A 7.58 B -0.44 | E−E0−W -81.6
+   t 2.75 sun 4.99 arm -1.37° A 7.52 B 4.77 | E−E0−W -97.5
+   t 3.00 sun 5.00 arm 3.12° A 7.48 B 5.09 | E−E0−W -97.5
+   t 3.25 sun -4.96 arm -8.19° A 7.51 B -4.69 | E−E0−W -146.6
+   t 3.50 sun -5.00 arm 3.43° A 5.98 B -8.55 | E−E0−W -147.8
+   t 3.75 sun -5.01 arm -4.93° A -3.25 B -4.83 | E−E0−W -219.3
+   t 4.00 sun -5.01 arm -7.12° A -3.29 B -3.80 | E−E0−W -218.2
+   0.002 ENG sun-planet snap 0.000 teeth gap 0.000
+   0.123 ENG planet-A snap -0.394 teeth gap 0.124
+   1.079 rel planet-A gap 0.252
+   1.108 ENG planet-B snap 0.344 teeth gap 0.119
+   2.077 rel planet-B gap 0.254
+   2.104 ENG planet-A snap 0.459 teeth gap 0.124
+   2.458 rel planet-A gap 0.251
+   2.604 ENG planet-B snap -0.302 teeth gap 0.124
+   2.865 rel planet-B gap 0.250
+   3.160 ENG planet-B snap -0.430 teeth gap 0.124
+   3.425 rel planet-B gap 0.251
+   3.508 ENG planet-A snap 0.384 teeth gap 0.124
+   3.606 rel planet-A gap 0.250
+   3.669 ENG planet-B snap -0.239 teeth gap 0.125
+== shaft mu 0.05 k 1 w 5 {}: joints revolute(0-1) m 9.87 τf 187.6; revolute(0-4) m 2.67 τf 50.8; revolute(0-5) m 2.67 τf 50.8; revolute(1-2) m 5.51 τf 104.8; revolute(2-3) m 2.67 τf 50.8
+   meshes engaged at some point: 3; engagements 1,0,0,2,2,0; max phase err 0.0058 teeth; peak output α 1557 rad/s²; max(E−E0−W_drive) -0.30 (W_drive 5284.7); guardRemoved 9.99
+   t 0.25 sun 3.50 arm 8.21° A 3.46 B 0.00 | E−E0−W -304.5
+   t 0.50 sun 3.48 arm 8.21° A 3.46 B 0.00 | E−E0−W -646.1
+   t 0.75 sun 3.44 arm 8.21° A 3.42 B 0.00 | E−E0−W -987.8
+   t 1.00 sun 3.47 arm 8.19° A 2.61 B 0.00 | E−E0−W -1328.7
+   t 1.25 sun -3.62 arm -8.21° A 0.00 B -3.15 | E−E0−W -1623.5
+   t 1.50 sun -3.47 arm -8.21° A 0.00 B -3.46 | E−E0−W -1962.5
+   t 1.75 sun -3.48 arm -8.21° A 0.00 B -3.46 | E−E0−W -2304.3
+   t 2.00 sun -3.46 arm -8.19° A 0.00 B -2.61 | E−E0−W -2645.3
+   t 2.25 sun 3.44 arm 8.21° A 3.33 B 0.00 | E−E0−W -2936.5
+   t 2.50 sun 3.47 arm 8.21° A 3.46 B 0.00 | E−E0−W -3277.3
+   t 2.75 sun 3.47 arm 8.21° A 3.46 B 0.00 | E−E0−W -3619.0
+   t 3.00 sun 3.46 arm 8.19° A 2.61 B 0.00 | E−E0−W -3960.1
+   t 3.25 sun -3.23 arm -8.21° A 0.00 B -3.31 | E−E0−W -4251.2
+   t 3.50 sun -3.47 arm -8.21° A 0.00 B -3.45 | E−E0−W -4592.3
+   t 3.75 sun -3.45 arm -8.21° A 0.00 B -3.45 | E−E0−W -4934.0
+   t 4.00 sun -3.44 arm -8.19° A 0.00 B -2.61 | E−E0−W -5275.1
+   0.002 ENG sun-planet snap 0.000 teeth gap 0.000
+   0.094 ENG planet-A snap -0.048 teeth gap 0.122
+   1.121 rel planet-A gap 0.252
+   1.158 ENG planet-B snap 0.243 teeth gap 0.120
+   2.121 rel planet-B gap 0.252
+   2.158 ENG planet-A snap 0.035 teeth gap 0.119
+   3.121 rel planet-A gap 0.252
+   3.158 ENG planet-B snap -0.093 teeth gap 0.119
+== shaft mu 0.2 k 1 w 5 {}: joints revolute(0-1) m 9.87 τf 750.4; revolute(0-4) m 2.67 τf 203.1; revolute(0-5) m 2.67 τf 203.1; revolute(1-2) m 5.51 τf 419.0; revolute(2-3) m 2.67 τf 203.1
+   meshes engaged at some point: 2; engagements 1,0,0,1,0,0; max phase err 0.0060 teeth; peak output α 942 rad/s²; max(E−E0−W_drive) -0.05 (W_drive 298.5); guardRemoved 72.62
+   t 0.25 sun 0.00 arm 8.09° A 0.00 B 0.00 | E−E0−W -148.2
+   t 0.50 sun 0.00 arm 8.22° A 0.00 B 0.00 | E−E0−W -157.2
+   t 0.75 sun 0.00 arm 8.22° A 0.00 B 0.00 | E−E0−W -157.2
+   t 1.00 sun 0.00 arm 8.21° A 0.00 B 0.00 | E−E0−W -157.3
+   t 1.25 sun 0.00 arm 8.05° A 0.00 B 0.00 | E−E0−W -169.0
+   t 1.50 sun 0.00 arm 7.88° A 0.00 B 0.00 | E−E0−W -180.8
+   t 1.75 sun 0.00 arm 7.72° A 0.00 B 0.00 | E−E0−W -192.6
+   t 2.00 sun 0.00 arm 7.55° A 0.00 B 0.00 | E−E0−W -204.4
+   t 2.25 sun 0.00 arm 7.72° A 0.00 B 0.00 | E−E0−W -216.3
+   t 2.50 sun 0.00 arm 7.89° A 0.00 B 0.00 | E−E0−W -228.1
+   t 2.75 sun 0.00 arm 8.05° A 0.00 B 0.00 | E−E0−W -239.9
+   t 3.00 sun 0.00 arm 8.21° A 0.00 B 0.00 | E−E0−W -251.3
+   t 3.25 sun 0.00 arm 8.05° A 0.00 B 0.00 | E−E0−W -263.1
+   t 3.50 sun 0.00 arm 7.88° A 0.00 B 0.00 | E−E0−W -274.8
+   t 3.75 sun 0.00 arm 7.71° A 0.00 B 0.00 | E−E0−W -286.7
+   t 4.00 sun 0.00 arm 7.55° A 0.00 B 0.00 | E−E0−W -298.5
+   0.002 ENG sun-planet snap 0.000 teeth gap 0.000
+   0.081 ENG planet-A snap 0.331 teeth gap 0.125
+== frame mu 0 k 1 w 5 {}: joints revolute(0-1) m 2.67 τf 0.0; revolute(0-2) m 5.51 τf 0.0; revolute(0-4) m 2.67 τf 0.0; revolute(0-5) m 2.67 τf 0.0; revolute(2-3) m 2.67 τf 0.0
+   meshes engaged at some point: 3; engagements 1,0,0,2,2,0; max phase err 0.0068 teeth; peak output α 1850 rad/s²; max(E−E0−W_drive) 0.25 (W_drive 138.1); guardRemoved 10.76
+   t 0.25 sun 4.94 arm 7.85° A 4.84 B 0.00 | E−E0−W -14.0
+   t 0.50 sun 5.00 arm 8.09° A 5.06 B 0.00 | E−E0−W -14.0
+   t 0.75 sun 5.00 arm 7.81° A 5.08 B 0.00 | E−E0−W -14.0
+   t 1.00 sun 5.00 arm 7.54° A 4.32 B 0.00 | E−E0−W -14.0
+   t 1.25 sun -5.01 arm -8.17° A 0.50 B -4.53 | E−E0−W -48.2
+   t 1.50 sun -5.00 arm -8.18° A 0.51 B -4.99 | E−E0−W -47.8
+   t 1.75 sun -5.00 arm -8.16° A 0.51 B -4.99 | E−E0−W -47.8
+   t 2.00 sun -5.00 arm -8.11° A 0.51 B -4.22 | E−E0−W -47.8
+   t 2.25 sun 5.00 arm 8.07° A 4.60 B -0.44 | E−E0−W -79.5
+   t 2.50 sun 5.00 arm 7.96° A 5.08 B -0.45 | E−E0−W -79.0
+   t 2.75 sun 5.00 arm 7.67° A 5.10 B -0.45 | E−E0−W -79.0
+   t 3.00 sun 5.00 arm 7.39° A 4.33 B -0.45 | E−E0−W -79.0
+   t 3.25 sun -4.94 arm -8.15° A 0.52 B -5.05 | E−E0−W -110.9
+   t 3.50 sun -5.00 arm -7.73° A 0.52 B -5.13 | E−E0−W -110.4
+   t 3.75 sun -5.00 arm -7.34° A 0.52 B -5.16 | E−E0−W -110.4
+   t 4.00 sun -5.00 arm -6.98° A 0.52 B -4.38 | E−E0−W -110.4
+   0.002 ENG sun-planet snap 0.000 teeth gap 0.000
+   0.123 ENG planet-A snap -0.397 teeth gap 0.125
+   1.083 rel planet-A gap 0.256
+   1.110 ENG planet-B snap 0.286 teeth gap 0.122
+   2.090 rel planet-B gap 0.257
+   2.117 ENG planet-A snap -0.263 teeth gap 0.122
+   3.081 rel planet-A gap 0.254
+   3.108 ENG planet-B snap 0.126 teeth gap 0.125
+== frame mu 0.05 k 1 w 5 {}: joints revolute(0-1) m 2.67 τf 50.8; revolute(0-2) m 5.51 τf 104.8; revolute(0-4) m 2.67 τf 50.8; revolute(0-5) m 2.67 τf 50.8; revolute(2-3) m 2.67 τf 50.8
+   meshes engaged at some point: 3; engagements 1,0,0,1,2,0; max phase err 0.0052 teeth; peak output α 1939 rad/s²; max(E−E0−W_drive) -0.12 (W_drive 2406.4); guardRemoved 14.48
+   t 0.25 sun 4.57 arm 2.79° A 0.00 B 0.00 | E−E0−W -114.1
+   t 0.50 sun 4.57 arm 2.79° A 0.00 B 0.00 | E−E0−W -230.1
+   t 0.75 sun 4.57 arm 2.79° A 0.00 B 0.00 | E−E0−W -346.1
+   t 1.00 sun 4.57 arm 2.78° A 0.00 B 0.00 | E−E0−W -462.0
+   t 1.25 sun -3.97 arm -8.20° A 0.00 B -4.03 | E−E0−W -605.6
+   t 1.50 sun -4.37 arm -8.21° A 0.00 B -4.35 | E−E0−W -770.6
+   t 1.75 sun -4.38 arm -8.21° A 0.00 B -4.34 | E−E0−W -936.1
+   t 2.00 sun -4.33 arm -8.19° A 0.00 B -3.54 | E−E0−W -1101.7
+   t 2.25 sun 4.43 arm 8.17° A 4.73 B 0.00 | E−E0−W -1254.7
+   t 2.50 sun 4.36 arm 8.21° A 4.33 B 0.00 | E−E0−W -1421.0
+   t 2.75 sun 4.38 arm 8.21° A 4.34 B 0.00 | E−E0−W -1586.9
+   t 3.00 sun 4.36 arm 8.19° A 3.51 B 0.00 | E−E0−W -1752.5
+   t 3.25 sun -4.53 arm -6.95° A 0.00 B -4.60 | E−E0−W -1891.8
+   t 3.50 sun -4.35 arm -8.21° A 0.00 B -4.36 | E−E0−W -2057.3
+   t 3.75 sun -4.36 arm -8.21° A 0.00 B -4.36 | E−E0−W -2223.0
+   t 4.00 sun -4.39 arm -8.20° A 0.00 B -3.49 | E−E0−W -2388.5
+   0.002 ENG sun-planet snap 0.000 teeth gap 0.000
+   1.148 ENG planet-B snap -0.191 teeth gap 0.124
+   2.110 rel planet-B gap 0.256
+   2.144 ENG planet-A snap 0.267 teeth gap 0.125
+   3.110 rel planet-A gap 0.255
+   3.146 ENG planet-B snap -0.155 teeth gap 0.120
+== frame mu 0.2 k 1 w 5 {}: joints revolute(0-1) m 2.67 τf 203.1; revolute(0-2) m 5.51 τf 419.0; revolute(0-4) m 2.67 τf 203.1; revolute(0-5) m 2.67 τf 203.1; revolute(2-3) m 2.67 τf 203.1
+   meshes engaged at some point: 1; engagements 1,0,0,0,0,0; max phase err 1.32e-6 teeth; peak output α 0 rad/s²; max(E−E0−W_drive) -0.32 (W_drive 5282.8); guardRemoved 6.33
+   t 0.25 sun 3.28 arm 0.21° A 0.00 B 0.00 | E−E0−W -321.2
+   t 0.50 sun 3.28 arm 0.21° A 0.00 B 0.00 | E−E0−W -654.2
+   t 0.75 sun 3.27 arm 0.21° A 0.00 B 0.00 | E−E0−W -987.3
+   t 1.00 sun 3.28 arm 0.20° A 0.00 B 0.00 | E−E0−W -1319.5
+   t 1.25 sun -3.28 arm -0.72° A 0.00 B 0.00 | E−E0−W -1641.5
+   t 1.50 sun -3.28 arm -0.72° A 0.00 B 0.00 | E−E0−W -1974.5
+   t 1.75 sun -3.27 arm -0.72° A 0.00 B 0.00 | E−E0−W -2307.6
+   t 2.00 sun -3.28 arm -0.71° A 0.00 B 0.00 | E−E0−W -2639.8
+   t 2.25 sun 3.28 arm 0.21° A 0.00 B 0.00 | E−E0−W -2961.8
+   t 2.50 sun 3.28 arm 0.21° A 0.00 B 0.00 | E−E0−W -3294.9
+   t 2.75 sun 3.27 arm 0.21° A 0.00 B 0.00 | E−E0−W -3627.9
+   t 3.00 sun 3.28 arm 0.20° A 0.00 B 0.00 | E−E0−W -3960.2
+   t 3.25 sun -3.28 arm -0.72° A 0.00 B 0.00 | E−E0−W -4282.1
+   t 3.50 sun -3.28 arm -0.72° A 0.00 B 0.00 | E−E0−W -4615.2
+   t 3.75 sun -3.28 arm -0.72° A 0.00 B 0.00 | E−E0−W -4948.2
+   t 4.00 sun -3.28 arm -0.71° A 0.00 B 0.00 | E−E0−W -5280.5
+   0.002 ENG sun-planet snap 0.000 teeth gap 0.000

@@ -12,6 +12,7 @@ import {
   CREASE_DEG,
   EPS,
   E_CONN,
+  E_FREE,
   H,
   R_BORE,
   R_RIDGE,
@@ -483,11 +484,38 @@ function zrim(s: Scope, r: number): Manifold {
   );
 }
 
+/** Least depth (studs) by which the drawn rim must reach into a male cell's rod, in the wheel's
+ *  plane, for the rod to count as joined to it without a web (below it the joint would be a sliver). */
+const MALE_REACH = 0.1;
+
 /**
- * Webs joining a rim to each hole cell of the part in its layer that rule 1 joins to it (the nominal
- * disc overlaps the cell) but whose barrel the drawn rim (radius r − RIM_INSET) does not reach: the
- * 2-D hull of a circle at the cell's centre and one inside the rim on the line to the hub, ±H thick.
- * The cell's bore is subtracted afterwards like every bore.
+ * Distance in the wheel's plane from the hub axis to the nearest point of a male cell's rod
+ * footprint: a circle of radius R_ROD for a rod parallel to the hub axis, else the rectangle the rod
+ * sweeps (±R_ROD across, ±(E_FREE − CHAMFER) along: the free-end extent less its chamfer, so a
+ * chamfered tip is never counted as a joint; a connected end only reaches further, so this errs
+ * toward bridging).
+ */
+function rodFootprintDist(h: Axis, c: Cell, du: number, dv: number): number {
+  if (c.axis === h) return Math.hypot(du, dv) - R_ROD;
+  // In-plane coordinates (u, v) of to2D(h): which of them runs along the rod?
+  const [au, av] = to2D(h, [c.axis === 0 ? 1 : 0, c.axis === 1 ? 1 : 0, c.axis === 2 ? 1 : 0]);
+  const along = E_FREE - CHAMFER;
+  const eu = au !== 0 ? along : R_ROD;
+  const ev = av !== 0 ? along : R_ROD;
+  return Math.hypot(Math.max(0, Math.abs(du) - eu), Math.max(0, Math.abs(dv) - ev));
+}
+
+/**
+ * Webs joining a rim to each cell of the part in its layer that rule 1 joins to it (the nominal
+ * disc overlaps the cell) but that the drawn rim (radius r − RIM_INSET) does not reach: a hole whose
+ * barrel the rim does not enter by 0.05, or a male (§4.2: a crank pin or axle built into the wheel's
+ * part) whose rod it does not enter by MALE_REACH. The web is the 2-D hull of a circle at the cell's
+ * centre (a boss round the bore or rod) and one inside the rim on the line to the hub, ±H thick,
+ * clipped to the nominal disc ∪ the cell's own square, so it never reaches outside the cell and
+ * the disc — space no other part may occupy (§2.6 rule 2). The hull and the clip region are convex
+ * and their pieces in the disc and in the square share the corner of the square nearest the hub,
+ * so the clipped web is still one piece joining the cell to the rim. A cell's bore is subtracted
+ * afterwards like every bore; a male's rod is united with the web like every positive.
  */
 function rimBridges(s: Scope, part: Part, w: Cell, origin: Vec3): Manifold[] {
   const h = w.axis;
@@ -495,19 +523,25 @@ function rimBridges(s: Scope, part: Part, w: Cell, origin: Vec3): Manifold[] {
   const R = r - RIM_INSET;
   const out: Manifold[] = [];
   const hub: [number, number, number] = [w.x, w.y, w.z];
+  const CS = getWasm().CrossSection;
+  let disc: CrossSection | null = null;
   for (const c of part.cells) {
-    if (c === w || !isHole(c.kind) || c[axKey(h)] !== w[axKey(h)]) continue;
+    if (c === w || c[axKey(h)] !== w[axKey(h)]) continue;
+    if (!isHole(c.kind) && !isMale(c.kind)) continue;
     if (!discOverlapsCell(hub, h, r, [c.x, c.y, c.z])) continue;
     const [du, dv] = to2D(h, [c.x - w.x, c.y - w.y, c.z - w.z]);
     const d = Math.hypot(du, dv);
-    if (d - H < R - 0.05) continue; // the rim reaches the barrel
-    const CS = getWasm().CrossSection;
+    if (isHole(c.kind) ? d - H < R - 0.05 : rodFootprintDist(h, c, du, dv) < R - MALE_REACH) continue; // the rim reaches it
     const BR = 0.36;
     const k = Math.max(0, R - 0.4) / d;
     const a = s.t(s.t(CS.circle(BR, SEGMENTS)).translate([du, dv]));
     const b = s.t(s.t(CS.circle(BR, SEGMENTS)).translate([du * k, dv * k]));
     const hull = s.t(CS.hull([a, b]));
-    out.push(place(s, s.t(extrudeCS(s, hull, 2 * H).translate([0, 0, -H])), h, localCenter(w, origin)));
+    // Clip: the nominal disc (inscribed polygon, so never beyond r) ∪ the cell's square.
+    disc ??= s.t(CS.circle(r, rimSegments(r)));
+    const sq = s.t(s.t(CS.square([1, 1], true)).translate([du, dv]));
+    const web = s.t(hull.intersect(s.t(disc.add(sq))));
+    out.push(place(s, s.t(extrudeCS(s, web, 2 * H).translate([0, 0, -H])), h, localCenter(w, origin)));
   }
   return out;
 }
@@ -661,8 +695,9 @@ function buildSolid(s: Scope, part: Part, fast = true, marks = true): Manifold |
   } else {
     const rimSolids = hubs.map((w) => place(s, zrim(s, w.rim), w.axis, localCenter(w, origin)));
     // Rule 1 (§2.6) joins every cell the *nominal* disc overlaps; the drawn rim is RIM_INSET smaller,
-    // so a hole near the rim's edge (e.g. (2, 3) of an r 3 wheel) would float beside it as a separate
-    // shell. Bridge each such cell to its rim with a short web (review finding; DEVIATIONS §4).
+    // so a hole or a male near the rim's edge (e.g. (2, 3) of an r 3 wheel, a crank pin at (2, 2) of
+    // an r 2.5 one) would float beside it as a separate shell. Bridge each such cell to its rim with a
+    // short web (review findings; DEVIATIONS §4).
     for (const w of hubs) rimSolids.push(...rimBridges(s, part, w, origin));
     const base = positives.length === 0 ? null : positives.length === 1 ? positives[0]! : s.t(M.union(positives));
     pos = s.t(M.union(base ? [base, ...rimSolids] : rimSolids));

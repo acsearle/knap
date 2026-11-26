@@ -1,0 +1,14 @@
+crank 1:5 unloaded mu 0 1 rev/s: input 1.961 rev of 2, max lag 0.254 rad, output/input -0.2000 (−0.2), phase 2.29e-6 teeth
+crank 1:5 unloaded mu 0.05 1 rev/s: input 1.961 rev of 2, max lag 0.255 rad, output/input -0.2000 (−0.2), phase 2.78e-6 teeth
+crank 1:5 unloaded mu 0.2 1 rev/s: input 1.960 rev of 2, max lag 0.257 rad, output/input -0.2000 (−0.2), phase 3.61e-6 teeth
+crank 1:5 + 7-arm mu 0 1 rev/s: input 0.441 rev of 2, max lag 9.797 rad, output/input -0.2000 (−0.2), phase 7.07e-5 teeth
+crank 1:5 + 7-arm mu 0.05 1 rev/s: input 0.441 rev of 2, max lag 9.797 rad, output/input -0.2000 (−0.2), phase 7.13e-5 teeth
+crank 1:5 + 7-arm mu 0.2 1 rev/s: input 0.441 rev of 2, max lag 9.795 rad, output/input -0.2000 (−0.2), phase 6.97e-5 teeth
+1:25 back-driven by a 2-hole arm, mu 0.05: arm torque 3215 vs friction reflected to the output 2424 → should fall; fell -1.2679 rad in 4 s; reached vertical at never
+1:25 back-driven by a 2-hole arm, mu 0.2: arm torque 3215 vs friction reflected to the output 9694 → should hold; fell -2.99e-8 rad in 4 s; reached vertical at never
+1:25 back-driven by a 3-hole arm, mu 0.05: arm torque 6190 vs friction reflected to the output 2440 → should fall; fell -1.8119 rad in 4 s; reached vertical at 1.192 s
+1:25 back-driven by a 3-hole arm, mu 0.2: arm torque 6190 vs friction reflected to the output 9758 → should hold; fell -1.21e-7 rad in 4 s; reached vertical at never
+1:25 back-driven by a 5-hole arm, mu 0.05: arm torque 15253 vs friction reflected to the output 2472 → should fall; fell -1.5935 rad in 4 s; reached vertical at 0.733 s
+1:25 back-driven by a 5-hole arm, mu 0.2: arm torque 15253 vs friction reflected to the output 9887 → should fall; fell -1.5453 rad in 4 s; reached vertical at never
+1:25 back-driven by a 7-hole arm, mu 0.05: arm torque 28467 vs friction reflected to the output 2504 → should fall; fell -1.5590 rad in 4 s; reached vertical at 0.650 s
+1:25 back-driven by a 7-hole arm, mu 0.2: arm torque 28467 vs friction reflected to the output 10016 → should fall; fell -1.8461 rad in 4 s; reached vertical at 0.698 s

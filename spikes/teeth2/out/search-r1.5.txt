@@ -1,0 +1,90 @@
+end    l1 pivot (0,3) β0 rest -69.5°  teeth +:33.6 skip −:0.796 skip  smooth +:27.1 skip −:0.898 tunnel  <== RATCHET
+end    l1 pivot (0,3) β180 rest 249°  teeth +:0.796 skip −:34.4 skip  smooth +:0.909 tunnel −:29.4 skip  <== RATCHET
+end    l2 pivot (0,3) β0 rest -46.8°  teeth +:1.32 tunnel −:0.931 tunnel  smooth +:0.787 tunnel −:0.835 tunnel
+end    l2 pivot (0,3) β180 rest 227°  teeth +:0.931 tunnel −:1.32 tunnel  smooth +:0.835 tunnel −:0.777 tunnel
+end    l2 pivot (0,4) β0 rest -80.1°  teeth +:16.5 skip −:0.604 tunnel  smooth +:18.9 skip −:0.604 tunnel  <== RATCHET
+end    l2 pivot (0,4) β180 rest 260°  teeth +:0.604 tunnel −:16.9 skip  smooth +:0.604 tunnel −:21.3 skip  <== RATCHET
+end    l2 pivot (1,3) β0 rest -69.9°  teeth +:1.82 tunnel −:0.741 tunnel  smooth +:0.690 tunnel −:0.576 tunnel
+end    l2 pivot (1,3) β180 rest 213°  teeth +:1.13 tunnel −:2.21 tunnel  smooth +:0.898 tunnel −:0.931 tunnel
+end    l2 pivot (2,2) β0 rest -87.6°  teeth +:0.412 tunnel −:0.464 tunnel  smooth +:0.412 tunnel −:0.459 tunnel
+end    l2 pivot (2,3) β180 rest 207°  teeth +:0.777 tunnel −:36.1 skip  smooth +:0.741 tunnel −:1.60 tunnel  <== RATCHET
+end    l3 pivot (0,3) β0 rest -47.2°  teeth +:0.919 tunnel −:1.02 tunnel  smooth +:0.887 tunnel −:0.942 tunnel
+end    l3 pivot (0,3) β180 rest 227°  teeth +:1.00 tunnel −:0.919 tunnel  smooth +:0.942 tunnel −:0.887 tunnel
+end    l3 pivot (0,4) β0 rest -60.6°  teeth +:0.898 tunnel −:0.759 tunnel  smooth +:0.698 tunnel −:0.542 tunnel
+end    l3 pivot (0,4) β180 rest 241°  teeth +:0.759 tunnel −:0.898 tunnel  smooth +:0.542 tunnel −:0.698 tunnel
+end    l3 pivot (0,5) β0 rest -83.6°  teeth +:13.2 skip −:0.442 tunnel  smooth +:14.7 skip −:0.432 tunnel  <== RATCHET
+end    l3 pivot (0,5) β180 rest 264°  teeth +:0.437 tunnel −:13.7 skip  smooth +:0.383 tunnel −:20.0 skip  <== RATCHET
+end    l3 pivot (1,3) β0 rest -67.9°  teeth +:0.612 tunnel −:0.590 tunnel  smooth +:0.626 tunnel −:0.626 tunnel
+end    l3 pivot (1,3) β180 rest 210°  teeth +:0.942 tunnel −:0.976 tunnel  smooth +:0.856 tunnel −:0.856 tunnel
+end    l3 pivot (1,4) β0 rest -75.4°  teeth +:1.10 tunnel −:0.542 tunnel  smooth +:0.493 tunnel −:0.427 tunnel
+end    l3 pivot (1,4) β180 rest 228°  teeth +:0.909 tunnel −:2.18 tunnel  smooth +:0.576 tunnel −:0.856 tunnel
+end    l3 pivot (2,2) β0 rest -87.6°  teeth +:0.312 tunnel −:0.365 tunnel  smooth +:0.324 tunnel −:0.370 tunnel
+end    l3 pivot (2,3) β0 rest -88.4°  teeth +:0.305 tunnel −:0.328 tunnel  smooth +:0.305 tunnel −:0.332 tunnel
+end    l3 pivot (2,3) β180 rest 202°  teeth +:1.02 tunnel −:0.909 tunnel  smooth +:0.876 tunnel −:0.876 tunnel
+end    l3 pivot (2,4) β180 rest 221°  teeth +:0.715 tunnel −:34.4 tunnel  smooth +:0.723 tunnel −:0.887 tunnel  <== RATCHET
+end    l3 pivot (3,3) β180 rest 198°  teeth +:0.796 tunnel −:2.64 tunnel  smooth +:0.768 tunnel −:1.04 tunnel
+end    l3 pivot (3,4) β0 rest -121°  teeth +:0.298 free −:0.298 free  smooth +:- nosettle −:- nosettle
+end    l3 pivot (3,4) β180 rest 225°  teeth +:0.845 tunnel −:14.9 skip  smooth +:0.866 tunnel −:18.9 skip
+end    l3 pivot (4,3) β180 rest 208°  teeth +:1.00 tunnel −:15.6 skip  smooth +:0.856 tunnel −:15.6 skip
+corner l1 pivot (0,3) β0 rest -62.2°  teeth +:30.5 skip −:1.04 skip  smooth +:1.64 tunnel −:0.796 tunnel  <== RATCHET
+corner l1 pivot (0,3) β180 rest 242°  teeth +:1.05 skip −:33.2 skip  smooth +:0.796 tunnel −:1.64 tunnel  <== RATCHET
+corner l1 pivot (2,2) β0 rest -90.0°  teeth +:0.681 tunnel −:0.562 tunnel  smooth +:0.562 tunnel −:0.562 tunnel
+corner l2 pivot (0,3) β0 rest -47.2°  teeth +:0.816 tunnel −:0.825 tunnel  smooth +:0.796 tunnel −:0.825 tunnel
+corner l2 pivot (0,3) β180 rest 227°  teeth +:0.825 tunnel −:0.816 tunnel  smooth +:0.825 tunnel −:0.787 tunnel
+corner l2 pivot (0,4) β0 rest -73.2°  teeth +:22.9 skip −:0.787 skip  smooth +:29.4 skip −:0.542 tunnel  <== RATCHET
+corner l2 pivot (0,4) β180 rest 253°  teeth +:0.787 skip −:25.2 skip  smooth +:0.542 tunnel −:29.8 skip  <== RATCHET
+corner l2 pivot (1,3) β0 rest -68.2°  teeth +:43.7 tunnel −:0.576 tunnel  smooth +:0.604 tunnel −:0.604 tunnel  <== RATCHET
+corner l2 pivot (1,3) β180 rest 211°  teeth +:0.931 tunnel −:64.2 tunnel  smooth +:0.796 tunnel −:0.816 tunnel  <== RATCHET
+corner l2 pivot (2,2) β0 rest -87.6°  teeth +:0.379 tunnel −:0.427 tunnel  smooth +:0.379 tunnel −:0.427 tunnel
+corner l2 pivot (2,3) β180 rest 205°  teeth +:1.20 tunnel −:73.2 tunnel  smooth +:0.750 tunnel −:1.05 tunnel  <== RATCHET
+corner l3 pivot (0,3) β0 rest -47.4°  teeth +:0.976 tunnel −:3.61 tunnel  smooth +:0.909 tunnel −:0.856 tunnel
+corner l3 pivot (0,3) β180 rest 227°  teeth +:3.65 tunnel −:1.02 tunnel  smooth +:0.856 tunnel −:0.909 tunnel
+corner l3 pivot (0,4) β0 rest -58.7°  teeth +:33.2 tunnel −:0.569 tunnel  smooth +:0.583 tunnel −:0.505 tunnel  <== RATCHET
+corner l3 pivot (0,4) β180 rest 239°  teeth +:0.569 tunnel −:28.4 tunnel  smooth +:0.505 tunnel −:0.583 tunnel  <== RATCHET
+corner l3 pivot (0,5) β0 rest -84.7°  teeth +:28.0 skip −:0.487 skip  smooth +:22.3 skip −:0.459 tunnel  <== RATCHET
+corner l3 pivot (0,5) β180 rest 265°  teeth +:0.481 skip −:30.9 skip  smooth +:0.459 tunnel −:22.6 skip  <== RATCHET
+corner l3 pivot (1,3) β0 rest -68.2°  teeth +:5.76 tunnel −:5.23 tunnel  smooth +:0.619 tunnel −:0.604 tunnel
+corner l3 pivot (1,3) β180 rest 210°  teeth +:0.942 tunnel −:3.57 tunnel  smooth +:0.856 tunnel −:0.866 tunnel
+corner l3 pivot (1,4) β0 rest -73.7°  teeth +:34.0 tunnel −:0.432 tunnel  smooth +:0.459 tunnel −:0.388 tunnel  <== RATCHET
+corner l3 pivot (1,4) β180 rest 226°  teeth +:0.673 tunnel −:44.8 tunnel  smooth +:0.657 tunnel −:0.583 tunnel  <== RATCHET
+corner l3 pivot (1,5) β0 rest -95.1°  teeth +:0.499 tunnel −:0.487 skip  smooth +:0.976 skip −:0.284 free
+corner l3 pivot (1,5) β180 rest 250°  teeth +:0.493 skip −:0.249 free  smooth +:0.706 tunnel −:1.29 skip
+corner l3 pivot (2,2) β0 rest -87.6°  teeth +:0.305 tunnel −:0.392 tunnel  smooth +:0.301 tunnel −:0.340 tunnel
+corner l3 pivot (2,3) β0 rest -88.4°  teeth +:0.284 free −:0.305 tunnel  smooth +:0.284 free −:0.309 tunnel
+corner l3 pivot (2,3) β180 rest 202°  teeth +:0.825 tunnel −:0.835 tunnel  smooth +:0.825 tunnel −:0.816 tunnel
+corner l3 pivot (2,4) β0 rest -96.0°  teeth +:69.8 tunnel −:0.264 free  smooth +:- nosettle −:- nosettle  <== RATCHET
+corner l3 pivot (2,4) β180 rest 219°  teeth +:1.01 tunnel −:69.0 tunnel  smooth +:0.569 tunnel −:0.909 tunnel  <== RATCHET
+corner l3 pivot (3,3) β0 rest -107°  teeth +:0.280 free −:0.280 free  smooth +:- nosettle −:- nosettle
+corner l3 pivot (3,3) β180 rest 196°  teeth +:1.04 tunnel −:15.0 tunnel  smooth +:0.759 tunnel −:0.698 tunnel
+corner l3 pivot (3,4) β0 rest -118°  teeth +:0.294 free −:0.264 free  smooth +:- nosettle −:- nosettle
+corner l3 pivot (3,4) β180 rest 219°  teeth +:1.01 skip −:24.6 skip  smooth +:0.777 tunnel −:22.9 skip  <== RATCHET
+corner l3 pivot (4,3) β180 rest 203°  teeth +:1.30 skip −:24.0 skip  smooth +:0.876 tunnel −:18.7 skip
+pinx   l1 pivot (0,3) β0 rest -69.4°  teeth +:38.8 skip −:1.04 skip  smooth +:1.84 tunnel −:0.787 tunnel  <== RATCHET
+pinx   l1 pivot (0,3) β180 rest 249°  teeth +:1.04 skip −:42.2 skip  smooth +:0.787 tunnel −:1.84 tunnel  <== RATCHET
+pinx   l2 pivot (0,3) β0 rest -51.8°  teeth +:55.6 tunnel −:0.750 tunnel  smooth +:0.690 tunnel −:0.657 tunnel  <== RATCHET
+pinx   l2 pivot (0,3) β180 rest 232°  teeth +:0.750 tunnel −:46.4 tunnel  smooth +:0.657 tunnel −:0.690 tunnel  <== RATCHET
+pinx   l2 pivot (0,4) β0 rest -81.4°  teeth +:50.5 skip −:0.562 skip  smooth +:20.0 skip −:0.597 tunnel  <== RATCHET
+pinx   l2 pivot (0,4) β180 rest 261°  teeth +:0.562 skip −:53.6 skip  smooth +:0.597 tunnel −:21.0 skip  <== RATCHET
+pinx   l2 pivot (1,3) β0 rest -71.2°  teeth +:71.5 skip −:0.562 tunnel  smooth +:0.590 tunnel −:0.536 tunnel  <== RATCHET
+pinx   l2 pivot (1,3) β180 rest 215°  teeth +:0.887 tunnel −:97.6 skip  smooth +:0.806 tunnel −:0.741 tunnel  <== RATCHET
+pinx   l2 pivot (2,3) β180 rest 211°  teeth +:1.17 skip −:101 tunnel  smooth +:0.723 tunnel −:1.01 tunnel  <== RATCHET
+pinx   l3 pivot (0,3) β0 rest -46.2°  teeth +:0.887 tunnel −:2.87 tunnel  smooth +:0.876 tunnel −:0.806 tunnel
+pinx   l3 pivot (0,3) β180 rest 226°  teeth +:3.01 tunnel −:0.866 tunnel  smooth +:0.825 tunnel −:0.876 tunnel
+pinx   l3 pivot (0,4) β0 rest -62.7°  teeth +:101 tunnel −:0.619 tunnel  smooth +:0.562 tunnel −:0.569 tunnel  <== RATCHET
+pinx   l3 pivot (0,4) β180 rest 243°  teeth +:0.626 tunnel −:80.6 tunnel  smooth +:0.576 tunnel −:0.562 tunnel  <== RATCHET
+pinx   l3 pivot (0,5) β0 rest -83.5°  teeth +:38.8 skip −:0.417 skip  smooth +:21.8 skip −:0.417 tunnel  <== RATCHET
+pinx   l3 pivot (0,5) β180 rest 264°  teeth +:0.417 skip −:42.7 skip  smooth +:0.417 tunnel −:24.6 skip  <== RATCHET
+pinx   l3 pivot (1,3) β0 rest -67.2°  teeth +:6.12 tunnel −:0.549 tunnel  smooth +:0.597 tunnel −:0.612 tunnel
+pinx   l3 pivot (1,3) β180 rest 211°  teeth +:0.919 tunnel −:13.2 tunnel  smooth +:0.825 tunnel −:0.816 tunnel
+pinx   l3 pivot (1,4) β0 rest -77.5°  teeth +:61.9 tunnel −:0.464 tunnel  smooth +:0.448 tunnel −:0.448 tunnel  <== RATCHET
+pinx   l3 pivot (1,4) β180 rest 229°  teeth +:0.732 tunnel −:79.6 tunnel  smooth +:0.634 tunnel −:0.569 tunnel  <== RATCHET
+pinx   l3 pivot (1,5) β0 rest -99.5°  teeth +:1.62 skip −:1.05 skip  smooth +:2.29 skip −:0.312 skip
+pinx   l3 pivot (1,5) β180 rest 251°  teeth +:0.556 skip −:1.06 skip  smooth +:0.556 tunnel −:2.08 skip
+pinx   l3 pivot (2,2) β0 rest -87.6°  teeth +:0.320 tunnel −:0.407 tunnel  smooth +:0.324 tunnel −:0.379 tunnel
+pinx   l3 pivot (2,3) β180 rest 205°  teeth +:1.27 tunnel −:93.1 tunnel  smooth +:0.706 tunnel −:1.20 tunnel  <== RATCHET
+pinx   l3 pivot (2,4) β180 rest 222°  teeth +:0.988 tunnel −:83.5 tunnel  smooth +:0.634 tunnel −:0.642 tunnel  <== RATCHET
+pinx   l3 pivot (3,3) β0 rest -111°  teeth +:0.316 skip −:0.316 skip  smooth +:- nosettle −:- nosettle
+pinx   l3 pivot (3,3) β180 rest 200°  teeth +:1.07 tunnel −:69.0 tunnel  smooth +:0.732 tunnel −:0.673 tunnel  <== RATCHET
+pinx   l3 pivot (3,4) β180 rest 223°  teeth +:1.00 skip −:34.0 skip  smooth +:0.750 tunnel −:20.3 skip  <== RATCHET
+pinx   l3 pivot (4,3) β180 rest 205°  teeth +:1.00 skip −:30.5 skip  smooth +:0.835 tunnel −:21.3 skip  <== RATCHET
+r 1.5: 89 resting candidates, 1100 simulations, 327 cpu-s

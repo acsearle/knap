@@ -1,0 +1,752 @@
+{
+ "train-home": {
+  "gears": [
+   {
+    "part": 1,
+    "N": 40,
+    "tri": 2400,
+    "ms": 31.5,
+    "closed": true
+   },
+   {
+    "part": 2,
+    "N": 8,
+    "tri": 608,
+    "ms": 5.9,
+    "closed": true
+   },
+   {
+    "part": 3,
+    "N": 24,
+    "tri": 1504,
+    "ms": 9.4,
+    "closed": true
+   }
+  ],
+  "vp": {
+   "parts": 11,
+   "geometries": 5,
+   "renders": 2,
+   "lastRenderMs": 0.6999999284744263,
+   "supersample": 2,
+   "shadowRenders": 0
+  }
+ },
+ "train-home-dpr2": {
+  "gears": [
+   {
+    "part": 1,
+    "N": 40,
+    "tri": 2400,
+    "ms": 32.4,
+    "closed": true
+   },
+   {
+    "part": 2,
+    "N": 8,
+    "tri": 608,
+    "ms": 5.7,
+    "closed": true
+   },
+   {
+    "part": 3,
+    "N": 24,
+    "tri": 1504,
+    "ms": 9.6,
+    "closed": true
+   }
+  ],
+  "vp": {
+   "parts": 11,
+   "geometries": 5,
+   "renders": 2,
+   "lastRenderMs": 0.6000000238418579,
+   "supersample": 2,
+   "shadowRenders": 0
+  }
+ },
+ "train-far": {
+  "gears": [
+   {
+    "part": 1,
+    "N": 40,
+    "tri": 2400,
+    "ms": 32.5,
+    "closed": true
+   },
+   {
+    "part": 2,
+    "N": 8,
+    "tri": 608,
+    "ms": 5.7,
+    "closed": true
+   },
+   {
+    "part": 3,
+    "N": 24,
+    "tri": 1504,
+    "ms": 9.4,
+    "closed": true
+   }
+  ],
+  "vp": {
+   "parts": 11,
+   "geometries": 5,
+   "renders": 2,
+   "lastRenderMs": 0.7000000476837158,
+   "supersample": 2,
+   "shadowRenders": 0
+  }
+ },
+ "train-home-band": {
+  "gears": [
+   {
+    "part": 1,
+    "N": 40,
+    "tri": 2400,
+    "ms": 31.2,
+    "closed": true
+   },
+   {
+    "part": 2,
+    "N": 8,
+    "tri": 608,
+    "ms": 5.7,
+    "closed": true
+   },
+   {
+    "part": 3,
+    "N": 24,
+    "tri": 1504,
+    "ms": 9.4,
+    "closed": true
+   }
+  ],
+  "vp": {
+   "parts": 11,
+   "geometries": 5,
+   "renders": 2,
+   "lastRenderMs": 0.6000000238418579,
+   "supersample": 2,
+   "shadowRenders": 0
+  }
+ },
+ "train-home-band-nofb": {
+  "gears": [
+   {
+    "part": 1,
+    "N": 40,
+    "tri": 2400,
+    "ms": 31.3,
+    "closed": true
+   },
+   {
+    "part": 2,
+    "N": 8,
+    "tri": 608,
+    "ms": 5.7,
+    "closed": true
+   },
+   {
+    "part": 3,
+    "N": 24,
+    "tri": 1504,
+    "ms": 9.4,
+    "closed": true
+   }
+  ],
+  "vp": {
+   "parts": 11,
+   "geometries": 5,
+   "renders": 2,
+   "lastRenderMs": 0.6999999284744263,
+   "supersample": 2,
+   "shadowRenders": 0
+  }
+ },
+ "train-home-flat-nofb": {
+  "gears": [
+   {
+    "part": 1,
+    "N": 40,
+    "tri": 2400,
+    "ms": 31.4,
+    "closed": true
+   },
+   {
+    "part": 2,
+    "N": 8,
+    "tri": 608,
+    "ms": 5.6,
+    "closed": true
+   },
+   {
+    "part": 3,
+    "N": 24,
+    "tri": 1504,
+    "ms": 9.4,
+    "closed": true
+   }
+  ],
+  "vp": {
+   "parts": 11,
+   "geometries": 5,
+   "renders": 2,
+   "lastRenderMs": 0.6999999284744263,
+   "supersample": 2,
+   "shadowRenders": 0
+  }
+ },
+ "train-home-sine": {
+  "gears": [
+   {
+    "part": 1,
+    "N": 40,
+    "tri": 4000,
+    "ms": 39.3,
+    "closed": true
+   },
+   {
+    "part": 2,
+    "N": 8,
+    "tri": 928,
+    "ms": 7.7,
+    "closed": true
+   },
+   {
+    "part": 3,
+    "N": 24,
+    "tri": 2464,
+    "ms": 11.9,
+    "closed": true
+   }
+  ],
+  "vp": {
+   "parts": 11,
+   "geometries": 5,
+   "renders": 2,
+   "lastRenderMs": 0.8999999761581421,
+   "supersample": 2,
+   "shadowRenders": 0
+  }
+ },
+ "train-home-trap": {
+  "gears": [
+   {
+    "part": 1,
+    "N": 40,
+    "tri": 800,
+    "ms": 18.1,
+    "closed": true
+   },
+   {
+    "part": 2,
+    "N": 8,
+    "tri": 256,
+    "ms": 3.3,
+    "closed": true
+   },
+   {
+    "part": 3,
+    "N": 24,
+    "tri": 544,
+    "ms": 5.2,
+    "closed": true
+   }
+  ],
+  "vp": {
+   "parts": 11,
+   "geometries": 5,
+   "renders": 2,
+   "lastRenderMs": 0.6000000238418579,
+   "supersample": 2,
+   "shadowRenders": 0
+  }
+ },
+ "train-home-draw20": {
+  "gears": [
+   {
+    "part": 1,
+    "N": 20,
+    "tri": 1280,
+    "ms": 20.9,
+    "closed": true
+   },
+   {
+    "part": 2,
+    "N": 4,
+    "tri": 290,
+    "ms": 3.8,
+    "closed": true
+   },
+   {
+    "part": 3,
+    "N": 12,
+    "tri": 832,
+    "ms": 7.9,
+    "closed": true
+   }
+  ],
+  "vp": {
+   "parts": 11,
+   "geometries": 5,
+   "renders": 2,
+   "lastRenderMs": 0.8999999761581421,
+   "supersample": 2,
+   "shadowRenders": 0
+  }
+ },
+ "train-home-ch": {
+  "gears": [
+   {
+    "part": 1,
+    "N": 40,
+    "tri": 3232,
+    "ms": 50.3,
+    "closed": true
+   },
+   {
+    "part": 2,
+    "N": 8,
+    "tri": 848,
+    "ms": 9.4,
+    "closed": true
+   },
+   {
+    "part": 3,
+    "N": 24,
+    "tri": 2000,
+    "ms": 17.1,
+    "closed": true
+   }
+  ],
+  "vp": {
+   "parts": 11,
+   "geometries": 5,
+   "renders": 2,
+   "lastRenderMs": 0.7000000476837158,
+   "supersample": 2,
+   "shadowRenders": 0
+  }
+ },
+ "train-home-mark-holes": {
+  "gears": [
+   {
+    "part": 1,
+    "N": 40,
+    "tri": 3250,
+    "ms": 52.7,
+    "closed": true
+   },
+   {
+    "part": 2,
+    "N": 8,
+    "tri": 608,
+    "ms": 5.4,
+    "closed": true
+   },
+   {
+    "part": 3,
+    "N": 24,
+    "tri": 2320,
+    "ms": 20.3,
+    "closed": true
+   }
+  ],
+  "vp": {
+   "parts": 11,
+   "geometries": 5,
+   "renders": 2,
+   "lastRenderMs": 0.6999999284744263,
+   "supersample": 2,
+   "shadowRenders": 0
+  }
+ },
+ "train-front": {
+  "gears": [
+   {
+    "part": 1,
+    "N": 40,
+    "tri": 3250,
+    "ms": 52.7,
+    "closed": true
+   },
+   {
+    "part": 2,
+    "N": 8,
+    "tri": 608,
+    "ms": 5.5,
+    "closed": true
+   },
+   {
+    "part": 3,
+    "N": 24,
+    "tri": 2320,
+    "ms": 20.3,
+    "closed": true
+   }
+  ],
+  "vp": {
+   "parts": 11,
+   "geometries": 5,
+   "renders": 2,
+   "lastRenderMs": 0.7000000476837158,
+   "supersample": 2,
+   "shadowRenders": 0
+  }
+ },
+ "train-top-edge": {
+  "gears": [
+   {
+    "part": 1,
+    "N": 40,
+    "tri": 3250,
+    "ms": 52.3,
+    "closed": true
+   },
+   {
+    "part": 2,
+    "N": 8,
+    "tri": 608,
+    "ms": 5.3,
+    "closed": true
+   },
+   {
+    "part": 3,
+    "N": 24,
+    "tri": 2320,
+    "ms": 20.2,
+    "closed": true
+   }
+  ],
+  "vp": {
+   "parts": 11,
+   "geometries": 5,
+   "renders": 2,
+   "lastRenderMs": 0.5,
+   "supersample": 2,
+   "shadowRenders": 0
+  }
+ },
+ "pair-close": {
+  "gears": [
+   {
+    "part": 1,
+    "N": 8,
+    "tri": 608,
+    "ms": 15.9,
+    "closed": true
+   },
+   {
+    "part": 2,
+    "N": 24,
+    "tri": 1536,
+    "ms": 15.5,
+    "closed": true
+   }
+  ],
+  "vp": {
+   "parts": 2,
+   "geometries": 2,
+   "renders": 2,
+   "lastRenderMs": 0.7000000476837158,
+   "supersample": 2,
+   "shadowRenders": 0
+  }
+ },
+ "pair-close-front": {
+  "gears": [
+   {
+    "part": 1,
+    "N": 8,
+    "tri": 608,
+    "ms": 16,
+    "closed": true
+   },
+   {
+    "part": 2,
+    "N": 24,
+    "tri": 1536,
+    "ms": 14.5,
+    "closed": true
+   }
+  ],
+  "vp": {
+   "parts": 2,
+   "geometries": 2,
+   "renders": 2,
+   "lastRenderMs": 0.7000000476837158,
+   "supersample": 2,
+   "shadowRenders": 0
+  }
+ },
+ "pair-close-sine": {
+  "gears": [
+   {
+    "part": 1,
+    "N": 8,
+    "tri": 928,
+    "ms": 19,
+    "closed": true
+   },
+   {
+    "part": 2,
+    "N": 24,
+    "tri": 2496,
+    "ms": 22.9,
+    "closed": true
+   }
+  ],
+  "vp": {
+   "parts": 2,
+   "geometries": 2,
+   "renders": 2,
+   "lastRenderMs": 0.6999999284744263,
+   "supersample": 2,
+   "shadowRenders": 0
+  }
+ },
+ "pair-close-band-nofb": {
+  "gears": [
+   {
+    "part": 1,
+    "N": 8,
+    "tri": 608,
+    "ms": 15.4,
+    "closed": true
+   },
+   {
+    "part": 2,
+    "N": 24,
+    "tri": 1536,
+    "ms": 14.3,
+    "closed": true
+   }
+  ],
+  "vp": {
+   "parts": 2,
+   "geometries": 2,
+   "renders": 2,
+   "lastRenderMs": 0.5,
+   "supersample": 2,
+   "shadowRenders": 0
+  }
+ },
+ "pair-diag": {
+  "gears": [
+   {
+    "part": 1,
+    "N": 40,
+    "tri": 3184,
+    "ms": 47.6,
+    "closed": true
+   }
+  ],
+  "vp": {
+   "parts": 2,
+   "geometries": 1,
+   "renders": 2,
+   "lastRenderMs": 0.7000000476837158,
+   "supersample": 2,
+   "shadowRenders": 0
+  }
+ },
+ "single40-closeup": {
+  "gears": [
+   {
+    "part": 1,
+    "N": 40,
+    "tri": 3250,
+    "ms": 54.1,
+    "closed": true
+   }
+  ],
+  "vp": {
+   "parts": 1,
+   "geometries": 1,
+   "renders": 2,
+   "lastRenderMs": 0.6000000238418579,
+   "supersample": 2,
+   "shadowRenders": 0
+  }
+ },
+ "single40-closeup-dpr2": {
+  "gears": [
+   {
+    "part": 1,
+    "N": 40,
+    "tri": 3250,
+    "ms": 53,
+    "closed": true
+   }
+  ],
+  "vp": {
+   "parts": 1,
+   "geometries": 1,
+   "renders": 2,
+   "lastRenderMs": 0.5,
+   "supersample": 2,
+   "shadowRenders": 0
+  }
+ },
+ "sizes-home": {
+  "gears": [
+   {
+    "part": 1,
+    "N": 8,
+    "tri": 608,
+    "ms": 16,
+    "closed": true
+   },
+   {
+    "part": 2,
+    "N": 16,
+    "tri": 1088,
+    "ms": 12.1,
+    "closed": true
+   },
+   {
+    "part": 3,
+    "N": 24,
+    "tri": 2320,
+    "ms": 24.2,
+    "closed": true
+   },
+   {
+    "part": 4,
+    "N": 40,
+    "tri": 3250,
+    "ms": 33.3,
+    "closed": true
+   }
+  ],
+  "vp": {
+   "parts": 4,
+   "geometries": 4,
+   "renders": 2,
+   "lastRenderMs": 0.6999999284744263,
+   "supersample": 2,
+   "shadowRenders": 0
+  }
+ },
+ "sizes-colors-dark": {
+  "gears": [
+   {
+    "part": 1,
+    "N": 8,
+    "tri": 608,
+    "ms": 15.6,
+    "closed": true
+   },
+   {
+    "part": 2,
+    "N": 16,
+    "tri": 1088,
+    "ms": 11.7,
+    "closed": true
+   },
+   {
+    "part": 3,
+    "N": 24,
+    "tri": 2320,
+    "ms": 23.9,
+    "closed": true
+   },
+   {
+    "part": 4,
+    "N": 40,
+    "tri": 3250,
+    "ms": 32.7,
+    "closed": true
+   }
+  ],
+  "vp": {
+   "parts": 4,
+   "geometries": 4,
+   "renders": 2,
+   "lastRenderMs": 0.7000000476837158,
+   "supersample": 2,
+   "shadowRenders": 0
+  }
+ },
+ "sizes-colors-light": {
+  "gears": [
+   {
+    "part": 1,
+    "N": 8,
+    "tri": 608,
+    "ms": 15.2,
+    "closed": true
+   },
+   {
+    "part": 2,
+    "N": 16,
+    "tri": 1088,
+    "ms": 11.7,
+    "closed": true
+   },
+   {
+    "part": 3,
+    "N": 24,
+    "tri": 2320,
+    "ms": 23.8,
+    "closed": true
+   },
+   {
+    "part": 4,
+    "N": 40,
+    "tri": 3250,
+    "ms": 32.3,
+    "closed": true
+   }
+  ],
+  "vp": {
+   "parts": 4,
+   "geometries": 4,
+   "renders": 2,
+   "lastRenderMs": 0.6000000238418579,
+   "supersample": 2,
+   "shadowRenders": 0
+  }
+ },
+ "sizes-thin": {
+  "gears": [
+   {
+    "part": 1,
+    "N": 8,
+    "tri": 768,
+    "ms": 19.7,
+    "closed": true
+   },
+   {
+    "part": 2,
+    "N": 16,
+    "tri": 1472,
+    "ms": 16.9,
+    "closed": true
+   },
+   {
+    "part": 3,
+    "N": 24,
+    "tri": 2768,
+    "ms": 27,
+    "closed": true
+   },
+   {
+    "part": 4,
+    "N": 40,
+    "tri": 3984,
+    "ms": 34.4,
+    "closed": true
+   }
+  ],
+  "vp": {
+   "parts": 4,
+   "geometries": 4,
+   "renders": 2,
+   "lastRenderMs": 0.6000000238418579,
+   "supersample": 2,
+   "shadowRenders": 0
+  }
+ }
+}

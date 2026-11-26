@@ -15,7 +15,6 @@ import {
   canSetRim,
   cellsAt,
   defaultColorFor,
-  discCoversCell,
   discOverlapsCell,
   hasRim,
   isHole,
@@ -789,17 +788,27 @@ function wheelTarget(m: Model, pick: CellPick): { partId: number; cellIndex: num
     return { partId: part.id, cellIndex: pick.cellIndex, cell };
   }
   if (isHole(cell.kind)) {
-    // A bare hole wholly inside a wheel of its own part (a crank hole): the user is pointing at that
-    // wheel — growing a hidden second disc on the crank hole is never what is meant (review finding).
+    // A bare hole whose centre lies inside (or on the rim of) a wheel of its own part, in that
+    // wheel's layer (a crank hole, including one bridged at the rim's edge, §7.2): the user is
+    // pointing at that wheel — a second disc there would be hidden inside the first or poke out of
+    // it (M7 review: (2,1) in r 2.5, (0,2) in r 2, (1,1) in r 1.5 still grew their own disc when
+    // only holes wholly inside the disc counted). Several such wheels: the nearest hub, then the
+    // lower cell index.
     if (!hasRim(cell)) {
-      const pos: Vec3i = [cell.x, cell.y, cell.z];
+      let best = -1;
+      let bestD = Infinity;
       for (let i = 0; i < part.cells.length; i++) {
         const h = part.cells[i]!;
         if (!hasRim(h) || !isHole(h.kind) || !isValidRim(h.rim)) continue;
         const a = h.axis;
         if ((a === 0 ? h.x - cell.x : a === 1 ? h.y - cell.y : h.z - cell.z) !== 0) continue;
-        if (discCoversCell([h.x, h.y, h.z], a, h.rim!, pos)) return { partId: part.id, cellIndex: i, cell: h };
+        const d2 = (h.x - cell.x) ** 2 + (h.y - cell.y) ** 2 + (h.z - cell.z) ** 2; // (0 along the axis)
+        if (d2 <= h.rim! * h.rim! + 1e-9 && d2 < bestD) {
+          best = i;
+          bestD = d2;
+        }
       }
+      if (best >= 0) return { partId: part.id, cellIndex: best, cell: part.cells[best]! };
     }
     return { partId: part.id, cellIndex: pick.cellIndex, cell };
   }
@@ -812,7 +821,7 @@ function wheelTarget(m: Model, pick: CellPick): { partId: number; cellIndex: num
  * What a Wheel-tool click would do (§7.2): grow the hovered wheel's rim by half a unit
  * (bare → 1 → 1.5 → … → 4), or with `shrink` (Shift) shrink it by half a unit (1 → bare). The
  * hover may be a hole cell, the disc of a wheel (virtual cell or tread: that wheel), a bare hole
- * wholly inside a wheel of its own part (that wheel), or a male cell in another part's hole (that
+ * whose centre lies inside a wheel of its own part (that wheel), or a male cell in another part's hole (that
  * hole). Each valid click is one setRim.
  */
 export function resolveWheel(model: Model, pick: CellPick | null, shrink = false): WheelProposal {

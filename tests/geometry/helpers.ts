@@ -117,6 +117,31 @@ export function meshVolume(m: MeshData): number {
   return v / 6;
 }
 
+/** Is the world point q inside the closed mesh? Ray parity along a skew direction (Möller–Trumbore). */
+export function insideMesh(m: MeshData, q: readonly number[]): boolean {
+  const P = m.positions;
+  const I = m.indices;
+  const d = [0.9998, 0.0131, 0.0173];
+  const p = [q[0]! - m.origin[0], q[1]! - m.origin[1], q[2]! - m.origin[2]];
+  let hits = 0;
+  for (let t = 0; t < I.length; t += 3) {
+    const a = 3 * I[t]!, b = 3 * I[t + 1]!, c = 3 * I[t + 2]!;
+    const e1x = P[b]! - P[a]!, e1y = P[b + 1]! - P[a + 1]!, e1z = P[b + 2]! - P[a + 2]!;
+    const e2x = P[c]! - P[a]!, e2y = P[c + 1]! - P[a + 1]!, e2z = P[c + 2]! - P[a + 2]!;
+    const hx = d[1]! * e2z - d[2]! * e2y, hy = d[2]! * e2x - d[0]! * e2z, hz = d[0]! * e2y - d[1]! * e2x;
+    const det = e1x * hx + e1y * hy + e1z * hz;
+    if (Math.abs(det) < 1e-12) continue;
+    const sx = p[0]! - P[a]!, sy = p[1]! - P[a + 1]!, sz = p[2]! - P[a + 2]!;
+    const u = (sx * hx + sy * hy + sz * hz) / det;
+    if (u < 0 || u > 1) continue;
+    const qx = sy * e1z - sz * e1y, qy = sz * e1x - sx * e1z, qz = sx * e1y - sy * e1x;
+    const v = (d[0]! * qx + d[1]! * qy + d[2]! * qz) / det;
+    if (v < 0 || u + v > 1) continue;
+    if ((e2x * qx + e2y * qy + e2z * qz) / det > 0) hits++;
+  }
+  return hits % 2 === 1;
+}
+
 export function bbox(m: MeshData): { min: number[]; max: number[] } {
   const min = [Infinity, Infinity, Infinity];
   const max = [-Infinity, -Infinity, -Infinity];

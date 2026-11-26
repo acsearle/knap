@@ -1,0 +1,11 @@
+load 4 τ0 (NF 30, flywheel 0, pawl mass 3.38, gear Izz 56.5): gear position in pitches at 1 s intervals: -0.0660 -0.0817 -0.0876 -0.0906; max pawl lift 0.00548 rad, max penetration 0.0726
+load 8 τ0 (NF 30, flywheel 0, pawl mass 3.38, gear Izz 56.5): gear position in pitches at 1 s intervals: -0.0354 -0.0367 -0.0377 -0.0385; max pawl lift 0.00236 rad, max penetration 0.0726
+load 16 τ0 (NF 30, flywheel 0, pawl mass 3.38, gear Izz 56.5): gear position in pitches at 1 s intervals: 0.0192 0.0495 0.0596 0.0616; max pawl lift 0.0138 rad, max penetration 0.0947
+load 32 τ0 (NF 30, flywheel 0, pawl mass 3.38, gear Izz 56.5): gear position in pitches at 1 s intervals: 0.157 0.879 1.19 1.29; max pawl lift 0.0120 rad, max penetration 0.175
+load 4 τ0 (NF 30, flywheel 0, pawl mass 2.15, gear Izz 56.5): gear position in pitches at 1 s intervals: 0.220 0.237 0.246 0.249; max pawl lift 0.0110 rad, max penetration 0.0551
+load 8 τ0 (NF 30, flywheel 0, pawl mass 2.15, gear Izz 56.5): gear position in pitches at 1 s intervals: 0.252 0.288 0.299 0.301; max pawl lift 0.0185 rad, max penetration 0.0551
+load 16 τ0 (NF 30, flywheel 0, pawl mass 2.15, gear Izz 56.5): gear position in pitches at 1 s intervals: 0.300 0.361 0.376 0.376; max pawl lift 0.0461 rad, max penetration 0.0932
+load 32 τ0 (NF 30, flywheel 0, pawl mass 2.15, gear Izz 56.5): gear position in pitches at 1 s intervals: 0.409 0.539 0.589 0.608; max pawl lift 0.0293 rad, max penetration 0.134
+load 32 τ0 (NF 120, flywheel 0, pawl mass 3.38, gear Izz 56.5): gear position in pitches at 1 s intervals: -0.153 -0.153 -0.153 -0.153; max pawl lift 0.0347 rad, max penetration 0.0726
+load 64 τ0 (NF 120, flywheel 0, pawl mass 3.38, gear Izz 56.5): gear position in pitches at 1 s intervals: -0.123 -0.123 -0.123 -0.123; max pawl lift 0.0335 rad, max penetration 0.0726
+load 128 τ0 (NF 120, flywheel 0, pawl mass 3.38, gear Izz 56.5): gear position in pitches at 1 s intervals: -0.0642 -0.0642 -0.0642 -0.0642; max pawl lift 0.0313 rad, max penetration 0.0726

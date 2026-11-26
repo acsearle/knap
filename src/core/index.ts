@@ -3,3 +3,4 @@ export * from './types';
 export * from './rules';
 export * from './model';
 export * from './disc';
+export * from './gears';

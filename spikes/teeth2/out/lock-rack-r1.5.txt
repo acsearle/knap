@@ -1,0 +1,13 @@
+r 1.5 T 24: a free 15-hole liftarm lies on the gear's tooth tips (flat side down; it may slide in X and lift in Y, no rotation). The gear is driven at 2 rad/s; measured over 0.5 s after 0.25 s. Slip = 1 − v_beam/(ω·tip). Resisting force on the beam = k·m·g.
+  hull   k 0    beam speed 3.24 (rolling 3.25) slip 0.00221  bounce y 0.00835 units, rms vy 0.165
+  hull   k 0.2  beam speed 3.24 (rolling 3.25) slip 0.00214  bounce y 0.00844 units, rms vy 0.165
+  hull   k 0.35 beam speed 3.24 (rolling 3.25) slip 0.00285  bounce y 0.00843 units, rms vy 0.166
+  hull   k 0.45 beam speed -64.5 (rolling 3.25) slip 20.8  bounce y 42.1 units, rms vy 135
+  hull   k 0.6  beam speed -195 (rolling 3.25) slip 61.0  bounce y 121 units, rms vy 263
+  hull   k 1    beam speed -302 (rolling 3.25) slip 94.0  bounce y 123 units, rms vy 248
+  smooth k 0    beam speed 3.26 (rolling 3.25) slip -0.00213  bounce y 0.00783 units, rms vy 0.184
+  smooth k 0.2  beam speed 3.26 (rolling 3.25) slip -0.00197  bounce y 0.00805 units, rms vy 0.184
+  smooth k 0.35 beam speed 3.25 (rolling 3.25) slip -0.00143  bounce y 0.00824 units, rms vy 0.185
+  smooth k 0.45 beam speed -64.8 (rolling 3.25) slip 20.9  bounce y 40.2 units, rms vy 130
+  smooth k 0.6  beam speed -196 (rolling 3.25) slip 61.2  bounce y 122 units, rms vy 265
+  smooth k 1    beam speed -302 (rolling 3.25) slip 93.9  bounce y 123 units, rms vy 249

@@ -1,0 +1,22 @@
+pendulum         mu 0: gearsim be16d0ea302f91af product be16d0ea302f91af recorded be16d0ea302f91af SAME (gear candidates 0, engaged 0)
+pendulum         mu 0.2: gearsim 4edce26126fa3de4 product 4edce26126fa3de4 SAME (gear candidates 0, engaged 0)
+triple-pendulum  mu 0: gearsim 8045f3612e003414 product 8045f3612e003414 recorded 8045f3612e003414 SAME (gear candidates 0, engaged 0)
+triple-pendulum  mu 0.2: gearsim d2cc4c39b20fe74a product d2cc4c39b20fe74a SAME (gear candidates 0, engaged 0)
+four-bar         mu 0: gearsim 0ff7acea870a0f1f product 0ff7acea870a0f1f recorded 0ff7acea870a0f1f SAME (gear candidates 0, engaged 0)
+four-bar         mu 0.2: gearsim 77e7c31df324ebfe product 77e7c31df324ebfe SAME (gear candidates 0, engaged 0)
+parallelogram    mu 0: gearsim 707e3d76770f0d85 product 707e3d76770f0d85 recorded 707e3d76770f0d85 SAME (gear candidates 0, engaged 0)
+parallelogram    mu 0.2: gearsim 08189b3c0463e191 product 08189b3c0463e191 SAME (gear candidates 0, engaged 0)
+sliding-axle     mu 0: gearsim 0c9d98094512d78a product 0c9d98094512d78a recorded 0c9d98094512d78a SAME (gear candidates 0, engaged 0)
+sliding-axle     mu 0.2: gearsim 51fe35226dfbf641 product 51fe35226dfbf641 SAME (gear candidates 0, engaged 0)
+weld-test        mu 0: gearsim 8d4f0b236fc9b568 product 8d4f0b236fc9b568 recorded 8d4f0b236fc9b568 SAME (gear candidates 0, engaged 0)
+weld-test        mu 0.2: gearsim aa002c8f2695dfaa product aa002c8f2695dfaa SAME (gear candidates 0, engaged 0)
+collision        mu 0: gearsim 2a1e19a7ce8ac25a product 2a1e19a7ce8ac25a recorded 2a1e19a7ce8ac25a SAME (gear candidates 0, engaged 0)
+collision        mu 0.2: gearsim 493f6ef782f9fdfa product 493f6ef782f9fdfa SAME (gear candidates 0, engaged 0)
+crank-wheel      mu 0: gearsim d1ca4dbbd192506e product d1ca4dbbd192506e SAME (gear candidates 0, engaged 0)
+crank-wheel      mu 0.2: gearsim e07e88a5ab8e9188 product e07e88a5ab8e9188 SAME (gear candidates 0, engaged 0)
+cart             mu 0: gearsim 794d1a08071b6f2d product 794d1a08071b6f2d SAME (gear candidates 6, engaged 0)
+cart             mu 0.2: gearsim 10120a76f52e5537 product 10120a76f52e5537 SAME (gear candidates 6, engaged 0)
+examples differing: 0
+swing selector (shaft, μ 0.2, reversing drive): c5857f59511235d2 (engagements 1,0,0,2,2,0) / c5857f59511235d2 (engagements 1,0,0,2,2,0) IDENTICAL
+slider (μ 0.2, grab in/out): 4f3b2dab68278196 (engagements 2) / 4f3b2dab68278196 (engagements 2) IDENTICAL
+1:25 crane drop (μ 0, k 2): 1a5097d17fb1f8ac / 1a5097d17fb1f8ac IDENTICAL

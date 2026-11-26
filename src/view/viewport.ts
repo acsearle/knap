@@ -104,7 +104,7 @@ export interface HoverFace {
   dir: Dir;
   /** Default: the accent colour. */
   color?: string;
-  /** Colour of the part the highlight is drawn over (overlayColor: a contrasting variant if close). */
+  /** Colour of the part the highlight is drawn over (overlayStyle: white fill, bold outline if close). */
   over?: string;
   /**
    * Seen through the part (Back side, §7.3: the face is on the far side): drawn on top of
@@ -163,6 +163,17 @@ const FLOOR_OVER_GRID_ORDER = -90;
 
 /** Hover face fill opacity; seen through the part (Back side) it is drawn on top, a bit lighter. */
 const HOVER_FACE_OPACITY = 0.28;
+/** Fill opacities of the bold (white-filled) overlays, and the erase cell / ring fills. */
+const HOVER_BOLD_OPACITY = 0.5;
+const HOVER_BOLD_XRAY_OPACITY = 0.42;
+const HOVER_CELL_OPACITY = 0.16;
+const HOVER_CELL_BOLD_OPACITY = 0.32;
+const HOVER_RING_OPACITY = 0.2;
+const HOVER_RING_BOLD_OPACITY = 0.4;
+/** Silhouette rim (in the semantic colour) of a bold, white ghost. */
+const GHOST_BOLD_RIM = 1;
+/** Falloff of that rim (rim^p, rim = 1 − |n·view|): broader than the white see-through rim's 3. */
+const GHOST_BOLD_RIM_POW = 0.7;
 const HOVER_FACE_XRAY_OPACITY = 0.22;
 /** The ghost where geometry is in front of it; stronger for a Back side proposal (always behind). */
 const GHOST_HIDDEN_OPACITY = 0.16;
@@ -240,25 +251,38 @@ function q4(q: QuatLike): [number, number, number, number] {
   return [o.x, o.y, o.z, o.w];
 }
 
+/** sRGB distance below which an overlay's colour counts as close to the part under it. */
+export const OVERLAY_CLOSE = 0.3;
+/** Fill colour of an overlay drawn over a part of (nearly) its own colour. */
+export const OVERLAY_CLOSE_FILL = '#ffffff';
+
+/** How an overlay is drawn: its semantic colour for the lines, the fill colour, and whether it is bold. */
+export interface OverlayStyle {
+  /** The semantic colour (accent = a click will do this, red = refused or erase): always the lines'. */
+  line: string;
+  /** The fill: the semantic colour, or white over a part close to it. */
+  fill: string;
+  /** Over a part close to the semantic colour: white fill, outline at double width. */
+  bold: boolean;
+}
+
 /**
- * The colour to draw an overlay (hover face, erase cell or ring, ghost) of colour `color` over a part
- * of colour `over`: `color` itself unless the two are close (sRGB distance < 0.3, e.g. the blue accent
- * over a blue wheel, the red erase band over a red part); then a contrasting variant — orange for a
- * blue overlay, a dark shade of any other. Together with the light under-stroke of the lines
- * (applyHalo) the overlay stays legible on every palette colour.
+ * How to draw an overlay (hover face, erase cell or ring, ghost) of semantic colour `color` over a
+ * part of colour `over` (§7.3 "Hue keeps its meaning on every part colour"): the hue never changes —
+ * the accent always means "a click will do this", red always "refused" or "erase". When the two
+ * colours are close (sRGB distance < OVERLAY_CLOSE: the blue accent over a blue wheel, the red erase
+ * band over a red or orange part) the *treatment* changes instead: a white fill, and the outline in
+ * the semantic colour at double width over the white under-stroke (applyHalo). (A first version
+ * switched hue — orange over blue, dark red over red — so a valid face on the Cart turned orange and
+ * an invalid one red 6 px apart, and dark red on red read as a plain dark outline.)
  */
-export function overlayColor(color: string, over?: string): string {
-  if (!over) return color;
+export function overlayStyle(color: string, over?: string): OverlayStyle {
+  if (!over) return { line: color, fill: color, bold: false };
   const a = rgba(color);
   const b = rgba(over);
-  if (Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]) >= 0.3) return color;
-  if (a[2] > a[0] && a[2] > a[1]) return OVERLAY_ALT_BLUE;
-  const k = 0.45;
-  const hex = (v: number) => Math.round(Math.max(0, Math.min(1, v * k)) * 255).toString(16).padStart(2, '0');
-  return `#${hex(a[0])}${hex(a[1])}${hex(a[2])}`;
+  const bold = Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]) < OVERLAY_CLOSE;
+  return { line: color, fill: bold ? OVERLAY_CLOSE_FILL : color, bold };
 }
-/** The accent's contrasting variant over a blue part. */
-export const OVERLAY_ALT_BLUE = '#f07a00';
 
 /** A light under-stroke for overlay lines: the same segments, white, drawn wider just before them. */
 function applyHalo(sb: SegmentBuilder, halo: FatLines): void {
@@ -319,6 +343,10 @@ export class Viewport {
   private readonly hoverFaceLines: FatLines;
   /** Light under-strokes of the hover lines (legible over a part of the overlay's own hue or a dark one). */
   private readonly hoverFaceHalo: FatLines;
+  /** The hover face / cell / ring is drawn bold (overlayStyle). */
+  private hoverFaceBold = false;
+  private hoverCellBold = false;
+  private hoverRingBold = false;
   private readonly hoverCellHalo: FatLines;
   private readonly hoverRingHalo: FatLines;
   private readonly hoverCellFill: THREE.Mesh;
@@ -421,13 +449,13 @@ export class Viewport {
     const accent = this.opts.accent;
     this.hoverFaceFill = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), createFillMaterial(accent, HOVER_FACE_OPACITY));
     this.hoverFaceLines = new FatLines(this.lineUniforms, { depthTest: true, depthBias: 0.0005 });
-    this.hoverCellFill = new THREE.Mesh(new THREE.BoxGeometry(1.02, 1.02, 1.02), createFillMaterial('#e0322b', 0.16));
+    this.hoverCellFill = new THREE.Mesh(new THREE.BoxGeometry(1.02, 1.02, 1.02), createFillMaterial('#e0322b', HOVER_CELL_OPACITY));
     this.hoverCellLines = new FatLines(this.lineUniforms, { depthTest: true, depthBias: 0.0005 });
     this.ghostVisible = new THREE.Mesh(new THREE.BufferGeometry(), createGhostMaterial(false));
     this.ghostHidden = new THREE.Mesh(new THREE.BufferGeometry(), createGhostMaterial(true));
     this.ghostHidden.renderOrder = 1;
     this.ghostVisible.renderOrder = 2;
-    const ringMat = createFillMaterial('#e0322b', 0.2);
+    const ringMat = createFillMaterial('#e0322b', HOVER_RING_OPACITY);
     ringMat.side = THREE.DoubleSide;
     this.hoverRingFill = new THREE.Mesh(new THREE.BufferGeometry(), ringMat);
     this.hoverRingLines = new FatLines(this.lineUniforms, { depthTest: true, depthBias: 0.0005 });
@@ -645,9 +673,11 @@ export class Viewport {
     const fill = this.hoverFaceFill;
     fill.position.set(...c);
     fill.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), new THREE.Vector3(d[0], d[1], d[2]));
-    const color = overlayColor(h.color ?? this.opts.accent, h.over);
+    const st = overlayStyle(h.color ?? this.opts.accent, h.over);
+    const color = st.line;
+    this.hoverFaceBold = st.bold;
     const fm = fill.material as THREE.MeshBasicMaterial;
-    fm.color.set(color);
+    fm.color.set(st.fill);
     const xray = !!h.xray;
     if (fm.depthTest === xray) {
       fm.depthTest = !xray;
@@ -656,7 +686,7 @@ export class Viewport {
       this.hoverFaceLines.material.depthTest = !xray;
       this.hoverFaceHalo.material.depthTest = !xray;
     }
-    fm.opacity = xray ? HOVER_FACE_XRAY_OPACITY : HOVER_FACE_OPACITY;
+    fm.opacity = st.bold ? (xray ? HOVER_BOLD_XRAY_OPACITY : HOVER_BOLD_OPACITY) : xray ? HOVER_FACE_XRAY_OPACITY : HOVER_FACE_OPACITY;
     fill.visible = true;
     const t1 = (axis + 1) % 3;
     const t2 = (axis + 2) % 3;
@@ -683,9 +713,13 @@ export class Viewport {
       this.requestRender();
       return;
     }
-    const color = overlayColor(h.color ?? '#e0322b', h.over);
+    const st = overlayStyle(h.color ?? '#e0322b', h.over);
+    const color = st.line;
+    this.hoverCellBold = st.bold;
     this.hoverCellFill.position.set(h.cell[0], h.cell[1], h.cell[2]);
-    (this.hoverCellFill.material as THREE.MeshBasicMaterial).color.set(color);
+    const cm = this.hoverCellFill.material as THREE.MeshBasicMaterial;
+    cm.color.set(st.fill);
+    cm.opacity = st.bold ? HOVER_CELL_BOLD_OPACITY : HOVER_CELL_OPACITY;
     this.hoverCellFill.visible = true;
     const sb = new SegmentBuilder();
     const col = rgba(color);
@@ -721,7 +755,9 @@ export class Viewport {
       this.requestRender();
       return;
     }
-    const color = overlayColor(h.color ?? '#e0322b', h.over);
+    const st = overlayStyle(h.color ?? '#e0322b', h.over);
+    const color = st.line;
+    this.hoverRingBold = st.bold;
     const a = h.axis;
     const u = (a + 1) % 3;
     const v = (a + 2) % 3;
@@ -749,7 +785,8 @@ export class Viewport {
     g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pos), 3));
     this.hoverRingFill.geometry.dispose();
     this.hoverRingFill.geometry = g;
-    this.hoverRingFill.material.color.set(color);
+    this.hoverRingFill.material.color.set(st.fill);
+    this.hoverRingFill.material.opacity = st.bold ? HOVER_RING_BOLD_OPACITY : HOVER_RING_OPACITY;
     this.hoverRingFill.visible = true;
     const sb = new SegmentBuilder();
     const col = rgba(color);
@@ -805,12 +842,18 @@ export class Viewport {
       this.ghostVisible.geometry = entry.geometry;
       this.ghostHidden.geometry = entry.geometry;
     }
-    const color = overlayColor(g.valid ? this.opts.accent : '#e0322b', g.over);
+    // Over a part of (nearly) the ghost's colour: a white body with a silhouette rim in the
+    // semantic colour (overlayStyle; the ghost's "outline"), else the colour with a white rim
+    // where it is seen through geometry.
+    const st = overlayStyle(g.valid ? this.opts.accent : '#e0322b', g.over);
     this.ghostHidden.material.uniforms.uOpacity!.value = g.xray ? GHOST_XRAY_HIDDEN_OPACITY : GHOST_HIDDEN_OPACITY;
-    this.ghostHidden.material.uniforms.uRim!.value = g.xray ? GHOST_XRAY_HIDDEN_RIM : GHOST_HIDDEN_RIM;
+    this.ghostHidden.material.uniforms.uRim!.value = st.bold ? GHOST_BOLD_RIM : g.xray ? GHOST_XRAY_HIDDEN_RIM : GHOST_HIDDEN_RIM;
+    this.ghostVisible.material.uniforms.uRim!.value = st.bold ? GHOST_BOLD_RIM : 0;
     for (const m of [this.ghostVisible, this.ghostHidden]) {
       m.position.set(origin[0], origin[1], origin[2]);
-      (m.material.uniforms.uColor!.value as THREE.Color).set(color);
+      (m.material.uniforms.uColor!.value as THREE.Color).set(st.fill);
+      (m.material.uniforms.uRimColor!.value as THREE.Color).set(st.bold ? st.line : '#ffffff');
+      m.material.uniforms.uRimPow!.value = st.bold ? GHOST_BOLD_RIM_POW : 3;
       m.visible = true;
     }
     this.requestRender();
@@ -1410,12 +1453,15 @@ export class Viewport {
     if (this.floatTargets) this.outline.composite(r, params, this.visibleSelection().length > 0);
 
     // 5: overlays in the scene (hover, ghost, root marker, glyphs on top)
-    this.hoverFaceLines.width = 2 * dpr;
-    this.hoverCellLines.width = 1.75 * dpr;
-    this.hoverRingLines.width = 2 * dpr;
-    this.hoverFaceHalo.width = 5 * dpr;
-    this.hoverCellHalo.width = 4.75 * dpr;
-    this.hoverRingHalo.width = 5 * dpr;
+    // Bold (overlayStyle: over a part of the overlay's own colour): the line at double width, the
+    // white under-stroke still 1.5 px wider on each side.
+    const lw = (base: number, bold: boolean) => (bold ? 2 * base : base) * dpr;
+    this.hoverFaceLines.width = lw(2, this.hoverFaceBold);
+    this.hoverCellLines.width = lw(1.75, this.hoverCellBold);
+    this.hoverRingLines.width = lw(2, this.hoverRingBold);
+    this.hoverFaceHalo.width = lw(2, this.hoverFaceBold) + 3 * dpr;
+    this.hoverCellHalo.width = lw(1.75, this.hoverCellBold) + 3 * dpr;
+    this.hoverRingHalo.width = lw(2, this.hoverRingBold) + 3 * dpr;
     this.updateGlyphs(dpr);
     this.updateRootMarker(dpr, ss);
     r.render(this.overlayScene, this.camera);

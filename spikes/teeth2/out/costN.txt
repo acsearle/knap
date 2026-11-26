@@ -1,0 +1,16 @@
+load 93 91 58
+N  2  no teeth anywhere (smooth discs only)        colliders     6  cpu ms/step 0.528 (x1.00)  contact pairs 0 points 0
+N  2  teeth (hull) on gear 0 only                  colliders    31  cpu ms/step 0.925 (x1.75)  contact pairs 1 points 5
+N  2  teeth (hull) on all gears                    colliders    56  cpu ms/step 0.920 (x1.74)  contact pairs 1 points 5
+N  2  teeth (compound) on all gears                colliders     8  cpu ms/step 0.913 (x1.73)  contact pairs 1 points 5
+N  2  teeth (hull) on all, teeth meet every part   colliders    56  cpu ms/step 2.08 (x3.95)  contact pairs 5 points 25
+N 10  no teeth anywhere (smooth discs only)        colliders    22  cpu ms/step 1.63 (x1.00)  contact pairs 0 points 0
+N 10  teeth (hull) on gear 0 only                  colliders    47  cpu ms/step 2.05 (x1.26)  contact pairs 1 points 5
+N 10  teeth (hull) on all gears                    colliders   272  cpu ms/step 2.17 (x1.33)  contact pairs 1 points 5
+N 10  teeth (compound) on all gears                colliders    32  cpu ms/step 2.15 (x1.32)  contact pairs 1 points 5
+N 10  teeth (hull) on all, teeth meet every part   colliders   272  cpu ms/step 5.88 (x3.61)  contact pairs 36 points 179
+N 40  no teeth anywhere (smooth discs only)        colliders    82  cpu ms/step 6.38 (x1.00)  contact pairs 0 points 0
+N 40  teeth (hull) on gear 0 only                  colliders   107  cpu ms/step 6.36 (x0.998)  contact pairs 1 points 5
+N 40  teeth (hull) on all gears                    colliders  1082  cpu ms/step 7.33 (x1.15)  contact pairs 1 points 5
+N 40  teeth (compound) on all gears                colliders   122  cpu ms/step 6.70 (x1.05)  contact pairs 1 points 5
+N 40  teeth (hull) on all, teeth meet every part   colliders  1082  cpu ms/step 21.8 (x3.42)  contact pairs 168 points 832

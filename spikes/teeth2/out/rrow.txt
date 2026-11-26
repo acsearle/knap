@@ -1,0 +1,10 @@
+r1 T16 gear (+ flywheel I≈56), one-way row; free direction +, lock direction −; τ0 = 3.10e+3
+  hold 10 τ0 for 5 s: gear 2.85e-7 pitch from the stop (negative = past it), stop moved 0.00 pitches
+  hold 100 τ0 for 5 s: gear -2.09e-7 pitch from the stop (negative = past it), stop moved 0.00 pitches
+  hold 1000 τ0 for 5 s: gear -2.99e-7 pitch from the stop (negative = past it), stop moved 0.00 pitches
+  hold 10000 τ0 for 5 s: gear -0.0000670 pitch from the stop (negative = past it), stop moved 0.00 pitches
+  ω 10: forward coast keeps ω -0.00000407 (drag from the row ≈ 10.0 rad/s over 0.5 s, joint friction included); reversed at −10: went -4.07e-7 pitch past the stop, energy rise 0.00 (KE0 2.89e+3), end ω -0.00000407; 0.412 cpu ms/step
+  ω 50: forward coast keeps ω -0.00000407 (drag from the row ≈ 50.0 rad/s over 0.5 s, joint friction included); reversed at −50: went -4.00e-7 pitch past the stop, energy rise 0.00 (KE0 7.24e+4), end ω -0.00000408; 0.388 cpu ms/step
+  ω 100: forward coast keeps ω -0.00000409 (drag from the row ≈ 100 rad/s over 0.5 s, joint friction included); reversed at −100: went -4.44e-7 pitch past the stop, energy rise 0.00 (KE0 2.89e+5), end ω -0.00000409; 0.422 cpu ms/step
+  ω 200: forward coast keeps ω -0.00000407 (drag from the row ≈ 200 rad/s over 0.5 s, joint friction included); reversed at −200: went -3.22e-7 pitch past the stop, energy rise 0.00 (KE0 1.16e+6), end ω -0.00000407; 0.361 cpu ms/step
+  ω 350: forward coast keeps ω -0.00000407 (drag from the row ≈ 350 rad/s over 0.5 s, joint friction included); reversed at −350: went -3.94e-7 pitch past the stop, energy rise 0.00 (KE0 3.55e+6), end ω -0.00000407; 0.360 cpu ms/step

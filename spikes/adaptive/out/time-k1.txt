@@ -1,0 +1,1 @@
+KNAP_K=$k PHYSICS_REPORT=$PWD/$O/report-k$k.txt npx vitest run --config    >   554.80s user 3.36s system 170% cpu 5:27.71 total

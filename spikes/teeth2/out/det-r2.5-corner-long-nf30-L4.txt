@@ -1,0 +1,5 @@
+candidate r2.5 T40 corner l3 pivot (0,5) β180° rep hull; lock direction −
+[long]
+  load 4 τ0, NF 30
+  long ω 10: 60 cycles → load not held (ran back > 1.5 pitch) 0, pawl not touching at end of hold 0, NaN 0; 0.777 cpu ms/step
+  long ω 40: 60 cycles → load not held (ran back > 1.5 pitch) 0, pawl not touching at end of hold 0, NaN 0; 0.631 cpu ms/step

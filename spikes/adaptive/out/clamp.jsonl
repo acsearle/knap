@@ -1,0 +1,8 @@
+{"sec":"clamp","k":1,"kind":"loose","w":376.99,"v":400,"wPerInner":0.7854}
+{"sec":"clamp","k":1,"kind":"pinned","w":376.99,"v":0,"wPerInner":0.7854}
+{"sec":"clamp","k":2,"kind":"loose","w":753.98,"v":400,"wPerInner":0.7854}
+{"sec":"clamp","k":2,"kind":"pinned","w":753.98,"v":0,"wPerInner":0.7854}
+{"sec":"clamp","k":4,"kind":"loose","w":1000,"v":400,"wPerInner":0.5208}
+{"sec":"clamp","k":4,"kind":"pinned","w":1000.09,"v":0,"wPerInner":0.5209}
+{"sec":"clamp","k":8,"kind":"loose","w":1000,"v":400,"wPerInner":0.2604}
+{"sec":"clamp","k":8,"kind":"pinned","w":1000.09,"v":0,"wPerInner":0.2604}

@@ -1,0 +1,6 @@
+candidate r1 T16 corner l2 pivot (1,3) β0° rep hull; lock direction +
+[hold]
+  ramp lock torque 25.2 τ0 (skip)
+  hold 0.25×: 20 s, gear moved 69.4 rad in the lock direction (177 pitch), skips 144, 0.702 cpu ms/step
+  hold 0.5×: 20 s, gear moved 104 rad in the lock direction (266 pitch), skips 149, 1.42 cpu ms/step
+  hold 0.8×: 20 s, gear moved 4.95e+3 rad in the lock direction (1.26e+4 pitch), skips 6433, 0.650 cpu ms/step

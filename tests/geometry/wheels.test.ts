@@ -11,6 +11,7 @@ import {
   RIM_CHAMFER,
   RIM_INSET,
   R_BORE,
+  R_ROD,
   W_BORE,
   buildPartMesh,
   clearMeshCache,
@@ -23,10 +24,10 @@ import {
   rimSegments,
 } from '../../src/geometry';
 import type { ColliderPrim, MeshData } from '../../src/geometry';
-import { emptyModel, isHole, makeCell, setRim } from '../../src/core';
+import { addPart, discOverlapsCell, emptyModel, isHole, makeCell, setRim, validateModel } from '../../src/core';
 import type { Axis, Cell, Kind, Model } from '../../src/core';
 import { vertexPatches } from '../../src/view/patches';
-import { crossArea, edgeProblems, meshShells, meshVolume, part, randomPart, weld } from './helpers';
+import { crossArea, edgeProblems, insideMesh, meshShells, meshVolume, part, randomPart, weld } from './helpers';
 
 let M: ManifoldToplevel;
 beforeAll(async () => {
@@ -295,4 +296,219 @@ describe('random wheel parts', () => {
     if (pinched.length) console.log(`wheel fuzz: ${pinched.length}/${SEEDS} with pinched edges\n  ${pinched.join('\n  ')}`);
     expect(pinched.length).toBeLessThanOrEqual(Math.ceil(SEEDS * 0.01));
   }, 600000);
+});
+
+// ---------------------------------------------------------------------------------------------
+// Crank cells at the rim's edge (§2.6 rule 1, §4.2): every cell the nominal disc overlaps belongs to
+// the wheel, so the part must be drawn as one closed shell, the web staying inside the nominal
+// disc ∪ the crank cell's own cube.
+describe('crank cells at the rim edge are drawn joined to the wheel', () => {
+  type V3 = [number, number, number];
+  const at = (axis: Axis, du: number, dv: number, base: V3 = [0, 0, 0]): V3 => {
+    const p: V3 = [...base];
+    p[(axis + 1) % 3]! += du;
+    p[(axis + 2) % 3]! += dv;
+    return p;
+  };
+  const isValid = (cells: Cell[]): boolean => {
+    try {
+      return validateModel(addPart(emptyModel(), cells).model).length === 0;
+    } catch {
+      return false;
+    }
+  };
+  const volOf = new Map<string, number>();
+  const lone = (k: Cell): number => {
+    const key = `${k.kind},${k.axis},${k.rim}`;
+    let v = volOf.get(key);
+    if (v === undefined) volOf.set(key, (v = meshVolume(buildPartMesh(part([{ ...k, x: 0, y: 0, z: 0 }])))));
+    return v;
+  };
+  const radial = (w: Cell, q: readonly number[]): { ax: number; rad: number } => {
+    const rel = [q[0]! - w.x, q[1]! - w.y, q[2]! - w.z];
+    let r2 = 0;
+    for (let j = 0; j < 3; j++) if (j !== w.axis) r2 += rel[j]! ** 2;
+    return { ax: rel[w.axis]!, rad: Math.sqrt(r2) };
+  };
+  /** Every vertex lies in an own cell's cube (±(½ + EPS)) or in the hub layer inside a nominal disc. */
+  const strayVertices = (m: MeshData, cells: Cell[]): number => {
+    const hubs = cells.filter((q) => q.rim !== undefined);
+    let n = 0;
+    for (let i = 0; i < m.positions.length; i += 3) {
+      const q = [m.positions[i]! + m.origin[0], m.positions[i + 1]! + m.origin[1], m.positions[i + 2]! + m.origin[2]];
+      const tol = 0.505 + 1e-4;
+      if (cells.some((k) => Math.abs(q[0]! - k.x) <= tol && Math.abs(q[1]! - k.y) <= tol && Math.abs(q[2]! - k.z) <= tol)) continue;
+      if (hubs.some((w) => { const { ax, rad } = radial(w, q); return Math.abs(ax) <= H + 1e-4 && rad <= w.rim! + 1e-4; })) continue;
+      n++;
+    }
+    return n;
+  };
+  /** Mesh checks shared by the sweeps; returns failure strings (empty = sound). */
+  const check = (label: string, cells: Cell[]): string[] => {
+    const m = buildPartMesh(part(cells));
+    const f: string[] = [];
+    const shells = meshShells(m);
+    if (shells !== 1) f.push(`${label}: ${shells} shells`);
+    const ep = edgeProblems(m);
+    if (ep.length) f.push(`${label}: not a closed manifold (${ep[0]})`);
+    const hubs = cells.filter((q) => q.rim !== undefined);
+    const rest = cells.filter((q) => q.rim === undefined);
+    // Volume: no less than the largest wheel less the crank holes' bores; no more than every wheel and
+    // every cell alone plus, per crank cell, a web within its cube and the 0.03 band of the disc.
+    const v = meshVolume(m);
+    // (a bore in the wheel's plane runs the cell's full length 1 + 4·EPS through the rim, not 2H)
+    const bores = rest.filter((q) => isHole(q.kind)).length * Math.PI * R_BORE ** 2 * 1.02 * 1.01;
+    const lo = Math.max(...hubs.map(lone)) - bores - 1e-6;
+    const hi = hubs.reduce((a, w) => a + lone(w), 0) + rest.reduce((a, q) => a + lone(q) + 2 * H * (1 + 2 * Math.PI * 4 * RIM_INSET), 0);
+    if (!(v >= lo && v <= hi)) f.push(`${label}: volume ${v.toFixed(4)} outside [${lo.toFixed(4)}, ${hi.toFixed(4)}]`);
+    const stray = strayVertices(m, cells);
+    if (stray) f.push(`${label}: ${stray} vertices outside own cubes ∪ nominal discs`);
+    // Bores open along each hole's axis (hub and crank holes), except an in-plane hole whose bore
+    // both ends of lie inside a rim: that would be a sealed cavity, so it has none (DEVIATIONS).
+    const capped = (q: Cell, s: number): boolean =>
+      hubs.some((w) => {
+        if (w.axis === q.axis || [q.x, q.y, q.z][w.axis] !== [w.x, w.y, w.z][w.axis]) return false;
+        const o = 3 - q.axis - w.axis;
+        const u0 = [q.x - w.x, q.y - w.y, q.z - w.z][q.axis]! + s * 0.51;
+        const v0 = Math.abs([q.x - w.x, q.y - w.y, q.z - w.z][o]!) + R_BORE;
+        return u0 * u0 + v0 * v0 < (w.rim! - RIM_INSET - RIM_CHAMFER) ** 2;
+      });
+    for (const q of cells) {
+      if (!isHole(q.kind) || (capped(q, -1) && capped(q, 1))) continue;
+      for (const t of [-0.4, 0, 0.4]) {
+        const p = [q.x, q.y, q.z];
+        p[q.axis]! += t;
+        if (insideMesh(m, p)) f.push(`${label}: bore of (${q.x},${q.y},${q.z}) closed at ${t}`);
+      }
+    }
+    return f;
+  };
+
+  const MALES: Kind[] = ['pin', 'axle', 'frictionPin'];
+  it('a male crank (pin, axle, friction pin; parallel or either perpendicular axis) at every in-layer position the disc overlaps: pin/axle hub, r 1…4, axis X/Y/Z', () => {
+    const fails: string[] = [];
+    let n = 0;
+    let band = 0;
+    for (const hk of ['pinHole', 'axleHole'] as Kind[])
+      for (const r of RADII)
+        for (const axis of [0, 1, 2] as Axis[])
+          for (let du = 0; du <= 4; du++)
+            for (let dv = 0; dv <= 4; dv++) {
+              if (du === 0 && dv === 0) continue;
+              // Z: the whole quadrant (the mark runs along +u); X and Y: the octant dv ≤ du.
+              if (axis !== 2 && dv > du) continue;
+              const p = at(axis, du, dv);
+              if (!discOverlapsCell([0, 0, 0], axis, r, p)) continue;
+              for (const k of MALES)
+                for (const ka of [0, 1, 2] as Axis[]) {
+                  const cells = [hub(r, hk, axis), c(p[0], p[1], p[2], k, ka)];
+                  if (!isValid(cells)) continue;
+                  n++;
+                  if (Math.hypot(du, dv) - R_ROD > r - RIM_INSET - 0.1) band++;
+                  fails.push(...check(`${hk} r ${r} axis ${axis} (${du},${dv}) ${k}/${'XYZ'[ka]}`, cells));
+                }
+            }
+    expect(fails.slice(0, 20)).toEqual([]);
+    expect(liveManifoldCount()).toBe(0);
+    console.log(`male crank sweep: ${n} solids, ${band} with a parallel rod's circle beyond the drawn rim's reach`);
+    expect(n).toBeGreaterThan(2000);
+    expect(band).toBeGreaterThan(100);
+  }, 600000);
+
+  it('a hole crank (pin or axle hole, parallel or perpendicular) at every in-layer position the disc overlaps: pin/axle hub, r 1…4, axis Z', () => {
+    const fails: string[] = [];
+    let n = 0;
+    for (const hk of ['pinHole', 'axleHole'] as Kind[])
+      for (const r of RADII)
+        for (let du = 0; du <= 4; du++)
+          for (let dv = 0; dv <= 4; dv++) {
+            if (du === 0 && dv === 0) continue;
+            const p = at(2, du, dv);
+            if (!discOverlapsCell([0, 0, 0], 2, r, p)) continue;
+            for (const [k, ka] of [['pinHole', 2], ['axleHole', 2], ['pinHole', 0], ['axleHole', 1]] as [Kind, Axis][]) {
+              const cells = [hub(r, hk, 2), c(p[0], p[1], p[2], k, ka)];
+              if (!isValid(cells)) continue;
+              n++;
+              fails.push(...check(`${hk} r ${r} (${du},${dv}) ${k}/${'XYZ'[ka]}`, cells));
+            }
+          }
+    expect(fails.slice(0, 20)).toEqual([]);
+    expect(n).toBeGreaterThan(300);
+  }, 600000);
+
+  it('several crank cells at once, and cranks shared by two wheels of a part', () => {
+    const fails: string[] = [];
+    let n = 0;
+    const run = (label: string, cells: Cell[]): void => {
+      expect(isValid(cells), label).toBe(true);
+      n++;
+      fails.push(...check(label, cells));
+    };
+    const eight = (a: number, b: number): [number, number][] => [[a, b], [b, a], [-a, b], [-b, a], [a, -b], [b, -a], [-a, -b], [-b, -a]];
+    for (const axis of [0, 1, 2] as Axis[]) {
+      const u = ((axis + 1) % 3) as Axis;
+      const P = (du: number, dv: number, k: Kind, a: Axis = axis, rim?: number): Cell => {
+        const p = at(axis, du, dv);
+        return c(p[0], p[1], p[2], k, a, rim);
+      };
+      const W = (r: number, k: Kind = 'pinHole'): Cell => hub(r, k, axis);
+      run(`axis ${axis}: r 3, eight pins at (±2,±3)/(±3,±2)`, [W(3), ...eight(2, 3).map(([a, b]) => P(a, b, 'pin'))]);
+      run(`axis ${axis}: r 4, eight perpendicular axles at (±2,±4)/(±4,±2)`, [W(4, 'axleHole'), ...eight(2, 4).map(([a, b]) => P(a, b, 'axle', u))]);
+      run(`axis ${axis}: r 1, pins, axles, holes at the four corners`, [W(1), P(1, 1, 'pin'), P(-1, 1, 'axle'), P(1, -1, 'pinHole'), P(-1, -1, 'frictionPin', u)]);
+      run(`axis ${axis}: r 2.5, crank pin (2,2) with a crank hole beside it at (1,2)`, [W(2.5), P(2, 2, 'pin'), P(1, 2, 'pinHole')]);
+      run(`axis ${axis}: r 3, pin at (2,3) between own holes (1,3) and (2,2)`, [W(3), P(2, 3, 'pin'), P(1, 3, 'pinHole'), P(2, 2, 'pinHole')]);
+      run(`axis ${axis}: r 3, axle at (2,3) continuing outward as a 3-long axle`, [W(3), P(2, 3, 'axle', u), P(3, 3, 'axle', u), P(4, 3, 'axle', u)]);
+      run(`axis ${axis}: two r 3 wheels 5 apart sharing crank pins (2,3), (3,3)`, [W(3), P(5, 0, 'pinHole', axis, 3), P(2, 3, 'pin'), P(3, 3, 'axle'), P(-2, -3, 'frictionPin')]);
+      run(`axis ${axis}: r 3 + r 2 overlapping, pins at (2,3) and (5,2)`, [W(3), P(4, 0, 'pinHole', axis, 2), P(2, 3, 'pin'), P(5, 2, 'pin')]);
+      // The natural build of the review finding: a 2-long crank pin, in the wheel's layer and out of its face.
+      const p0 = at(axis, 2, 2);
+      const p1: V3 = [...p0];
+      p1[axis] += 1;
+      run(`axis ${axis}: r 2.5, 2-long crank pin at (2,2) out of the face`, [W(2.5), c(p0[0], p0[1], p0[2], 'pin', axis), c(p1[0], p1[1], p1[2], 'pin', axis)]);
+    }
+    expect(fails).toEqual([]);
+    expect(n).toBe(27);
+    expect(liveManifoldCount()).toBe(0);
+  }, 120000);
+
+  it('the review case (r 2.5 pin-hole hub, pins at (2,2,0) and (2,2,1), axis Z) is one shell: the boss fills the 0.063 gap', () => {
+    const cells = [hub(2.5), c(2, 2, 0, 'pin', 2), c(2, 2, 1, 'pin', 2)];
+    const m = buildPartMesh(part(cells));
+    expect(meshShells(m)).toBe(1);
+    expect(edgeProblems(m)).toEqual([]);
+    // Solid along the line hub → pin through the old gap (rod surface at 2.828 − 0.295 = 2.533, rim at 2.47).
+    for (const d of [2.45, 2.5, 2.53]) expect(insideMesh(m, [d / Math.SQRT2, d / Math.SQRT2, 0]), `at ${d}`).toBe(true);
+    // A boss round the rod (radius 0.36), not a sliver: solid all round the rod at radius 0.33 mid-layer…
+    for (let i = 0; i < 16; i++) {
+      const a = (i / 16) * 2 * Math.PI;
+      expect(insideMesh(m, [2 + 0.33 * Math.cos(a), 2 + 0.33 * Math.sin(a), 0]), `boss at ${i}`).toBe(true);
+    }
+    // …and the web joins the rim over its full width: across the line at radius 2.5, ±0.3.
+    for (const t of [-0.3, -0.15, 0, 0.15, 0.3]) {
+      const q = [2.5 / Math.SQRT2 - t / Math.SQRT2, 2.5 / Math.SQRT2 + t / Math.SQRT2, 0];
+      expect(insideMesh(m, q), `joint at ${t}`).toBe(true);
+    }
+  });
+
+  it('webs are clipped to the nominal disc ∪ the crank cell: no solid beyond r outside own cubes (mid-plane, 0.02 grid)', () => {
+    // r 3 (2,3) is where the unclipped web reached 0.252 beyond r; (1,1) of r 1 and (2,4) of r 4 the next.
+    const cases: [number, number, number, Kind, Axis][] = [
+      [3, 2, 3, 'pinHole', 2], [3, 2, 3, 'pin', 2], [3, 3, 2, 'axle', 0], [1, 1, 1, 'pinHole', 2], [1, 1, 1, 'pin', 2], [4, 2, 4, 'pinHole', 2], [4, 2, 4, 'frictionPin', 1], [2.5, 2, 2, 'pin', 2],
+    ];
+    const out: string[] = [];
+    for (const [r, du, dv, k, ka] of cases) {
+      const cells = [hub(r), c(du, dv, 0, k, ka)];
+      const m = buildPartMesh(part(cells));
+      let beyond = 0;
+      for (let i = -40; i <= 40; i++)
+        for (let j = -40; j <= 40; j++) {
+          const q = [du + i * 0.02, dv + j * 0.02, 0];
+          if (Math.abs(q[0]! - du) <= 0.5 && Math.abs(q[1]! - dv) <= 0.5) continue;
+          if (Math.hypot(q[0]!, q[1]!) <= r) continue;
+          if (insideMesh(m, q)) beyond++;
+        }
+      if (beyond) out.push(`r ${r} (${du},${dv}) ${k}: ${beyond} samples beyond r`);
+    }
+    expect(out).toEqual([]);
+  });
 });

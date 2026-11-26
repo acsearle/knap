@@ -132,7 +132,7 @@ describe('validateModel holes', () => {
       M([P(1, [{ x: 0, y: 0, z: 0, kind: 'pin', axis: '0' } as unknown as Cell])]),
       M([P(1, [{ x: NaN, y: 0, z: 0, kind: 'pin', axis: 0 } as unknown as Cell])]),
       { ...M([]), nextPartId: 1.5 },
-      { ...M([]), version: 3 },
+      { ...M([]), version: 4 }, // 3 became valid with gears (DESIGN §2.4)
       null,
       [],
     ];

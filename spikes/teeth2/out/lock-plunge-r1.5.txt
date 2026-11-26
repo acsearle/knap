@@ -1,0 +1,13 @@
+r 1.5 T 24: plunger on a vertical slider pushed onto the top of the gear with force N (its weight + k·weight); torque ramp on the gear (×10 per 0.4 s) until it turns one pitch. μ_eff = τ/(N·tip radius); pure contact friction would give ≈ 0.4.
+  end    hull   over gap  k0: depth 0.045 μ_eff 1.69   k10: depth 0.13 μ_eff 1.30   k100: depth 0.64 μ_eff 1.45
+  end    hull   over tip  k0: depth -2.8e-7 μ_eff 0.976   k10: depth 0.053 μ_eff 1.43   k100: depth 0.47 μ_eff 0.412
+  end    smooth over gap  k0: depth 0.0039 μ_eff 0.931   k10: depth 0.058 μ_eff 0.583   k100: depth 0.72 μ_eff 0.00542
+  corner hull   over gap  k0: depth 0.0071 μ_eff 0.942   k10: depth 0.056 μ_eff 0.965   k100: depth 0.54 μ_eff 1.84
+  corner hull   over tip  k0: depth -0.0000019 μ_eff 0.866   k10: depth 0.053 μ_eff 0.777   k100: depth 0.42 μ_eff 1.38
+  corner smooth over gap  k0: depth 0.0039 μ_eff 0.942   k10: depth 0.059 μ_eff 0.619   k100: depth 0.72 μ_eff 0.464
+  pinx   hull   over gap  k0: depth 0.0071 μ_eff 0.988   k10: depth 0.052 μ_eff 0.953   k100: depth 0.67 μ_eff 1.87
+  pinx   hull   over tip  k0: depth 0.0039 μ_eff 0.909   k10: depth 0.057 μ_eff 1.43   k100: depth 0.64 μ_eff 1.47
+  pinx   smooth over gap  k0: depth 0.0039 μ_eff 1.00   k10: depth 0.057 μ_eff 0.626   k100: depth 0.69 μ_eff 0.453
+  rod    hull   over gap  k0: depth 0.054 μ_eff 1.65   k10: depth 0.18 μ_eff 3.79   k100: depth 1.1 μ_eff 0.00536
+  rod    hull   over tip  k0: depth 0.0059 μ_eff 1.45   k10: depth 0.083 μ_eff 2.46   k100: depth 0.86 μ_eff 0.0113
+  rod    smooth over gap  k0: depth 0.0059 μ_eff 0.856   k10: depth 0.090 μ_eff 0.556   k100: depth 27 μ_eff 0.00205

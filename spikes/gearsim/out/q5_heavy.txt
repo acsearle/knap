@@ -1,0 +1,6 @@
+heavy 1:25 k 1 guard false: arm mass 44.8 | (E−E0)/mgL [-0.952, 0.000] | max ω 84.0 (0.175 rad/step) | arm angle range [-1.89, 0.00] rad (frictionless: [−π, 0]) | guardRemoved/mgL 0.00
+heavy 1:25 k 2 guard false: arm mass 44.8 | (E−E0)/mgL [-0.807, 4.85e-5] | max ω 157.1 (0.164 rad/step) | arm angle range [-2.21, 0.00] rad (frictionless: [−π, 0]) | guardRemoved/mgL 0.00
+heavy 1:25 k 4 guard false: arm mass 44.8 | (E−E0)/mgL [-0.226, 3.79e-4] | max ω 285.5 (0.149 rad/step) | arm angle range [-2.94, 0.00] rad (frictionless: [−π, 0]) | guardRemoved/mgL 0.00
+heavy 1:25 k 1 guard true: arm mass 44.8 | (E−E0)/mgL [-0.952, 0.000] | max ω 84.0 (0.175 rad/step) | arm angle range [-1.89, 0.00] rad (frictionless: [−π, 0]) | guardRemoved/mgL 0.00
+heavy 1:25 k 2 guard true: arm mass 44.8 | (E−E0)/mgL [-0.807, 4.85e-5] | max ω 157.1 (0.164 rad/step) | arm angle range [-2.21, 0.00] rad (frictionless: [−π, 0]) | guardRemoved/mgL 0.00
+heavy 1:25 k 4 guard true: arm mass 44.8 | (E−E0)/mgL [-0.226, 3.79e-4] | max ω 285.5 (0.149 rad/step) | arm angle range [-2.94, 0.00] rad (frictionless: [−π, 0]) | guardRemoved/mgL 0.00

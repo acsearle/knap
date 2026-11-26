@@ -1,0 +1,6 @@
+crank 1:5 unloaded mu 0 1 rev/s: input 1.956 rev of 2, max lag 0.289 rad, output/input -0.2000 (−0.2), phase 1.96e-6 teeth
+crank 1:5 unloaded mu 0.05 1 rev/s: input 1.955 rev of 2, max lag 0.292 rad, output/input -0.2000 (−0.2), phase 2.31e-6 teeth
+crank 1:5 unloaded mu 0.2 1 rev/s: input 1.954 rev of 2, max lag 0.299 rad, output/input -0.2000 (−0.2), phase 2.39e-6 teeth
+crank 1:5 + 7-arm mu 0 1 rev/s: input 1.944 rev of 2, max lag 0.352 rad, output/input -0.2000 (−0.2), phase 6.00e-6 teeth
+crank 1:5 + 7-arm mu 0.05 1 rev/s: input 1.943 rev of 2, max lag 0.355 rad, output/input -0.2000 (−0.2), phase 5.42e-6 teeth
+crank 1:5 + 7-arm mu 0.2 1 rev/s: input 1.942 rev of 2, max lag 0.364 rad, output/input -0.2000 (−0.2), phase 6.03e-6 teeth

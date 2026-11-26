@@ -2,7 +2,9 @@
 //
 // Tests marked FAILS ON PURPOSE demonstrated a finding: they stated what DESIGN (or plain physics)
 // expects and failed on the tree as reviewed. After the fixer: three are FIXED (they pass unchanged
-// but for the title), two are rewritten as KNOWN LIMIT tests asserting the documented envelope. Everything else passes and pins down behaviour that was
+// but for the title), two are rewritten as KNOWN LIMIT tests asserting the documented envelope (after
+// the milestone-7 verification one of those, the wheel lying across a beam, is FIXED with the
+// wedge hull and a five-position probe). Everything else passes and pins down behaviour that was
 // checked. Long sweeps behind these cases are in spikes/review-wheels/ (own vitest config).
 import { describe, expect, it } from 'vitest';
 import { ModelBuilder, EXAMPLES, beam, pin } from '../../src/core/examples';
@@ -177,15 +179,14 @@ describe('ground and wheels: findings', () => {
     expect(Math.abs(dx)).toBeLessThan(0.01); // measured −0.346
   }, 60000);
 
-  it('KNOWN LIMIT (DEVIATIONS §5 "Known failure envelope") — a wheel lying flat across a beam that lies on the floor sinks into the beam, then rests', async () => {
-    // Was "FAILS ON PURPOSE — … stays on top of it". Built in place (no drop): an r = 2.5 wheel lying
-    // flat one layer above a 15-hole beam lying flat on the floor, the beam under the disc 1 unit off
-    // the hub. The wheel tips toward the floor and its hull sinks into the beam's edge (parry's
-    // hull–hull contact while the round collider holds the wheel on the half-space; the same with the
-    // beam fixed and with soft CCD off; a 5×5 plate of holes in the same place rests correctly).
-    // Not fixable within this engine without replacing the wheel's hull (see the fixer's report);
-    // documented, and asserted here as its envelope: it never passes through the beam (depth stays
-    // below the beam's half-width HC), nothing is removed, and it comes to rest instead of jittering.
+  it('FIXED (was KNOWN LIMIT, before that FAILS ON PURPOSE) — a wheel lying flat across a beam that lies on the floor rests on top of it (≤ 0.05 deep)', async () => {
+    // Built in place (no drop): an r = 2.5 wheel lying flat one layer above a 15-hole beam lying
+    // flat on the floor, the beam under the disc 1 unit off the hub. The wheel tips toward the floor
+    // and leans on the beam's edge. With the first hull (one bevelled 32-gon prism) parry gave a
+    // single contact point there, the wheel pivoted on it and sank 0.36–0.45 (of HC = 0.46). The
+    // hull is now 32 wedges × 2 slabs (shapes.ts wheelHullPieces; DEVIATIONS §5). The probe samples
+    // five axial positions (−HC, −HC/2, 0, +HC/2, +HC): with only −HC, 0, +HC an r 1.5 wheel read
+    // 0.250 where five read 0.458 (review m7).
     const b = new ModelBuilder();
     const bm = b.add(beam([-7, 0, 1], [7, 0, 1], 1));
     const wl = b.add([makeCell(0, 1, 0, 'pinHole', 1)]);
@@ -200,7 +201,7 @@ describe('ground and wheels: findings', () => {
       let depth = -Infinity;
       for (const k of [0, 0.25, 0.5, 0.75, 1])
         for (let i = 0; i < 48; i++)
-          for (const a of [-HC, 0, HC]) {
+          for (const a of [-HC, -HC / 2, 0, HC / 2, HC]) {
             const q: Vec3 = [2.46 * k * Math.cos((i / 48) * 2 * Math.PI), 1 + a, 2.46 * k * Math.sin((i / 48) * 2 * Math.PI)];
             const e = rotate(conj(tb.q), sub(applyTransform(tw, q), tb.p));
             const t = Math.max(-7, Math.min(7, e[0]));
@@ -219,7 +220,7 @@ describe('ground and wheels: findings', () => {
     const removed = [bw, bb].filter((id) => !s.hasBody(id)).length;
     s.dispose();
     console.log(`wheel across a beam on the floor, 20 s: worst depth ${worst.toFixed(3)} (of HC ${HC}), hub y ${hubY.toFixed(3)}, final speed ${speed.toExponential(2)}`);
-    expect(worst).toBeLessThan(HC); // measured 0.36–0.44 at 5 s (the limit)
+    expect(worst).toBeLessThan(0.05); // first hull: 0.36–0.45
     expect(hubY).toBeGreaterThan(0);
     expect(speed).toBeLessThan(0.01); // at rest, not jittering
     expect(removed).toBe(0);

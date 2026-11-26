@@ -644,6 +644,45 @@ function hostsOf(model: Model, part: Part): number[] {
 }
 
 /**
+ * The rods standing in `part`'s holes (§7.3 "one solid both ways"): for each other part with a male
+ * cell in one of `part`'s holes, that male cell and the male cells of the same part contiguous with
+ * it along its axis (the rod passing through the hole, both ends). Cached per model.
+ */
+const rodCache = new WeakMap<Model, Map<number, { partId: number; cells: number[] }[]>>();
+function rodsOf(model: Model, part: Part): { partId: number; cells: number[] }[] {
+  let byPart = rodCache.get(model);
+  if (!byPart) {
+    byPart = new Map();
+    rodCache.set(model, byPart);
+  }
+  const hit = byPart.get(part.id);
+  if (hit) return hit;
+  const sh = sharedInfo(model);
+  const out: { partId: number; cells: number[] }[] = [];
+  for (const c of part.cells) {
+    if (!isHole(c.kind)) continue;
+    const m = sh.maleOfHole.get(c);
+    if (!m || m.partId === part.id) continue;
+    const mp = model.parts.find((q) => q.id === m.partId);
+    if (!mp) continue;
+    let entry = out.find((e) => e.partId === mp.id);
+    if (!entry) out.push((entry = { partId: mp.id, cells: [] }));
+    const a = m.cell.axis;
+    const at = (k: number): number =>
+      mp.cells.findIndex((q) => isMale(q.kind) && q.axis === a && q.x === m.cell.x + (a === 0 ? k : 0) && q.y === m.cell.y + (a === 1 ? k : 0) && q.z === m.cell.z + (a === 2 ? k : 0));
+    for (const step of [1, -1]) {
+      for (let k = step === 1 ? 0 : -1; ; k += step) {
+        const i = at(k);
+        if (i < 0) break;
+        if (!entry.cells.includes(i)) entry.cells.push(i);
+      }
+    }
+  }
+  byPart.set(part.id, out);
+  return out;
+}
+
+/**
  * Back side (§7.3): the nearest point where `ray` LEAVES a part's solid — the face it would hit if
  * every part's front faces were culled and only its back faces drawn. Each part's solid is the
  * union of all its cell cubes (a male inside another part's hole included) and its rim discs; a
@@ -656,7 +695,11 @@ function hostsOf(model: Model, part: Part): number[] {
  * (`opts.filter` as for pickCell). A male cell inside another part's hole is buried in that part
  * (fixer's ruling after review, DEVIATIONS §7): the host's cubes and discs extend the male part's
  * solid for merging, and an interval that ends in the host is no crossing of the male, so a pin's
- * side faces inside a beam never hide the beam's far face. Ties between parts: when both leave the same shared cell (a male
+ * side faces inside a beam never hide the beam's far face. And symmetrically (§7.3 "both ways"):
+ * for a part whose hole holds another part's male, the cubes of the rod through that hole (rodsOf)
+ * extend the hole part's solid in the same way, so an exit from the hole's part at a point still
+ * inside the rod is no crossing — looking straight down an axle the pick is its far end, not the
+ * beam's face buried in it. Ties between parts: when both leave the same shared cell (a male
  * in another part's hole), as for the front pick — the male iff the ray leaves through an axial face
  * (normal ∥ the axis) strictly within R_ROD of the axis, otherwise the hole's part; else the lower
  * part id. A cube left exactly through an edge or corner
@@ -740,6 +783,26 @@ export function pickBack(model: Model, ray: Ray, opts: PickOptions = {}): PickHi
         const c = host.cells[i]!;
         if (!rayDisc(ho, hd, c, rimOf(c)!)) continue;
         spans.push({ tIn: discNear, tOut: discFar, index: -1, disc: true, axis: 0, ties: 0, tread: false, filler: true });
+      }
+    }
+    // Symmetrically, the rods standing in this part's holes extend this part's solid: a hole's
+    // face still inside the rod passing through it is no back face (the rod leaves later).
+    for (const rod of rodsOf(model, part)) {
+      const mp = model.parts.find((q) => q.id === rod.partId);
+      if (!mp || (filter && !filter(mp))) continue;
+      let mo: Vec3 = ray.origin;
+      let md: Vec3 = D;
+      if (lookup) {
+        const mtf = lookup(mp.id);
+        if (!mtf) continue;
+        const qi = conj(mtf.q);
+        mo = rotate(qi, [ray.origin[0] - mtf.p[0], ray.origin[1] - mtf.p[1], ray.origin[2] - mtf.p[2]]);
+        md = rotate(qi, D);
+      }
+      for (const i of rod.cells) {
+        const c = mp.cells[i]!;
+        if (!rayBox(mo, md, c.x - 0.5, c.y - 0.5, c.z - 0.5, c.x + 0.5, c.y + 0.5, c.z + 0.5)) continue;
+        spans.push({ tIn: hitNear, tOut: hitFar, index: -1, disc: false, axis: 0, ties: 0, tread: false, filler: true });
       }
     }
     spans.sort((x, y) => x.tIn - y.tIn || x.tOut - y.tOut);

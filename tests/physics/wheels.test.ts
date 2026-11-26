@@ -11,7 +11,7 @@ import { HC } from '../../src/geometry/dims';
 import { G, GRAB_PRESS_LIMIT, Simulation } from '../../src/physics/sim';
 import { applyTransform } from '../../src/physics/math';
 import type { Vec3 } from '../../src/physics/math';
-import { BEVEL, WHEEL_BEVEL, WHEEL_SEGMENTS, partShapes } from '../../src/physics/shapes';
+import { BEVEL, WHEEL_BEVEL, WHEEL_SEGMENTS, WHEEL_SLABS, partShapes } from '../../src/physics/shapes';
 import { RAPIER } from '../../src/physics/rapier';
 import { angleZ, report, total, unwrap, where } from './helpers';
 import { looseWheel, rollRadius } from './wheelModels';
@@ -32,7 +32,7 @@ function shapePoints(part: Part): Vec3[] {
   const out: Vec3[] = [];
   for (const sh of partShapes(part, 16)) {
     if (sh.kind === 'hull') out.push(...sh.points);
-    else if (sh.kind === 'wheel') out.push(...sh.hull);
+    else if (sh.kind === 'wheel') for (const piece of sh.hull) out.push(...piece);
     else
       for (const sx of [-1, 1])
         for (const sy of [-1, 1])
@@ -103,17 +103,18 @@ describe('ground and wheel colliders', () => {
     const q = cyl[0]!.rotation();
     const yAxis = applyTransform({ p: [0, 0, 0], q: [q.x, q.y, q.z, q.w] }, [0, 1, 0]);
     expect(Math.abs(yAxis[2])).toBeCloseTo(1, 6);
-    // every other collider: the wheel's hull (density 0) or an ordinary part collider
+    // every other collider: the wheel's hull pieces (density 0) or an ordinary part collider
     const rest = cs.filter((c) => c.shape.type !== RAPIER.ShapeType.HalfSpace && c.shape.type !== RAPIER.ShapeType.Cylinder);
     const hulls = rest.filter((c) => c.collisionGroups() === GROUPS.hull);
-    expect(hulls.length).toBe(1);
-    expect(hulls[0]!.density()).toBe(0);
+    expect(hulls.length).toBe(WHEEL_SEGMENTS * WHEEL_SLABS);
+    for (const h of hulls) expect(h.density()).toBe(0);
+    for (const h of hulls) expect(h.friction()).toBeCloseTo(0.4, 6);
     // the ground guard (DEVIATIONS §5): inside the round collider, density 0, frictionless, ground only
     const guards = rest.filter((c) => c.collisionGroups() === GROUPS.guard);
     expect(guards.length).toBe(1);
     expect(guards[0]!.density()).toBe(0);
     expect(guards[0]!.friction()).toBe(0);
-    expect(rest.filter((c) => c.collisionGroups() === GROUPS.part).length).toBe(rest.length - 2);
+    expect(rest.filter((c) => c.collisionGroups() === GROUPS.part).length).toBe(rest.length - hulls.length - 1);
     s.dispose();
   });
 
@@ -122,27 +123,40 @@ describe('ground and wheel colliders', () => {
     const groups = colliders(s).map((c) => c.collisionGroups());
     expect(groups.filter((g) => g === GROUPS.guard).length).toBe(0);
     expect(groups.filter((g) => g === GROUPS.round).length).toBe(1);
-    expect(groups.filter((g) => g === GROUPS.hull).length).toBe(1);
+    expect(groups.filter((g) => g === GROUPS.hull).length).toBe(WHEEL_SEGMENTS * WHEEL_SLABS);
     expect(groups.every((g) => Object.values(GROUPS).includes(g))).toBe(true);
     s.dispose();
   });
 
-  it('the wheel hull is a 32-gon prism over the round collider with an end-face bevel of 0.02·r', () => {
+  it('the wheel hull is the circumscribed 32-gon prism over the round collider, cut into 32 wedges × 2 slabs (every face ≤ 4 vertices)', () => {
+    // DESIGN §5.1 "Wheels", requirement added in review; DEVIATIONS §5. (The first hull was one
+    // 32-gon prism with an end-face bevel of 0.02·r; a beam's edge across its face gave one contact.)
     expect(WHEEL_SEGMENTS).toBe(32);
-    expect(WHEEL_BEVEL).toBe(0.02);
+    expect(WHEEL_SLABS).toBe(2);
+    expect(WHEEL_BEVEL).toBe(0.02); // the ground guard's bevel
     for (const r of [1, 2.5, 4]) {
       const part: Part = { id: 1, color: '#000000', cells: [makeCell(0, 0, 0, 'pinHole', 2, r)] };
       const w = partShapes(part, 16).find((sh) => sh.kind === 'wheel');
       if (w?.kind !== 'wheel') throw new Error('no wheel shape');
       expect(w.radius).toBeCloseTo(r - 0.04, 12);
       expect(w.hull.length).toBe(64);
-      // inradius of the polygon = the cylinder's radius (circumscribed, faces tangent)
-      const R = Math.max(...w.hull.map((p) => Math.hypot(p[0], p[1])));
+      const all = w.hull.flat();
+      // inradius of the polygon = the cylinder's radius (circumscribed, faces tangent); four sides axis-aligned
+      const R = Math.max(...all.map((p) => Math.hypot(p[0], p[1])));
       expect(R * Math.cos(Math.PI / 32)).toBeCloseTo(r - 0.04, 9);
-      const zs = [...new Set(w.hull.map((p) => Math.abs(p[2]).toFixed(9)))].map(Number).sort();
-      expect(zs).toEqual([+(HC - 0.02 * r).toFixed(9), +HC.toFixed(9)]);
-      expect(w.hull.filter((p) => Math.abs(Math.abs(p[2]) - HC) < 1e-12).length).toBe(8); // 4 kept per cap
-      expect(0.02 * r).toBeGreaterThanOrEqual(0.0125 * r); // parry's 4-vertex face limit (spike)
+      expect(Math.min(...all.map((p) => p[1]))).toBeCloseTo(-(r - 0.04), 12);
+      expect(Math.max(...all.map((p) => p[0]))).toBeCloseTo(r - 0.04, 12);
+      for (const piece of w.hull) {
+        // a triangle prism: the axis and two adjacent rim vertices, at the two faces of one slab
+        expect(piece.length).toBe(6);
+        const zs = [...new Set(piece.map((p) => p[2].toFixed(12)))].map(Number).sort((a, b) => a - b);
+        expect(zs.length).toBe(2);
+        expect(zs[1]! - zs[0]!).toBeCloseTo(HC, 12);
+        expect(piece.filter((p) => Math.hypot(p[0], p[1]) < 1e-12).length).toBe(2);
+      }
+      // the slabs tile ±HC
+      const zAll = [...new Set(all.map((p) => p[2].toFixed(12)))].map(Number).sort((a, b) => a - b);
+      expect(zAll).toEqual([-HC, 0, HC].map((z) => +z.toFixed(12)));
     }
     expect(BEVEL).toBe(0.01); // ordinary prisms unchanged
   });

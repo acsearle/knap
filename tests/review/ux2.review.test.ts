@@ -1,5 +1,14 @@
-// Reviewer "ux2": Back side (DESIGN §7.3) against an independent ray-marching reference
-// (e2e/review-ux2-ref.mjs), and resolveBuild on the picks. None of these tests fail on purpose.
+// Reviewer "ux2": Back side (DESIGN §7.3) against an independent ray-marching reference, and
+// resolveBuild on the picks. None of these tests fail on purpose.
+//
+// The reference (refBackSym below) is e2e/review-ux2-ref.mjs's refBack ported here and updated to
+// the rule as DESIGN §7.3 now states it — a male and the hole it stands in are one solid BOTH ways:
+// besides a male part being extended by its host's solid, a hole part is extended by the cubes of
+// the rod passing through its hole (the male cell in the hole and the same part's male cells
+// contiguous with it along its axis), so an exit from the hole part still inside the rod is no
+// crossing. It shares no code with src/editor/picking.ts (point-membership ray marching only); the
+// e2e module keeps the old rule for the e2e scripts that import it, and only its transformModel
+// is used here.
 import { describe, expect, it } from 'vitest';
 import { emptyModel, makeCell } from '../../src/core';
 import type { Cell, Model } from '../../src/core';
@@ -7,7 +16,7 @@ import { EXAMPLES, buildExample } from '../../src/core/examples';
 import { buildPick, initialToolState, pickBack, pickCell, resolveBuild, selectTool, setBackSide } from '../../src/editor';
 import type { Ray } from '../../src/editor';
 // @ts-expect-error plain JS module shared with the e2e scripts
-import { refBack, transformModel } from '../../e2e/review-ux2-ref.mjs';
+import { refBack as refBackOld, transformModel } from '../../e2e/review-ux2-ref.mjs';
 
 type V3 = [number, number, number];
 
@@ -89,6 +98,254 @@ function viewDirs(rnd: () => number): V3[] {
   return out;
 }
 
+// ---------------------------------------------------------------------------------------------
+// Reference: nearest back-face crossing by dense ray marching (rule: one solid both ways).
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+type RefHit = {
+  status: 'hit' | 'none' | 'ambiguous';
+  why?: string;
+  partId?: number;
+  cellIndex?: number;
+  pos?: number[];
+  dir?: number;
+  t?: number;
+  virtual?: number[];
+  tread?: boolean;
+  kind?: string;
+  axis?: number;
+  pe?: number[];
+  tieKind?: string;
+};
+const REF_R_ROD = 0.295;
+const REF_STEP = 0.005;
+const REF_EDGE_EPS = 2e-4;
+const REF_TIE_EPS = 1e-6;
+const refIsHole = (k: string) => k.endsWith('Hole');
+const refIsMale = (k: string) => k === 'pin' || k === 'axle' || k === 'frictionPin';
+function refRim(c: Cell): number | undefined {
+  const r = c.rim;
+  return r !== undefined && refIsHole(c.kind) && r >= 1 && r <= 4 && Math.abs(r * 2 - Math.round(r * 2)) < 1e-9 ? r : undefined;
+}
+interface RefPart {
+  part: { id: number; cells: Cell[] };
+  keys: Map<string, number>;
+  hubs: [Cell, number, number][];
+  lo: number[];
+  hi: number[];
+  hosts: RefPart[];
+  /** Rod cubes standing in this part's holes ("x,y,z" keys), with their bounding box. */
+  rod: Set<string>;
+  rodLo: number[];
+  rodHi: number[];
+}
+function refPrep(model: Model): RefPart[] {
+  const pps: RefPart[] = model.parts.map((p) => {
+    const keys = new Map<string, number>();
+    p.cells.forEach((c, i) => keys.set(`${c.x},${c.y},${c.z}`, i));
+    const hubs = p.cells.map((c, i) => [c, i, refRim(c)] as [Cell, number, number | undefined]).filter((x): x is [Cell, number, number] => x[2] !== undefined);
+    const lo = [Infinity, Infinity, Infinity];
+    const hi = [-Infinity, -Infinity, -Infinity];
+    for (const c of p.cells) {
+      const r = refRim(c) ?? 0.5;
+      const q = [c.x, c.y, c.z];
+      for (let a = 0; a < 3; a++) {
+        const e = a === c.axis ? 0.5 : r;
+        lo[a] = Math.min(lo[a]!, q[a]! - e);
+        hi[a] = Math.max(hi[a]!, q[a]! + e);
+      }
+    }
+    return { part: p as any, keys, hubs, lo, hi, hosts: [], rod: new Set<string>(), rodLo: [Infinity, Infinity, Infinity], rodHi: [-Infinity, -Infinity, -Infinity] };
+  });
+  for (const pp of pps) {
+    for (const c of pp.part.cells) {
+      for (const q of pps) {
+        if (q === pp) continue;
+        const i = q.keys.get(`${c.x},${c.y},${c.z}`);
+        if (i === undefined) continue;
+        const other = q.part.cells[i]!;
+        // pp's male in q's hole: q is pp's host
+        if (refIsMale(c.kind) && refIsHole(other.kind) && !pp.hosts.includes(q)) pp.hosts.push(q);
+        // q's male in pp's hole: the rod through it, both ways along the male's axis
+        if (refIsHole(c.kind) && refIsMale(other.kind)) {
+          const a = other.axis;
+          for (const step of [1, -1]) {
+            for (let k = step === 1 ? 0 : -1; ; k += step) {
+              const pos = [other.x, other.y, other.z];
+              pos[a] = pos[a]! + k;
+              const j = q.keys.get(pos.join());
+              if (j === undefined) break;
+              const rc = q.part.cells[j]!;
+              if (!refIsMale(rc.kind) || rc.axis !== a) break;
+              pp.rod.add(pos.join());
+              for (let b = 0; b < 3; b++) {
+                pp.rodLo[b] = Math.min(pp.rodLo[b]!, pos[b]! - 0.5);
+                pp.rodHi[b] = Math.max(pp.rodHi[b]!, pos[b]! + 0.5);
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  return pps;
+}
+function refCubeAt(pp: RefPart, p: number[]): number {
+  const x = Math.round(p[0]!), y = Math.round(p[1]!), z = Math.round(p[2]!);
+  if (Math.abs(p[0]! - x) >= 0.5 || Math.abs(p[1]! - y) >= 0.5 || Math.abs(p[2]! - z) >= 0.5) return -1;
+  return pp.keys.get(`${x},${y},${z}`) ?? -1;
+}
+function refDiscAt(pp: RefPart, p: number[]): number {
+  for (const [c, i, r] of pp.hubs) {
+    const q = [c.x, c.y, c.z];
+    const a = c.axis;
+    if (Math.abs(p[a]! - q[a]!) >= 0.5) continue;
+    let s = 0;
+    for (let k = 0; k < 3; k++) if (k !== a) s += (p[k]! - q[k]!) ** 2;
+    if (s < r * r) return i;
+  }
+  return -1;
+}
+const refInside = (pp: RefPart, p: number[]) => refCubeAt(pp, p) >= 0 || refDiscAt(pp, p) >= 0;
+function refInRod(pp: RefPart, p: number[]): boolean {
+  if (!pp.rod.size) return false;
+  const x = Math.round(p[0]!), y = Math.round(p[1]!), z = Math.round(p[2]!);
+  if (Math.abs(p[0]! - x) >= 0.5 || Math.abs(p[1]! - y) >= 0.5 || Math.abs(p[2]! - z) >= 0.5) return false;
+  return pp.rod.has(`${x},${y},${z}`);
+}
+/** The part's solid extended by its hosts (it is a male in their holes) and by the rods in its holes. */
+const refInsideM = (pp: RefPart, p: number[]) => refInside(pp, p) || pp.hosts.some((h) => refInside(h, p)) || refInRod(pp, p);
+function refSlab(o: readonly number[], d: number[], lo: number[], hi: number[]): [number, number] | null {
+  let tn = -Infinity;
+  let tf = Infinity;
+  for (let a = 0; a < 3; a++) {
+    if (Math.abs(d[a]!) < 1e-15) {
+      if (o[a]! < lo[a]! || o[a]! > hi[a]!) return null;
+      continue;
+    }
+    let t1 = (lo[a]! - o[a]!) / d[a]!;
+    let t2 = (hi[a]! - o[a]!) / d[a]!;
+    if (t1 > t2) [t1, t2] = [t2, t1];
+    tn = Math.max(tn, t1);
+    tf = Math.min(tf, t2);
+  }
+  return tf > tn ? [tn, tf] : null;
+}
+function refBackSym(model: Model, ray: Ray): RefHit {
+  const L = Math.hypot(...ray.dir);
+  const d = ray.dir.map((v) => v / L);
+  const o = ray.origin;
+  const at = (t: number) => [o[0] + t * d[0]!, o[1] + t * d[1]!, o[2] + t * d[2]!];
+  const grow = (v: number[], e: number) => v.map((x) => x + e);
+  const parts = refPrep(model)
+    .map((pp) => ({ pp, s: refSlab(o, d, grow(pp.lo, -0.01), grow(pp.hi, 0.01)) }))
+    .filter((x): x is { pp: RefPart; s: [number, number] } => !!x.s && x.s[1] > 0);
+  if (!parts.length) return { status: 'none' };
+  let thin = false;
+  const exits: { pp: RefPart; t: number }[] = [];
+  for (const { pp, s } of parts) {
+    let s2: [number, number] = s;
+    const ext = (lo: number[], hi: number[]) => {
+      if (!(lo[0]! <= hi[0]!)) return;
+      const hs = refSlab(o, d, grow(lo, -0.01), grow(hi, 0.01));
+      if (hs) s2 = [Math.min(s2[0], hs[0]), Math.max(s2[1], hs[1])];
+    };
+    for (const h of pp.hosts) ext(h.lo, h.hi);
+    ext(pp.rodLo, pp.rodHi);
+    const t0 = Math.max(0, s2[0]);
+    let prev = refInsideM(pp, at(t0));
+    let ownSeen = prev && refInside(pp, at(t0));
+    for (let t = t0 + REF_STEP; t <= s2[1] + REF_STEP; t += REF_STEP) {
+      const cur = refInsideM(pp, at(t));
+      if (cur && refInside(pp, at(t))) ownSeen = true;
+      if (prev && !cur) {
+        let a = t - REF_STEP, b = t;
+        for (let k = 0; k < 60; k++) {
+          const m = (a + b) / 2;
+          if (refInsideM(pp, at(m))) a = m;
+          else b = m;
+        }
+        const te = (a + b) / 2;
+        if (!ownSeen) {
+          prev = cur;
+          continue;
+        }
+        // the interval ends in host or rod material: no crossing of this part
+        if (refInside(pp, at(te - 1e-5))) exits.push({ pp, t: te });
+        break;
+      }
+      prev = cur;
+    }
+    for (const c of pp.part.cells) {
+      const sp = refSlab(o, d, [c.x - 0.5, c.y - 0.5, c.z - 0.5], [c.x + 0.5, c.y + 0.5, c.z + 0.5]);
+      if (sp && sp[1] - sp[0] < 2 * REF_STEP && sp[1] > 0) thin = true;
+    }
+  }
+  if (!exits.length) return { status: thin ? 'ambiguous' : 'none', why: 'thin' };
+  exits.sort((a, b) => a.t - b.t);
+  const ex = exits[0]!;
+  if (thin && ex.t > 0) return { status: 'ambiguous', why: 'thin' };
+  const tie = exits.filter((e) => e.t - ex.t < REF_TIE_EPS);
+  const describe = (e: { pp: RefPart; t: number }): RefHit => {
+    const pp = e.pp;
+    const pe = at(e.t);
+    const pin = at(e.t - 1e-5);
+    const ci = refCubeAt(pp, pin);
+    if (ci >= 0) {
+      const c = pp.part.cells[ci]!;
+      const q = [c.x, c.y, c.z];
+      const cand = [0, 1, 2].map((a) => ({ a, g: Math.abs(Math.abs(pe[a]! - q[a]!) - 0.5) })).sort((u, v) => u.g - v.g);
+      const amb = cand[1]!.g < REF_EDGE_EPS;
+      const a = cand[0]!.a;
+      const dir = 2 * a + (d[a]! > 0 ? 0 : 1);
+      return { status: amb ? 'ambiguous' : 'hit', why: amb ? 'edge' : undefined, partId: pp.part.id, cellIndex: ci, pos: q, dir, t: e.t, kind: c.kind, axis: c.axis, pe };
+    }
+    const hi = refDiscAt(pp, pin);
+    if (hi < 0) return { status: 'ambiguous', why: 'lost' };
+    const h = pp.part.cells[hi]!;
+    const q = [h.x, h.y, h.z];
+    const a = h.axis;
+    const r = refRim(h)!;
+    const flatGap = Math.abs(Math.abs(pe[a]! - q[a]!) - 0.5);
+    let rad = 0;
+    for (let k = 0; k < 3; k++) if (k !== a) rad += (pe[k]! - q[k]!) ** 2;
+    const treadGap = Math.abs(Math.sqrt(rad) - r);
+    if (Math.abs(flatGap - treadGap) < REF_EDGE_EPS) return { status: 'ambiguous', why: 'rim-edge' };
+    if (flatGap < treadGap) {
+      const g = [...q];
+      for (let k = 0; k < 3; k++) if (k !== a) g[k] = Math.round(pe[k]!);
+      for (let k = 0; k < 3; k++) if (k !== a && Math.abs(Math.abs(pe[k]! - g[k]!) - 0.5) < REF_EDGE_EPS) return { status: 'ambiguous', why: 'virtual-edge' };
+      return { status: 'hit', partId: pp.part.id, cellIndex: hi, pos: q, dir: 2 * a + (d[a]! > 0 ? 0 : 1), t: e.t, virtual: g, pe };
+    }
+    const u = (a + 1) % 3;
+    const v = (a + 2) % 3;
+    const ru = pe[u]! - q[u]!;
+    const rv = pe[v]! - q[v]!;
+    if (Math.abs(Math.abs(ru) - Math.abs(rv)) < REF_EDGE_EPS) return { status: 'ambiguous', why: 'tread-diag' };
+    const k = Math.abs(rv) > Math.abs(ru) ? v : u;
+    const comp = k === u ? ru : rv;
+    return { status: 'hit', partId: pp.part.id, cellIndex: hi, pos: q, dir: 2 * k + (comp < 0 ? 1 : 0), t: e.t, tread: true, pe };
+  };
+  if (tie.length > 1) {
+    const ds = tie.map(describe);
+    if (ds.some((x) => x.status !== 'hit')) return { status: 'ambiguous', why: 'tie-edge' };
+    const samePos = ds.every((x) => x.pos && !x.virtual && !x.tread && x.pos.join() === ds[0]!.pos!.join());
+    if (ds.length === 2 && samePos && refIsHole(ds[0]!.kind!) !== refIsHole(ds[1]!.kind!)) {
+      const hole = refIsHole(ds[0]!.kind!) ? ds[0]! : ds[1]!;
+      const male = hole === ds[0] ? ds[1]! : ds[0]!;
+      const pe = hole.pe!;
+      let rad = 0;
+      for (let k = 0; k < 3; k++) if (k !== hole.axis) rad += (pe[k]! - hole.pos![k]!) ** 2;
+      const axial = hole.dir! >> 1 === hole.axis;
+      if (axial && Math.abs(Math.sqrt(rad) - REF_R_ROD) < REF_EDGE_EPS) return { status: 'ambiguous', why: 'rrod' };
+      return { ...(axial && Math.sqrt(rad) < REF_R_ROD ? male : hole), tieKind: 'shared' };
+    }
+    ds.sort((x, y) => x.partId! - y.partId!);
+    return { ...ds[0]!, tieKind: samePos ? 'other' : 'parts' };
+  }
+  return describe(ex);
+}
+
 interface Tally {
   n: number;
   compared: number;
@@ -100,12 +357,19 @@ interface Tally {
   tread?: number;
   shared?: number;
   oldRuleWouldDiffer?: number;
+  /** Rays where the reference under the old one-way burial rule gives a different answer. */
+  oneWayDiffers?: number;
 }
 
 function compare(m: Model, ray: Ray, t: Tally, label: string): void {
   t.n++;
-  const ref = refBack(m, ray);
+  const ref = refBackSym(m, ray);
   const got = pickBack(m, ray);
+  const old = refBackOld(m, ray) as RefHit;
+  if (ref.status !== 'ambiguous' && old.status !== 'ambiguous') {
+    const key = (h: RefHit) => (h.status === 'hit' ? `${h.partId} ${h.pos} ${h.dir} ${h.virtual ?? ''}` : h.status);
+    if (key(old) !== key(ref)) t.oneWayDiffers = (t.oneWayDiffers ?? 0) + 1;
+  }
   if (ref.status === 'ambiguous') {
     t.ambiguous++;
     return;
@@ -118,7 +382,7 @@ function compare(m: Model, ray: Ray, t: Tally, label: string): void {
     if (ref.tieKind === 'shared') t.shared = (t.shared ?? 0) + 1;
     // mutation check: the old rule (face opposite the hovered front face of the same cell)
     const f = pickCell(m, ray);
-    if (f && !f.virtual && !f.tread && !(f.partId === ref.partId && f.pos.join() === ref.pos.join() && (f.dir ^ 1) === ref.dir))
+    if (f && !f.virtual && !f.tread && !(f.partId === ref.partId && f.pos.join() === ref.pos!.join() && (f.dir ^ 1) === ref.dir))
       t.oldRuleWouldDiffer = (t.oldRuleWouldDiffer ?? 0) + 1;
   }
   if (ref.status === 'none') {
@@ -129,15 +393,15 @@ function compare(m: Model, ray: Ray, t: Tally, label: string): void {
   const ok =
     got !== null &&
     got.partId === ref.partId &&
-    got.pos.join() === ref.pos.join() &&
+    got.pos.join() === ref.pos!.join() &&
     got.dir === ref.dir &&
     !!got.tread === !!ref.tread &&
     (got.virtual?.join() ?? '') === (ref.virtual?.join() ?? '') &&
-    Math.abs(got.t - ref.t) < 1e-5;
+    Math.abs(got.t - ref.t!) < 1e-5;
   if (ok) t.agree++;
   else if (t.mism.length < 40)
     t.mism.push(
-      `${label} o=${ray.origin.map((v) => v.toFixed(4))} d=${ray.dir.map((v) => v.toFixed(4))}: ref p${ref.partId} ${ref.pos} d${ref.dir} t${ref.t.toFixed(5)}${ref.virtual ? ' v' + ref.virtual : ''}${ref.tread ? ' tread' : ''}; got ${got ? `p${got.partId} ${got.pos} d${got.dir} t${got.t.toFixed(5)}${got.virtual ? ' v' + got.virtual : ''}${got.tread ? ' tread' : ''}` : 'null'}`,
+      `${label} o=${ray.origin.map((v) => v.toFixed(4))} d=${ray.dir.map((v) => v.toFixed(4))}: ref p${ref.partId} ${ref.pos} d${ref.dir} t${ref.t!.toFixed(5)}${ref.virtual ? ' v' + ref.virtual : ''}${ref.tread ? ' tread' : ''}; got ${got ? `p${got.partId} ${got.pos} d${got.dir} t${got.t.toFixed(5)}${got.virtual ? ' v' + got.virtual : ''}${got.tread ? ' tread' : ''}` : 'null'}`,
     );
 }
 
@@ -166,9 +430,11 @@ describe('ux2 review: pickBack against a ray-marching reference', () => {
           sampleModel(m, rnd, 20, t, `${name}/${perm}/${signs}`);
         }
     }
-    console.log(`templates: ${t.n} rays, ${t.compared} compared, ${t.ambiguous} ambiguous (edge/tie/thin), ${t.agree} agree; ref hits ${t.hits} (virtual ${t.virt}, tread ${t.tread}, shared-cell ties ${t.shared}); old opposite-face rule differs on ${t.oldRuleWouldDiffer}`);
+    console.log(`templates: ${t.n} rays, ${t.compared} compared, ${t.ambiguous} ambiguous (edge/tie/thin), ${t.agree} agree; ref hits ${t.hits} (virtual ${t.virt}, tread ${t.tread}, shared-cell ties ${t.shared}); old opposite-face rule differs on ${t.oldRuleWouldDiffer}; old one-way burial rule differs on ${t.oneWayDiffers}`);
     if (t.mism.length) console.log(t.mism.join('\n'));
     expect(t.n).toBeGreaterThan(2000);
+    // the templates exercise the two-way rule (rays down a rod through a hole)
+    expect(t.oneWayDiffers ?? 0).toBeGreaterThan(0);
     expect(t.mism).toEqual([]);
   }, 300_000);
 
@@ -176,7 +442,7 @@ describe('ux2 review: pickBack against a ray-marching reference', () => {
     const rnd = lcg(7);
     const t: Tally = { n: 0, compared: 0, ambiguous: 0, agree: 0, mism: [] };
     for (const ex of EXAMPLES) sampleModel(buildExample(ex.name), rnd, 400, t, ex.name);
-    console.log(`examples: ${t.n} rays, ${t.compared} compared, ${t.ambiguous} ambiguous, ${t.agree} agree; ref hits ${t.hits} (virtual ${t.virt}, tread ${t.tread}, shared ${t.shared}); old rule differs on ${t.oldRuleWouldDiffer}`);
+    console.log(`examples: ${t.n} rays, ${t.compared} compared, ${t.ambiguous} ambiguous, ${t.agree} agree; ref hits ${t.hits} (virtual ${t.virt}, tread ${t.tread}, shared ${t.shared}); old rule differs on ${t.oldRuleWouldDiffer}; one-way burial differs on ${t.oneWayDiffers}`);
     if (t.mism.length) console.log(t.mism.join('\n'));
     expect(t.mism).toEqual([]);
   }, 300_000);

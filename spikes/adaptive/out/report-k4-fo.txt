@@ -1,0 +1,45 @@
+friction realistic pendulum: 30 s, joint error ≤ 8.6e-7, energy above running min ≤ 0.00 % of KE_max (-7.82 noise floors beyond the 1 % band), at rest from 18.5 s (then moves ≤ 0.3127°, 1.1e-2 units), guard removed 7.35e+3, 237 ms/sim-s
+pendulum (realistic): τ_f 304.5, 2τ_f/(mgd) = 3.55°, 5 half-swings, amplitudes 90.0 70.2 52.8 37.0 22.1 7.7°; energy loss / τ_f·(θ₁+θ₂) 3.905…4.001, small-angle decrement / 2τ_f/(mgd) 4.057…4.057; at rest from 0.819 s, 3.997° off vertical (dead zone 1.776°)
+hanging link, static load 0.5 × τ_f: turned 4.17e-4° in 2 s
+hanging link, static load 0.9 × τ_f: turned 5.66e-4° in 2 s
+hanging link, static load 1.2 × τ_f: turned 8.20e-2° in 2 s
+2-hole link held at 0.5 × dead zone near its build pose: largest deviation 1.3e-5 rad in 20 s
+2-hole link held at 0.97 × dead zone near its build pose: largest deviation 1.7e-5 rad in 20 s
+friction realistic triple-pendulum: 30 s, joint error ≤ 1.6e-6, energy above running min ≤ 0.00 % of KE_max (-5.36 noise floors beyond the 1 % band), at rest from 8.0 s (then moves ≤ 0.2186°, 2.6e-2 units), guard removed 4.56e+4, 370 ms/sim-s
+5-hole link held at 0.5 × dead zone near its build pose: largest deviation 1.0e-5 rad in 20 s
+5-hole link held at 0.97 × dead zone near its build pose: largest deviation 1.1e-5 rad in 20 s
+2-hole link stuck 3.9° from its build pose: moves 3.0e+0 rad between 3 and 30 s
+friction realistic four-bar: 30 s, joint error ≤ 3.6e-6, energy above running min ≤ 0.00 % of KE_max (-1.42 noise floors beyond the 1 % band), at rest from 9.5 s (then moves ≤ 0.1469°, 4.8e-3 units), guard removed 3.23e+4, 322 ms/sim-s
+four-bar at μ = 10: crank moves 1.0e-8 rad between 1 and 11 s
+spin centred 5-hole link on a pin (revolute): ω0 20 rad/s, τ_f/I = 39.12 rad/s², measured 157.38; stops at 0.123 s (predicted 0.511), largest step-to-step |ω| rise 0.0e+0
+spin centred 9-hole beam on a pin at "low", 50 rad/s: ω0 50 rad/s, τ_f/I = 2.95 rad/s², measured 11.78; stops at 4.240 s (predicted 16.923), largest step-to-step |ω| rise 0.0e+0
+friction realistic parallelogram: 30 s, joint error ≤ 9.9e-7, energy above running min ≤ 0.00 % of KE_max (-1.28 noise floors beyond the 1 % band), at rest from 18.0 s (then moves ≤ 0.1719°, 8.5e-3 units), guard removed 3.21e+3, 322 ms/sim-s
+spin centred 9-hole beam on a pin at "low", 200 rad/s: ω0 200 rad/s, τ_f/I = 2.95 rad/s², measured 11.77; stops at 16.992 s (predicted 67.690), largest step-to-step |ω| rise 1.2e-4
+spin axle in a pin hole (cylindrical, rotation axis): ω0 300 rad/s, τ_f/I = 1784.49 rad/s², measured 7200.00; stops at 0.037 s (predicted 0.168), largest step-to-step |ω| rise 0.0e+0
+sliding-axle off: vertical axle reaches 1.97 at 0.0583 s (free fall under (1−μ)g: 0.0567 s), rests at 2.0000
+sliding-axle low: vertical axle reaches 1.97 at 0.0625 s (free fall under (1−μ)g: 0.0582 s), rests at 2.0000
+friction realistic sliding-axle: 30 s, joint error ≤ 7.1e-7, energy above running min ≤ 0.00 % of KE_max (-1.45 noise floors beyond the 1 % band), at rest from 18.0 s (then moves ≤ 0.1347°, 5.0e-4 units), guard removed 5.26e+3, 206 ms/sim-s; vertical axle at its stop (2.0000) from 0.108 s
+friction realistic weld-test: 30 s, joint error ≤ 1.1e-6, energy above running min ≤ 0.00 % of KE_max (-7.50 noise floors beyond the 1 % band), at rest from 19.5 s (then moves ≤ 0.2584°, 1.2e-2 units), guard removed 2.04e+4, 116 ms/sim-s
+four-bar crank range over 5 s: off 212°, low 212°, realistic 212°
+parallelogram crank range over 5 s: off 61°, low 56°, realistic 42°
+pendulum: switched off after 1 s vs created off from that state: max position difference over 2 s 0
+four-bar: switched off after 1 s vs created off from that state: max position difference over 2 s 0
+friction realistic collision: 30 s, joint error ≤ 8.4e-7, energy above running min ≤ 0.00 % of KE_max (-7.66 noise floors beyond the 1 % band), at rest from 2.0 s (then moves ≤ 0.0065°, 7.0e-5 units), guard removed 2.44e+3, 770 ms/sim-s; link–peg min distance 0.737, loose beam rests at y 0.914
+grab pendulum tip: max lag behind the cursor 0.3463 (off) / 0.3511 (realistic) units; released at 45°, rests 3.898° off vertical (dead zone 1.776°)
+pendulum left at 1.195° (dead zone 1.776°): moves 0.0e+0° in 2 s
+cart: M 41.386, chassis 16.711, wheel 6.169; axle load 4.1777 = chassis/4 (the lighter-body fallback would give 6.169, ×1.48)
+friction realistic crank-wheel: 30 s, joint error ≤ 1.5e-6, energy above running min ≤ 0.00 % of KE_max (-0.76 noise floors beyond the 1 % band), at rest from 22.5 s (then moves ≤ 0.2390°, 1.1e-2 units), guard removed 3.04e+4, 342 ms/sim-s; wheel sweeps 176° in the first 2 s
+cart at rest 30 s: drift 2.20e-3 units, sank 9.77e-3, joint error ≤ 6.4e-7
+cart pushed to 40, friction off: chassis speed 39.997…40.383 over 5 s, joint error ≤ 7.4e-6, guard removed 541
+friction realistic cart: 30 s, joint error ≤ 1.9e-6, energy above running min ≤ 0.00 % of KE_max (-1.21 noise floors beyond the 1 % band), at rest from 2.0 s (then moves ≤ 0.2226°, 2.3e-3 units, joints ≤ 3.9e-3 rad), guard removed 6.84e+4, 1027 ms/sim-s; chassis x range 1.49 units, path 5.0 units in the first 2 s, tilt ≤ 4.6e-4 rad
+pendulum: m=4.005 d=2.0000 I_pivot=23.805 T_pred=309.46 ms T_sim=309.46 ms error=0.000%
+cart coasting from 10: stops after 0.806 units at 0.17 s, predicted 3.086 (-73.88 %), then moves -1.8e-5 in 5 s
+cart on 5°, friction off: a 82.31 vs 82.35 (-0.05 %)
+free spin, symmetric axle in a pin hole (cylindrical): ω 100 → 100.504 rad/s in 5 s (0.50%)
+cart on 15°, friction off: a 244.51 vs 244.55 (-0.02 %)
+free spin, centred 5-hole link on a pin: ω 100 → 100.505 rad/s in 5 s (0.50%)
+free spin, end-pinned 5-hole link: ω 30 → 30.151 rad/s in 5 s (0.50%)
+free spin, free 3×3×3 block (no joint): ω 100 → 100.504 rad/s in 5 s (0.50%)
+free spin, free 5-hole beam (no joint): ω 100 → 100.504 rad/s in 5 s (0.50%)
+cart at 100 units/s, friction off, 10 s: energy 1.01 % (max 1.01 %), guard removed 8944 of 268544
+free cart with an off-centre crank (products of inertia 0.220), friction off, pushed to 40: after 10 s chassis speed 33.62, crank wheel |ω| ≤ 28.2 rad/s (rolling: 27.4), energy ≤ 0.00 % above start, chassis tilt ≤ 0.008 rad, joint error 1.5e-5

@@ -273,6 +273,56 @@ describe('frame fitting', () => {
     expect(flips).toBe(0);
   });
 
+  it('beyond the maximum extent: hysteresis — wobbling footprints never flip; a switch needs 25 % more', () => {
+    // Two carts 150 apart whose footprints wobble by up to ±10 % as their arms swing (review: 16
+    // flips in 3 s when only an exact tie kept the previous window).
+    const cart = (x: number, w: number) => [box(x, 0, 0, x + w, 1, 4), box(x, 0, 6, x + 5, 1, 8)];
+    const at = (i: number) => [...cart(0, 5 * (1 + 0.1 * Math.sin(i * 0.7))), ...cart(150, 5 * (1 + 0.1 * Math.cos(i * 1.3)))];
+    let f = fitFrame(at(0), 0)!;
+    const side = (g: ShadowFrame) => (g.x0 + g.w / 2 < 75 ? 0 : 1);
+    const first = side(f);
+    let flips = 0;
+    for (let i = 1; i <= 400; i++) {
+      const g = fitFrame(at(i), 0, f)!;
+      if (side(g) !== side(f)) flips++;
+      f = g;
+    }
+    expect(flips).toBe(0);
+    expect(side(f)).toBe(first);
+    // The kept window holds footprint A = 20 + 10 = 30 (a 5×4 and a 5×2 beam). The other group:
+    // 24 % more stays put, 26 % more takes the frame.
+    const A = cart(0, 5);
+    const keep = fitFrame(A.concat(cart(150, 5)), 0)!;
+    expect(side(keep)).toBe(0);
+    const other = (gain: number) => [box(150, 0, 0, 155, 1, 4), box(150, 0, 6, 150 + (30 * gain - 20) / 2, 1, 8)];
+    expect(side(fitFrame([...A, ...other(1.24)], 0, keep)!)).toBe(0);
+    expect(side(fitFrame([...A, ...other(1.26)], 0, keep)!)).toBe(1);
+    // with no previous frame the bigger group wins outright
+    expect(side(fitFrame([...A, ...other(1.05)], 0)!)).toBe(1);
+  });
+
+  it('beyond the maximum extent: the kept frame is carried with its group, on the texel grid', () => {
+    // a small group driving away from a slightly bigger one: the frame stays with the small group
+    // (the big one never holds 25 % more), moving in whole texels, the group always inside the margin
+    const big = [box(-200, 0, 0, -194, 1, 5)]; // 30
+    const small = (x: number) => [box(x, 0, 0, x + 5, 1, 5)]; // 25
+    let f = fitFrame([...small(0), ...big], 0)!;
+    expect(f.x0 + f.w / 2).toBeLessThan(-100); // no previous frame: the bigger group
+    // start from a frame on the small group
+    f = { x0: snapToTexel(2.5 - SHADOW_MAX_EXTENT / 2), z0: snapToTexel(2.5 - SHADOW_MAX_EXTENT / 2), w: SHADOW_MAX_EXTENT, d: SHADOW_MAX_EXTENT };
+    for (let i = 1; i <= 300; i++) {
+      const x = i * 0.37;
+      const g = fitFrame([...small(x), ...big], 0, f)!;
+      expect(g.w).toBe(SHADOW_MAX_EXTENT);
+      expect(onGrid(g.x0) && onGrid(g.z0)).toBe(true);
+      expect(g.x0 + SHADOW_MARGIN).toBeLessThanOrEqual(x + 1e-9);
+      expect(g.x0 + g.w - SHADOW_MARGIN).toBeGreaterThanOrEqual(x + 5 - 1e-9);
+      // carried by the least move: unchanged while the group is inside, else by < 1 unit per step
+      expect(Math.abs(g.x0 - f.x0)).toBeLessThanOrEqual(0.37 + SHADOW_TEXEL);
+      f = g;
+    }
+  });
+
   it('frameEdgeFade: 1 inside, 0 at the frame edge, over SHADOW_EDGE_FADE', () => {
     const f: ShadowFrame = { x0: 0, z0: 0, w: 16, d: 16 };
     expect(frameEdgeFade(f, 8, 8)).toBe(1);

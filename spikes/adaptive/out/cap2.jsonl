@@ -1,0 +1,4 @@
+{"sec":"cap2","mode":"none","jmax":0.00000894,"w2max":99.24,"wAllMax":149.3,"E_end_rel":-1981727991902037.8,"maxRise":7.83,"capRemoved":0,"capEvents":0,"guard":0}
+{"sec":"cap2","mode":"body","jmax":0.00000169,"w2max":8,"wAllMax":48.8,"E_end_rel":-216530543551138000,"maxRise":0,"capRemoved":44300,"capEvents":336,"guard":0}
+{"sec":"cap2","mode":"group","jmax":0.00000151,"w2max":8,"wAllMax":22.5,"E_end_rel":-226951474940349700,"maxRise":0,"capRemoved":56200,"capEvents":118,"guard":0}
+{"sec":"cap2","mode":"damp","jmax":0.00000157,"w2max":21.54,"wAllMax":47.4,"E_end_rel":-224790084183389100,"maxRise":0,"capRemoved":0,"capEvents":0,"guard":0}

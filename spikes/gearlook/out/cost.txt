@@ -1,0 +1,7 @@
+wheel r1: 768 tri, 42.4 ms
+wheel r1.5: 874 tri, 23.5 ms
+wheel r2.5: 1192 tri, 16.6 ms
+final gear r0.5 N8: 672 tri, 9.1 ms, closed true, genus 1
+final gear r1 N16: 1216 tri, 7.1 ms, closed true, genus 1
+final gear r1.5 N24: 1728 tri, 13.9 ms, closed true, genus 1
+final gear r2.5 N40: 2752 tri, 17.2 ms, closed true, genus 1

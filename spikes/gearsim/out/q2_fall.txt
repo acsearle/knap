@@ -1,0 +1,36 @@
+fall k 1 spin 20: L(0.5 s)/L0 0.5123 (spin share of L0 -0.006) | maxSpinK/K0spin 0.9895 | errors 0 | end: ω1 gone ω2 gone | phase max 2.43e-4 | K0 436.7
+   g1 removed at 1.1687 s; meshes engaged 0, dead 0, joints alive 1
+   frame removed at 1.1708 s; meshes engaged 0, dead 1, joints alive 0
+   g2 removed at 1.1708 s; meshes engaged 0, dead 1, joints alive 0
+fall k 1 spin 50: L(0.5 s)/L0 0.6215 (spin share of L0 -0.006) | maxSpinK/K0spin 0.9958 | errors 0 | end: ω1 gone ω2 gone | phase max 5.84e-4 | K0 2729.3
+   g2 removed at 1.1708 s; meshes engaged 0, dead 0, joints alive 1
+   frame removed at 1.1729 s; meshes engaged 0, dead 1, joints alive 0
+   g1 removed at 1.1729 s; meshes engaged 0, dead 1, joints alive 0
+fall k 1 spin 100: L(0.5 s)/L0 0.4144 (spin share of L0 -0.006) | maxSpinK/K0spin 0.8191 | errors 0 | end: ω1 gone ω2 gone | phase max 0.0091 | K0 10917.1
+   g2 removed at 1.1708 s; meshes engaged 0, dead 0, joints alive 1
+   frame removed at 1.1729 s; meshes engaged 0, dead 1, joints alive 0
+   g1 removed at 1.1750 s; meshes engaged 0, dead 1, joints alive 0
+fall k 2 spin 20: L(0.5 s)/L0 0.5172 (spin share of L0 -0.006) | maxSpinK/K0spin 0.9895 | errors 0 | end: ω1 gone ω2 gone | phase max 1.28e-4 | K0 436.7
+   g1 removed at 1.1687 s; meshes engaged 0, dead 0, joints alive 1
+   frame removed at 1.1708 s; meshes engaged 0, dead 1, joints alive 0
+   g2 removed at 1.1708 s; meshes engaged 0, dead 1, joints alive 0
+fall k 2 spin 50: L(0.5 s)/L0 0.6204 (spin share of L0 -0.006) | maxSpinK/K0spin 0.9958 | errors 0 | end: ω1 gone ω2 gone | phase max 2.99e-4 | K0 2729.3
+   g2 removed at 1.1708 s; meshes engaged 0, dead 1, joints alive 1
+   frame removed at 1.1729 s; meshes engaged 0, dead 1, joints alive 0
+   g1 removed at 1.1729 s; meshes engaged 0, dead 1, joints alive 0
+fall k 2 spin 100: L(0.5 s)/L0 0.8088 (spin share of L0 -0.006) | maxSpinK/K0spin 0.9979 | errors 0 | end: ω1 gone ω2 gone | phase max 3.18e-4 | K0 10917.1
+   g2 removed at 1.1708 s; meshes engaged 0, dead 1, joints alive 1
+   frame removed at 1.1729 s; meshes engaged 0, dead 1, joints alive 0
+   g1 removed at 1.1729 s; meshes engaged 0, dead 1, joints alive 0
+fall k 4 spin 20: L(0.5 s)/L0 0.5203 (spin share of L0 -0.006) | maxSpinK/K0spin 0.9895 | errors 0 | end: ω1 gone ω2 gone | phase max 6.76e-5 | K0 436.7
+   g1 removed at 1.1687 s; meshes engaged 0, dead 0, joints alive 1
+   frame removed at 1.1708 s; meshes engaged 0, dead 1, joints alive 0
+   g2 removed at 1.1708 s; meshes engaged 0, dead 1, joints alive 0
+fall k 4 spin 50: L(0.5 s)/L0 0.6211 (spin share of L0 -0.006) | maxSpinK/K0spin 0.9958 | errors 0 | end: ω1 gone ω2 gone | phase max 1.53e-4 | K0 2729.3
+   g2 removed at 1.1708 s; meshes engaged 0, dead 1, joints alive 1
+   frame removed at 1.1729 s; meshes engaged 0, dead 1, joints alive 0
+   g1 removed at 1.1729 s; meshes engaged 0, dead 1, joints alive 0
+fall k 4 spin 100: L(0.5 s)/L0 0.8089 (spin share of L0 -0.006) | maxSpinK/K0spin 0.9979 | errors 0 | end: ω1 gone ω2 gone | phase max 3.97e-5 | K0 10917.1
+   g2 removed at 1.1708 s; meshes engaged 0, dead 1, joints alive 1
+   frame removed at 1.1729 s; meshes engaged 0, dead 1, joints alive 0
+   g1 removed at 1.1729 s; meshes engaged 0, dead 1, joints alive 0

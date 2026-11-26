@@ -1,0 +1,4 @@
+chain N 2: gears off 344/342/286 ms, on 328/257/348 ms per sim s | min ratio on/off 0.899 | per mesh +-28.9 ms/sim s | per body (off) 143.0 ms/sim s
+chain N 5: gears off 526/552/537 ms, on 706/787/711 ms per sim s | min ratio on/off 1.342 | per mesh +45.0 ms/sim s | per body (off) 105.1 ms/sim s
+chain N 11: gears off 1096/1018/938 ms, on 1472/1584/1669 ms per sim s | min ratio on/off 1.569 | per mesh +53.4 ms/sim s | per body (off) 85.3 ms/sim s
+crane 1:25 arm 7 falling, μ 0: k 1: 475/400/375 ms (min ×1.00) | k 2: 513/437/441 ms (min ×1.16) | k 4: 562/529/494 ms (min ×1.32)

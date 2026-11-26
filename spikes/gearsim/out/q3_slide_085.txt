@@ -1,0 +1,4 @@
+== slide mu 0.2 k 1 w 5: cylindrical limits [-1,2] F_f 1049.7 τf 325.4 | engagements 1 releases 0 | mean ratio while engaged -1.00525 | max phase err 0.0051 teeth | max tilt 9.42e-8 rad | max joint error 1.85e-7
+   0.015 ENG hub z 1.763 delta 0.810 snap -0.136 teeth
+== slide mu 0.2 k 2 w 5: cylindrical limits [-1,2] F_f 1049.7 τf 325.4 | engagements 1 releases 0 | mean ratio while engaged -1.00428 | max phase err 0.0025 teeth | max tilt 9.31e-8 rad | max joint error 1.96e-7
+   0.013 ENG hub z 1.818 delta 0.840 snap -0.124 teeth

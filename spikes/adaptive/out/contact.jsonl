@@ -1,0 +1,9 @@
+{"sec":"contact","case":"cart-coast-100","v":"k1","dist":310.527,"stopAt":6.19,"chassisYmin":-0.0135,"jmax":0.0000231,"kHist":{"1":5760},"kChanges":0,"innerSteps":5760,"maxRot":0.1426,"guard":478.9,"msPerSimS":743,"worldFrac":0.982}
+{"sec":"contact","case":"cart-coast-100","v":"k2","dist":311.283,"stopAt":6.206,"chassisYmin":-0.0102,"jmax":0.0000252,"kHist":{"2":5760},"kChanges":0,"innerSteps":11520,"maxRot":0.0713,"guard":173.2,"msPerSimS":787,"worldFrac":0.963}
+{"sec":"contact","case":"cart-coast-100","v":"k4","dist":311.446,"stopAt":6.21,"chassisYmin":-0.0098,"jmax":0.0000261,"kHist":{"4":5760},"kChanges":0,"innerSteps":23040,"maxRot":0.0357,"guard":74.07,"msPerSimS":629,"worldFrac":0.969}
+{"sec":"contact","case":"cart-coast-100","v":"k8","dist":311.466,"stopAt":6.213,"chassisYmin":-0.0098,"jmax":0.0000495,"kHist":{"8":5760},"kChanges":0,"innerSteps":46080,"maxRot":0.0178,"guard":59.11,"msPerSimS":651,"worldFrac":0.944}
+{"sec":"contact","case":"cart-coast-100","v":"A","dist":311.453,"stopAt":6.21,"chassisYmin":-0.01,"jmax":0.0000481,"kHist":{"1":3605,"2":833,"4":1322},"kChanges":3,"innerSteps":10559,"maxRot":0.04,"guard":80.62,"msPerSimS":497,"worldFrac":0.975}
+{"sec":"contact","case":"cart-coast-100","v":"toggle","dist":310.758,"stopAt":6.196,"chassisYmin":-0.0121,"jmax":0.0000298,"kHist":{"1":2877,"8":2883},"kChanges":823,"innerSteps":25941,"maxRot":0.1423,"guard":429.9,"msPerSimS":551,"worldFrac":0.956}
+{"sec":"contact","case":"collision-example","mode":"k1","looseYmin":0.9139,"looseYend":0.9143,"guard":0,"jerr":4.48e-7}
+{"sec":"contact","case":"collision-example","mode":"k8","looseYmin":0.9113,"looseYend":0.9142,"guard":0,"jerr":5.29e-7}
+{"sec":"contact","case":"collision-example","mode":"toggle","looseYmin":0.9142,"looseYend":0.9142,"guard":0,"jerr":3.8e-7}

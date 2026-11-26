@@ -190,15 +190,24 @@ function overlapArea(b: CasterBox, x0: number, x1: number, z0: number, z1: numbe
   return w > 0 && d > 0 ? w * d : 0;
 }
 
+/** A switch of the >SHADOW_MAX_EXTENT window needs this much more footprint than the kept one. */
+export const SHADOW_SWITCH_GAIN = 1.25;
+
 /**
  * For casters spread wider than SHADOW_MAX_EXTENT: the SHADOW_MAX_EXTENT-square window (its inside,
  * less the margin, is what gets a full shadow) holding the most caster footprint area — so a model
  * with a group far from the rest (a vehicle driven away, a part left behind) keeps the shadow of
  * its biggest group instead of a window centred on the empty gap between them. Candidates: windows
- * centred on, or aligned with either side of, each caster's footprint, and the previous window.
- * Among equal best ones the previous window, else the one nearest it, wins (no flipping between
- * equal groups; a moving group is followed).
- * Model-only (never the camera), deterministic (ties: the first candidate).
+ * centred on, or aligned with either side of, each caster's footprint.
+ *
+ * Hysteresis (DESIGN §6.1 "Stability"): with a previous frame, the *kept* window is that frame
+ * carried along with the casters in it (the casters overlapping it now, which a frame-to-frame
+ * motion cannot have taken out of it; shifted by the least texel-grid step that keeps their
+ * footprint plus the margin inside, when that fits) — and it is kept unless another candidate holds
+ * at least SHADOW_SWITCH_GAIN times its footprint. Footprint scores wobble as arms swing and bodies
+ * bounce; review found two similar carts 150 apart trading the shadow 16 times in 3 s when only an
+ * exact tie kept the previous window. Among equal best challengers the one nearest the previous
+ * window wins, then the first. Model-only (never the camera), deterministic.
  */
 export function clusterWindow(boxes: readonly CasterBox[], prev: ShadowFrame | null): { x0: number; x1: number; z0: number; z1: number } {
   const M = SHADOW_MAX_EXTENT;
@@ -208,8 +217,8 @@ export function clusterWindow(boxes: readonly CasterBox[], prev: ShadowFrame | n
     for (const b of boxes) s += overlapArea(b, ox + SHADOW_MARGIN, ox + SHADOW_MARGIN + inner, oz + SHADOW_MARGIN, oz + SHADOW_MARGIN + inner);
     return s;
   };
+  const win = (ox: number, oz: number) => ({ x0: ox, x1: ox + M, z0: oz, z1: oz + M });
   const cands: { ox: number; oz: number; s: number }[] = [];
-  if (prev && prev.w === M && prev.d === M) cands.push({ ox: prev.x0, oz: prev.z0, s: score(prev.x0, prev.z0) });
   for (const b of boxes) {
     const cx = (b.min[0] + b.max[0]) / 2;
     const cz = (b.min[2] + b.max[2]) / 2;
@@ -217,13 +226,56 @@ export function clusterWindow(boxes: readonly CasterBox[], prev: ShadowFrame | n
     const zs = [cz - M / 2, b.min[2] - SHADOW_MARGIN, b.max[2] + SHADOW_MARGIN + SHADOW_TEXEL - M];
     for (const ox of xs) for (const oz of zs) cands.push({ ox, oz, s: score(ox, oz) });
   }
-  const top = Math.max(...cands.map((c) => c.s));
-  // Among the best (the previous window first, then the one nearest it, then the first): so equal
-  // groups never flip, and a moving group is followed rather than swapped for another.
-  const near = prev ? (c: { ox: number; oz: number }) => Math.hypot(c.ox - prev.x0, c.oz - prev.z0) : () => 0;
-  let best = cands.find((c) => c.s >= top - 1e-9 * Math.max(1, top))!;
-  for (const c of cands) if (c.s >= top - 1e-9 * Math.max(1, top) && near(c) < near(best) - 1e-12) best = c;
-  return { x0: best.ox, x1: best.ox + M, z0: best.oz, z1: best.oz + M };
+  const pickBest = (): { ox: number; oz: number; s: number } => {
+    const top = Math.max(...cands.map((c) => c.s));
+    const near = prev ? (c: { ox: number; oz: number }) => Math.hypot(c.ox - prev.x0, c.oz - prev.z0) : () => 0;
+    let best = cands.find((c) => c.s >= top - 1e-9 * Math.max(1, top))!;
+    for (const c of cands) if (c.s >= top - 1e-9 * Math.max(1, top) && near(c) < near(best) - 1e-12) best = c;
+    return best;
+  };
+  if (!prev) {
+    const b = pickBest();
+    return win(b.ox, b.oz);
+  }
+  const kept = carryFrame(boxes, prev);
+  const keptScore = score(kept.ox, kept.oz);
+  const best = pickBest();
+  if (best.s > keptScore && best.s >= SHADOW_SWITCH_GAIN * keptScore) return win(best.ox, best.oz);
+  return win(kept.ox, kept.oz);
+}
+
+/**
+ * The previous frame as a SHADOW_MAX_EXTENT square (same centre, snapped to the texel grid when it
+ * was smaller), carried along with the casters overlapping it: per axis, moved by the least whole
+ * number of texels that puts their footprint (plus the margin) inside it, when it fits; else kept.
+ */
+function carryFrame(boxes: readonly CasterBox[], prev: ShadowFrame): { ox: number; oz: number } {
+  const M = SHADOW_MAX_EXTENT;
+  let ox = prev.w === M ? prev.x0 : snapToTexel(prev.x0 + prev.w / 2 - M / 2);
+  let oz = prev.d === M ? prev.z0 : snapToTexel(prev.z0 + prev.d / 2 - M / 2);
+  let x0 = Infinity;
+  let x1 = -Infinity;
+  let z0 = Infinity;
+  let z1 = -Infinity;
+  for (const b of boxes) {
+    if (b.max[0] <= prev.x0 || b.min[0] >= prev.x0 + prev.w || b.max[2] <= prev.z0 || b.min[2] >= prev.z0 + prev.d) continue;
+    x0 = Math.min(x0, b.min[0]);
+    x1 = Math.max(x1, b.max[0]);
+    z0 = Math.min(z0, b.min[2]);
+    z1 = Math.max(z1, b.max[2]);
+  }
+  if (!(x0 <= x1)) return { ox, oz };
+  const carry = (o: number, lo: number, hi: number): number => {
+    lo -= SHADOW_MARGIN;
+    hi += SHADOW_MARGIN;
+    if (hi - lo > M) return o;
+    if (o > lo + 1e-9) return o - Math.ceil((o - lo) / SHADOW_TEXEL - 1e-9) * SHADOW_TEXEL;
+    if (o + M < hi - 1e-9) return o + Math.ceil((hi - o - M) / SHADOW_TEXEL - 1e-9) * SHADOW_TEXEL;
+    return o;
+  };
+  ox = carry(ox, x0, x1);
+  oz = carry(oz, z0, z1);
+  return { ox, oz };
 }
 
 /**

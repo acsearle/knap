@@ -1,0 +1,182 @@
+wheel at rest r 1 axis Z: moved 8.5e-4, sank 7.4e-3, turned 8.4e-8 rad in 5 s
+wheel at rest r 1 axis X: moved 1.1e-3, sank 7.4e-3, turned 8.4e-8 rad in 5 s
+wheel at rest r 1 axis Y: moved 6.7e-4, sank 2.6e-3, turned 0.0e+0 rad in 5 s
+wheel at rest r 1.5 axis Z: moved 1.6e-3, sank 5.8e-3, turned 8.4e-8 rad in 5 s
+wheel at rest r 1.5 axis X: moved 2.3e-3, sank 5.8e-3, turned 8.4e-8 rad in 5 s
+wheel at rest r 1.5 axis Y: moved 4.6e-4, sank 2.3e-3, turned 0.0e+0 rad in 5 s
+wheel at rest r 2.5 axis Z: moved 1.7e-3, sank 4.9e-3, turned 2.5e-7 rad in 5 s
+wheel at rest r 2.5 axis X: moved 2.4e-3, sank 4.9e-3, turned 2.5e-7 rad in 5 s
+friction realistic pendulum: 30 s, joint error ≤ 9.9e-7, energy above running min ≤ 0.00 % of KE_max (-8.31 noise floors beyond the 1 % band), at rest from 4.0 s (then moves ≤ 0.0000°, 0.0e+0 units), guard removed 0.00, 267 ms/sim-s
+wheel at rest r 2.5 axis Y: moved 2.2e-4, sank 2.0e-3, turned 0.0e+0 rad in 5 s
+wheel at rest r 4 axis Z: moved 4.1e-6, sank 4.5e-3, turned 2.5e-7 rad in 5 s
+wheel at rest r 4 axis X: moved 1.8e-3, sank 4.5e-3, turned 3.7e-7 rad in 5 s
+wheel at rest r 4 axis Y: moved 9.2e-5, sank 1.9e-3, turned 0.0e+0 rad in 5 s
+pendulum (realistic): τ_f 304.5, 2τ_f/(mgd) = 3.55°, 21 half-swings, amplitudes 90.0 84.6 79.5 74.6 70.0 65.4 61.1 56.8 52.7 48.7 44.7 40.8 37.0 33.2 29.5 25.8 22.2 18.5 14.9 11.4 7.8 4.2°; energy loss / τ_f·(θ₁+θ₂) 0.987…1.001, small-angle decrement / 2τ_f/(mgd) 1.001…1.035; at rest from 3.575 s, 0.684° off vertical (dead zone 1.776°)
+wheel rolling r 1: 160 units in 3.99 s, speed 39.977…40.191 (from 40), sideways 0.002, guard removed 11.8
+wheel rolling r 1.5: 160 units in 4.00 s, speed 39.981…40.035 (from 40), sideways 0.001, guard removed 0.0
+wheel rolling r 2.5: 160 units in 4.00 s, speed 39.993…40.055 (from 40), sideways 0.002, guard removed 0.0
+hanging link, static load 0.5 × τ_f: turned 5.67e-4° in 2 s
+wheel rolling r 4: 160 units in 3.99 s, speed 40.000…40.222 (from 40), sideways 0.002, guard removed 186.8
+wheel on 5° r 1.5: a 71.19 vs 71.27 (-0.12 %)
+wheel on 15° r 1.5: a 211.42 vs 211.66 (-0.11 %)
+hanging link, static load 0.9 × τ_f: turned 5.72e-4° in 2 s
+wheel on 5° r 2.5: a 71.22 vs 71.26 (-0.05 %)
+wheel on 15° r 2.5: a 211.50 vs 211.61 (-0.05 %)
+wheel on 5° r 4: a 71.27 vs 71.25 (0.02 %)
+wheel on 15° r 4: a 211.63 vs 211.60 (0.02 %)
+hanging link, static load 1.2 × τ_f: turned 7.10e-1° in 2 s
+drop 5-hole liftarm flat from 10: deepest 0.010 below the floor, rests 0.0103 into it, moved 0.0e+0 in the last second
+drop 5-hole liftarm on edge from 10: deepest 0.010 below the floor, rests 0.0103 into it, moved 0.0e+0 in the last second
+drop 5-hole liftarm on end from 10: deepest 0.011 below the floor, rests 0.0104 into it, moved 0.0e+0 in the last second
+drop 5-hole liftarm tumbling from 10: deepest 0.010 below the floor, rests 0.0104 into it, moved 0.0e+0 in the last second
+drop 15-hole liftarm flat from 10: deepest 0.015 below the floor, rests 0.0114 into it, moved 0.0e+0 in the last second
+drop 15-hole liftarm tumbling from 10: deepest 0.014 below the floor, rests 0.0114 into it, moved 0.0e+0 in the last second
+drop 2-cell pin lying from 10: deepest 0.002 below the floor, rests 0.0018 into it, moved 0.0e+0 in the last second
+2-hole link held at 0.5 × dead zone near its build pose: largest deviation 1.0e-5 rad in 20 s
+drop 2-cell pin upright from 10: deepest 0.002 below the floor, rests 0.0018 into it, moved 0.0e+0 in the last second
+drop 2-cell pin tumbling from 10: deepest 0.020 below the floor, rests 0.0018 into it, moved 0.0e+0 in the last second
+drop 4-cell axle lying from 10: deepest 0.001 below the floor, rests 0.0009 into it, moved 0.0e+0 in the last second
+drop 4-cell axle upright from 10: deepest 0.001 below the floor, rests 0.0010 into it, moved 0.0e+0 in the last second
+drop L-shaped liftarm tumbling from 10: deepest 0.015 below the floor, rests 0.0061 into it, moved 0.0e+0 in the last second
+2-hole link held at 0.97 × dead zone near its build pose: largest deviation 1.1e-5 rad in 20 s
+drop wheel r 1.5 on edge from 10: deepest 0.002 below the floor, rests 0.0023 into it, moved 0.0e+0 in the last second
+friction realistic triple-pendulum: 30 s, joint error ≤ 3.3e-6, energy above running min ≤ 0.00 % of KE_max (-5.69 noise floors beyond the 1 % band), at rest from 6.0 s (then moves ≤ 0.0000°, 1.2e-7 units), guard removed 0.00, 537 ms/sim-s
+drop wheel r 2.5 flat from 10: deepest 0.002 below the floor, rests 0.0020 into it, moved 0.0e+0 in the last second
+drop wheel r 4 on edge, tilted spin from 10: deepest 0.046 below the floor, rests 0.0019 into it, moved 0.0e+0 in the last second
+drop wheel r 1 tumbling from 10: deepest 0.045 below the floor, rests 0.0026 into it, moved 0.0e+0 in the last second
+5-hole link held at 0.5 × dead zone near its build pose: largest deviation 1.0e-5 rad in 20 s
+drop wheel r 4 tumbling onto its face (wobbles flat) from 10: deepest 0.046 below the floor, rests 0.0019 into it, moved 0.0e+0 in the last second
+pendulum above the floor: largest pose difference to the run without floor 0.0e+0 over 3 s; tip lowest at y -4.00 (floor -6.46)
+loose link above the floor: rests with its centre at y -0.0103 (floor -0.46)
+liftarm onto wheel r 2.5 from 2 (on edge, centred): cells overlap the rim by ≤ 0.009, still on the wheel
+liftarm onto wheel r 2.5 from 5 (on edge, off-centre 1): cells overlap the rim by ≤ -0.004, deflected and fell away
+liftarm onto wheel r 4 from 10 (on edge, off-centre 2): cells overlap the rim by ≤ -0.013, deflected and fell away
+liftarm onto wheel r 1.5 from 10 (flat, centred): cells overlap the rim by ≤ 0.005, still on the wheel
+liftarm onto wheel r 2.5 from 10 (flat, off-centre): cells overlap the rim by ≤ -0.013, deflected and fell away
+liftarm onto wheel r 1.5 from 10 (across, centred): cells overlap the rim by ≤ -0.019, deflected and fell away
+liftarm onto wheel r 4 from 5 (across, off-centre 1): cells overlap the rim by ≤ -0.033, deflected and fell away
+liftarm onto wheel r 2.5 from 2 (across, off-centre 2): cells overlap the rim by ≤ -0.201, deflected and fell away
+liftarm onto wheel r 4 from 10 (across, flat): cells overlap the rim by ≤ 0.001, deflected and fell away
+liftarm onto wheel r 1.5 from 5 (on end): cells overlap the rim by ≤ -0.007, deflected and fell away
+liftarm onto wheel r 2.5 from 10 (on end, off-centre): cells overlap the rim by ≤ -0.012, deflected and fell away
+liftarm onto wheel r 4 from 5 (on edge, spinning): cells overlap the rim by ≤ 0.001, deflected and fell away
+liftarm onto wheel r 4 from 10 (across, spinning): cells overlap the rim by ≤ -0.002, deflected and fell away
+liftarm onto wheel r 2.5 from 10 (flat, spinning): cells overlap the rim by ≤ -0.054, deflected and fell away
+wheel r 1.5 onto beam from 2 (on edge across the beam, at hole 0): lowest centre over the beam 1.911, ends at y 1.917
+wheel r 2.5 onto beam from 5 (on edge, at hole 3): lowest centre over the beam 2.927, rolled or fell off
+wheel r 4 onto beam from 10 (on edge, at hole 7): lowest centre over the beam 4.433, rolled or fell off
+wheel r 1 onto beam from 10 (on edge, at hole 13): lowest centre over the beam 1.433, rolled or fell off
+wheel r 2.5 onto beam from 10 (on edge, end hole 14): lowest centre over the beam 2.936, rolled or fell off
+wheel r 1.5 onto beam from 10 (on edge along the beam, at hole 3): lowest centre over the beam 1.940, rolled or fell off
+wheel r 4 onto beam from 5 (on edge along the beam, at hole 7): lowest centre over the beam 4.425, rolled or fell off
+wheel r 2.5 onto beam from 10 (flat): lowest centre over the beam 0.942, rolled or fell off
+5-hole link held at 0.97 × dead zone near its build pose: largest deviation 1.0e-5 rad in 20 s
+wheel r 1 onto beam from 5 (flat): lowest centre over the beam 0.918, ends at y 0.918
+wheel r 2.5 onto beam from 10 (on edge, spinning): lowest centre over the beam 2.939, rolled or fell off
+wheel r 4 onto beam from 5 (tumbling): lowest centre over the beam 1.136, rolled or fell off
+wheel r 1.5 onto beam from 10 (flat, tumbling): lowest centre over the beam 0.931, rolled or fell off
+link strikes the wheel: at 12.8 rad/s, rebounds at 0.32 rad/s, stops at -12.0°; wheel spun up to 1.66 rad/s; deepest 0.000 into the rim
+2-hole link stuck 175.4° from its build pose: moves 1.1e-6 rad between 3 and 30 s
+crank wheel (realistic): sweeps 219° in the first 2 s, at rest from 3.5 s at -133.6° (crank-down is −135°)
+crank wheel (off): energy above its running minimum ≤ 1.00 % of KE_max over 10 s, guard removed 2.63e+3
+friction realistic four-bar: 30 s, joint error ≤ 4.8e-6, energy above running min ≤ 0.00 % of KE_max (-1.88 noise floors beyond the 1 % band), at rest from 2.5 s (then moves ≤ 0.0000°, 1.2e-7 units), guard removed 0.00, 698 ms/sim-s
+four-bar at μ = 10: crank moves 9.4e-10 rad between 1 and 11 s
+spin centred 5-hole link on a pin (revolute): ω0 20 rad/s, τ_f/I = 39.12 rad/s², measured 38.82; stops at 0.515 s (predicted 0.511), largest step-to-step |ω| rise 0.0e+0
+cart example pressed 10 units into the floor for 2 s: deepest wheel 0.070 units into it, 0.019 2 s after release
+spin centred 9-hole beam on a pin at "low", 50 rad/s: ω0 50 rad/s, τ_f/I = 2.95 rad/s², measured 2.89; stops at 17.008 s (predicted 16.923), largest step-to-step |ω| rise 0.0e+0
+cart example pressed 100 units into the floor for 2 s: deepest wheel 0.070 units into it, 0.000 2 s after release
+friction realistic parallelogram: 30 s, joint error ≤ 9.9e-7, energy above running min ≤ 0.00 % of KE_max (-1.57 noise floors beyond the 1 % band), at rest from 1.0 s (then moves ≤ 0.0148°, 7.3e-4 units), guard removed 0.00, 675 ms/sim-s
+non-principal revolute 10 s: true inertia → max |ω| 52 rad/s, energy +24%; decoupled → max |ω| 43.4, energy +0.50% (of the swing's PE range)
+spin centred 9-hole beam on a pin at "low", 200 rad/s: ω0 200 rad/s, τ_f/I = 2.95 rad/s², measured 2.90; stops at 68.033 s (predicted 67.690), largest step-to-step |ω| rise 2.9e-3
+spin axle in a pin hole (cylindrical, rotation axis): ω0 300 rad/s, τ_f/I = 1784.49 rad/s², measured 1783.01; stops at 0.169 s (predicted 0.168), largest step-to-step |ω| rise 0.0e+0
+sliding-axle off: vertical axle reaches 1.97 at 0.0583 s (free fall under (1−μ)g: 0.0567 s), rests at 2.0000
+sliding-axle low: vertical axle reaches 1.97 at 0.0583 s (free fall under (1−μ)g: 0.0582 s), rests at 2.0000
+sliding-axle realistic: vertical axle reaches 1.97 at 0.0646 s (free fall under (1−μ)g: 0.0634 s), rests at 2.0000
+grab four-bar coupler: target (2.26,0.18), off by 0.042, crank at -31.3° (target −30°), max joint error 1.63e-6
+grab light (2-cell pin) (m=0.53): off target 3.84e-3 after 1.5 s, max |v| 66.4
+grab heavy (7-hole beam) (m=5.70): off target 1.45e-2 after 1.5 s, max |v| 41.2
+200 create/dispose: WASM memory 1.51 MB → 1.51 MB (20 kept alive: 4.00 MB)
+friction realistic sliding-axle: 30 s, joint error ≤ 4.2e-7, energy above running min ≤ 0.00 % of KE_max (-3.69 noise floors beyond the 1 % band), at rest from 0.5 s (then moves ≤ 0.0000°, 1.5e-12 units), guard removed 0.00, 445 ms/sim-s; vertical axle at its stop (2.0000) from 0.067 s
+friction off pendulum: 30 s, joint error ≤ 1.1e-6, energy above running min ≤ 1.00 % of KE_max (0.25 noise floors beyond the 1 % band), at rest from never, guard removed 918, 236 ms/sim-s
+friction realistic weld-test: 30 s, joint error ≤ 1.4e-6, energy above running min ≤ 0.00 % of KE_max (-7.80 noise floors beyond the 1 % band), at rest from 5.5 s (then moves ≤ 0.0000°, 9.3e-10 units), guard removed 0.00, 237 ms/sim-s
+friction off triple-pendulum: 30 s, joint error ≤ 9.6e-6, energy above running min ≤ 0.03 % of KE_max (-6.08 noise floors beyond the 1 % band), at rest from never, guard removed 0.00, 452 ms/sim-s
+four-bar crank range over 5 s: off 212°, low 212°, realistic 212°
+friction realistic collision: 30 s, joint error ≤ 1.0e-6, energy above running min ≤ 0.00 % of KE_max (-8.11 noise floors beyond the 1 % band), at rest from 0.5 s (then moves ≤ 0.0000°, 1.7e-3 units), guard removed 0.00, 792 ms/sim-s; link–peg min distance 0.752, loose beam rests at y 0.914
+parallelogram crank range over 5 s: off 61°, low 59°, realistic 56°
+pendulum: switched off after 1 s vs created off from that state: max position difference over 2 s 0
+friction off four-bar: 30 s, joint error ≤ 7.7e-6, energy above running min ≤ 1.00 % of KE_max (0.31 noise floors beyond the 1 % band), at rest from never, guard removed 2.14e+3, 734 ms/sim-s
+four-bar: switched off after 1 s vs created off from that state: max position difference over 2 s 0.002976427349474342
+friction realistic crank-wheel: 30 s, joint error ≤ 1.3e-6, energy above running min ≤ 0.00 % of KE_max (-1.10 noise floors beyond the 1 % band), at rest from 4.0 s (then moves ≤ 0.0002°, 7.4e-6 units), guard removed 0.00, 516 ms/sim-s; wheel sweeps 218° in the first 2 s
+grab pendulum tip: max lag behind the cursor 0.3472 (off) / 0.3521 (realistic) units; released at 45°, rests 1.640° off vertical (dead zone 1.776°)
+pendulum left at 1.194° (dead zone 1.776°): moves 0.0e+0° in 2 s
+chain triple-pendulum example (realistic): at rest from 6.0 s; then turns 7.9e-8 rad in 5 s
+friction off parallelogram: 30 s, joint error ≤ 1.1e-6, energy above running min ≤ 1.00 % of KE_max (0.06 noise floors beyond the 1 % band), at rest from never, guard removed 334, 809 ms/sim-s
+friction off sliding-axle: 30 s, joint error ≤ 7.0e-7, energy above running min ≤ 0.11 % of KE_max (-5.95 noise floors beyond the 1 % band), at rest from never, guard removed 574, 459 ms/sim-s; vertical axle at its stop (2.0000) from 0.058 s
+chain 15-hole beam hung from a 2-hole link (realistic): at rest from 22.0 s; then turns 3.0e-5 rad in 5 s
+friction off weld-test: 30 s, joint error ≤ 1.4e-6, energy above running min ≤ 0.14 % of KE_max (-8.17 noise floors beyond the 1 % band), at rest from never, guard removed 0.00, 250 ms/sim-s
+chain double pendulum 5 + 5 (realistic): at rest from 8.5 s; then turns 7.3e-8 rad in 5 s
+friction realistic cart: 30 s, joint error ≤ 2.3e-6, energy above running min ≤ 0.00 % of KE_max (-1.22 noise floors beyond the 1 % band), at rest from 5.0 s (then moves ≤ 0.5688°, 1.1e-3 units, joints ≤ 9.9e-3 rad), guard removed 0.00, 1530 ms/sim-s; chassis x range 2.32 units, path 14.6 units in the first 2 s, tilt ≤ 4.8e-4 rad
+friction low pendulum: 30 s, joint error ≤ 9.7e-7, energy above running min ≤ 0.00 % of KE_max (-8.72 noise floors beyond the 1 % band), at rest from 14.5 s (then moves ≤ 0.0000°, 0.0e+0 units), guard removed 51.7, 335 ms/sim-s
+friction off collision: 30 s, joint error ≤ 5.8e-6, energy above running min ≤ 0.00 % of KE_max (-8.60 noise floors beyond the 1 % band), at rest from 2.5 s (then moves ≤ 0.0000°, 1.6e-3 units), guard removed 0.00, 936 ms/sim-s; link–peg min distance 0.750, loose beam rests at y 0.914
+chain three 9-hole links (realistic): at rest from 37.0 s; then turns 8.4e-8 rad in 5 s
+friction low triple-pendulum: 30 s, joint error ≤ 5.8e-6, energy above running min ≤ 0.00 % of KE_max (-5.97 noise floors beyond the 1 % band), at rest from 20.5 s (then moves ≤ 0.0000°, 1.2e-7 units), guard removed 0.00, 707 ms/sim-s
+friction off crank-wheel: 30 s, joint error ≤ 1.8e-6, energy above running min ≤ 1.00 % of KE_max (1.01 noise floors beyond the 1 % band), at rest from never, guard removed 8.72e+3, 489 ms/sim-s; wheel sweeps 259° in the first 2 s
+friction low four-bar: 30 s, joint error ≤ 7.3e-6, energy above running min ≤ 0.00 % of KE_max (-2.21 noise floors beyond the 1 % band), at rest from 9.5 s (then moves ≤ 0.0163°, 5.0e-4 units), guard removed 83.0, 822 ms/sim-s
+chain six 3-hole links (realistic): at rest from 13.0 s; then turns 7.9e-8 rad in 5 s
+friction low parallelogram: 30 s, joint error ≤ 8.4e-7, energy above running min ≤ 0.00 % of KE_max (-1.78 noise floors beyond the 1 % band), at rest from 4.0 s (then moves ≤ 0.0000°, 7.5e-8 units), guard removed 0.00, 944 ms/sim-s
+friction off cart: 30 s, joint error ≤ 3.0e-6, energy above running min ≤ 0.04 % of KE_max (-1.25 noise floors beyond the 1 % band), at rest from never, guard removed 0.00, 1613 ms/sim-s; chassis x range 1.82 units, path 16.2 units in the first 2 s, tilt ≤ 8.8e-4 rad
+example pendulum (friction off): joint error 9.99e-7, max |v| 58, max |ω| 29, energy rise 1.00% of KE_max, 342 ms/sim-s (incl. checks); part 2 swings to 180°
+example pendulum (friction default): joint error 9.92e-7, max |v| 56, max |ω| 28, energy rise 0.00% of KE_max, 347 ms/sim-s (incl. checks); part 2 swings to 175°
+example triple-pendulum (friction off): joint error 9.58e-6, max |v| 186, max |ω| 193, energy rise 0.01% of KE_max, 741 ms/sim-s (incl. checks); part 4 swings to 180°
+friction low sliding-axle: 30 s, joint error ≤ 6.3e-7, energy above running min ≤ 0.00 % of KE_max (-5.33 noise floors beyond the 1 % band), at rest from 2.5 s (then moves ≤ 0.0000°, 3.6e-13 units), guard removed 0.00, 633 ms/sim-s; vertical axle at its stop (2.0000) from 0.058 s
+example triple-pendulum (friction default): joint error 3.26e-6, max |v| 178, max |ω| 139, energy rise 0.00% of KE_max, 804 ms/sim-s (incl. checks); part 4 swings to 180°
+friction low weld-test: 30 s, joint error ≤ 1.4e-6, energy above running min ≤ 0.00 % of KE_max (-8.08 noise floors beyond the 1 % band), at rest from 21.5 s (then moves ≤ 0.0000°, 9.3e-10 units), guard removed 0.00, 395 ms/sim-s
+example four-bar (friction off): joint error 7.45e-6, max |v| 97, max |ω| 82, energy rise 1.00% of KE_max, 921 ms/sim-s (incl. checks); part 2 swings to 180°
+example four-bar (friction default): joint error 4.81e-6, max |v| 91, max |ω| 69, energy rise 0.00% of KE_max, 966 ms/sim-s (incl. checks); part 2 swings to 180°
+example parallelogram (friction off): joint error 1.14e-6, max |v| 32, max |ω| 11, energy rise 0.99% of KE_max, 938 ms/sim-s (incl. checks); part 2 swings to 61°, coupler tilt ≤ 3.6e-7 rad
+example parallelogram (friction default): joint error 9.92e-7, max |v| 29, max |ω| 10, energy rise 0.00% of KE_max, 992 ms/sim-s (incl. checks); part 2 swings to 56°, coupler tilt ≤ 3.0e-7 rad
+friction low collision: 30 s, joint error ≤ 1.4e-6, energy above running min ≤ 0.00 % of KE_max (-8.47 noise floors beyond the 1 % band), at rest from 1.0 s (then moves ≤ 0.0000°, 1.7e-3 units), guard removed 0.00, 1171 ms/sim-s; link–peg min distance 0.751, loose beam rests at y 0.914
+example sliding-axle (friction off): joint error 6.49e-7, max |v| 61, max |ω| 43, energy rise 0.00% of KE_max, 602 ms/sim-s (incl. checks); vertical axle displacement -2.0000, captured axle slide ≤ 8.9e-8, its arm swings to 180°
+example sliding-axle (friction default): joint error 4.17e-7, max |v| 57, max |ω| 33, energy rise 0.00% of KE_max, 684 ms/sim-s (incl. checks); vertical axle displacement -2.0000, captured axle slide ≤ 6.7e-8, its arm swings to 136°
+example weld-test (friction off): joint error 1.36e-6, max |v| 72, max |ω| 27, energy rise 0.05% of KE_max, 379 ms/sim-s (incl. checks); part 2 swings to 180°, welded pair rigid (Δ 0)
+example weld-test (friction default): joint error 1.44e-6, max |v| 71, max |ω| 26, energy rise 0.00% of KE_max, 388 ms/sim-s (incl. checks); part 2 swings to 176°, welded pair rigid (Δ 0)
+friction low crank-wheel: 30 s, joint error ≤ 1.6e-6, energy above running min ≤ 0.00 % of KE_max (-1.35 noise floors beyond the 1 % band), at rest from 14.0 s (then moves ≤ 0.0000°, 5.8e-7 units), guard removed 927, 660 ms/sim-s; wheel sweeps 245° in the first 2 s
+example collision (friction off): joint error 5.83e-6, max |v| 107, max |ω| 43, energy rise 0.00% of KE_max, 1164 ms/sim-s (incl. checks); lower link–peg min distance 0.7499 (contact at 0.75), upper link ≥ 2.00, loose beam rests at y 0.9142
+chain twelve 3-hole links (realistic): at rest from 31.5 s; then turns 1.7e-5 rad in 5 s
+example collision (friction default): joint error 1.01e-6, max |v| 108, max |ω| 43, energy rise 0.00% of KE_max, 1234 ms/sim-s (incl. checks); lower link–peg min distance 0.7524 (contact at 0.75), upper link ≥ 2.00, loose beam rests at y 0.9142
+example crank-wheel (friction off): joint error 1.80e-6, max |v| 94, max |ω| 40, energy rise 1.00% of KE_max, 634 ms/sim-s (incl. checks); part 2 swings to 180°
+example crank-wheel (friction default): joint error 1.33e-6, max |v| 73, max |ω| 30, energy rise 0.00% of KE_max, 671 ms/sim-s (incl. checks); part 2 swings to 180°
+energy guard, arm on an axle (axle-arm): rise over 60 s = 1.00 % of KE_max
+example cart (friction off): joint error 2.70e-6, max |v| 83, max |ω| 24, energy rise 0.00% of KE_max, 1925 ms/sim-s (incl. checks); part 10 swings to 180°, chassis x range 1.91, tilt ≤ 6.5e-4 rad, wheel hubs y -0.0177…-0.0001
+friction low cart: 30 s, joint error ≤ 2.6e-6, energy above running min ≤ 0.00 % of KE_max (-1.24 noise floors beyond the 1 % band), at rest from 16.5 s (then moves ≤ 0.0475°, 5.4e-4 units, joints ≤ 8.3e-4 rad), guard removed 0.00, 2061 ms/sim-s; chassis x range 2.21 units, path 16.1 units in the first 2 s, tilt ≤ 4.9e-4 rad
+cart: M 41.386, chassis 16.711, wheel 6.169; axle load 4.1777 = chassis/4 (the lighter-body fallback would give 6.169, ×1.48)
+example cart (friction default): joint error 2.32e-6, max |v| 84, max |ω| 24, energy rise 0.00% of KE_max, 2296 ms/sim-s (incl. checks); part 10 swings to 175°, chassis x range 2.32, tilt ≤ 4.8e-4 rad, wheel hubs y -0.0171…-0.0001
+triple pendulum 10 s: energy +0.01% / -6.01% of E0−Emin, max joint error 9.58e-6, max |v| 186, max |ω| 193, 836 ms per simulated s (incl. diagnostics)
+energy guard, spatial chain Y/X/Z: rise over 60 s = 1.00 % of KE_max
+four-bar 10 s: crank range 211.2°, max joint error 4.81e-6, loop-closure error 5.72e-5 units / 1.39e-5 rad
+axle slide stop: final displacement -2.00000, deepest -2.00000, max |disp + 2| after 0.5 s 3.58e-7, joint error 1.19e-7
+collision drop 3: lowest stacked cell centre 0.9113 (touching at 0.92), final COM y 0.9139, final |v| 1.04e-4
+collision drop 40: bounced true, lowest stacked cell centre 0.9670 (touching at 0.92), removed after falling away true
+flat on flat, 3-hole on a 9-hole, parallel: rests at 0.9109 (touching at 0.92), lowest 0.9109, tilt 3.3e-6 rad
+flat on flat, 5-hole on a 5-hole, crosswise: rests at 0.9144 (touching at 0.92), lowest 0.9144, tilt 3.4e-5 rad
+flat on flat, 3-hole on a 9-hole, crosswise: rests at 0.9139 (touching at 0.92), lowest 0.9139, tilt 2.1e-5 rad
+flat drop 40 onto flat beam: bounced true, lowest cell centre over the beam 0.9128 (touching at 0.92), removed after leaving false
+welds: relative pose deviation 8.93e-15, distance drift 6.22e-15, swing 176°
+pendulum: m=4.005 d=2.0000 I_pivot=23.805 T_pred=309.46 ms T_sim=309.46 ms error=0.000%
+free spin, symmetric axle in a pin hole (cylindrical): ω 100 → 100.504 rad/s in 5 s (0.50%)
+free spin, centred 5-hole link on a pin: ω 100 → 100.504 rad/s in 5 s (0.50%)
+free spin, end-pinned 5-hole link: ω 30 → 30.151 rad/s in 5 s (0.50%)
+free spin, free 3×3×3 block (no joint): ω 100 → 100.504 rad/s in 5 s (0.50%)
+free spin, free 5-hole beam (no joint): ω 100 → 100.504 rad/s in 5 s (0.50%)
+cart at rest 30 s: drift 2.06e-3 units, sank 9.77e-3, joint error ≤ 4.5e-7
+cart pushed to 40, friction off: chassis speed 39.997…40.334 over 5 s, joint error ≤ 6.4e-6, guard removed 548
+energy guard, sliding-axle example, after its 2 s drop: rise over 60 s = 0.00 % of KE_max
+no energy guard, axle-arm: rise over 10 s = 11.8 % of KE_max
+cart coasting from 10: stops after 3.088 units at 0.62 s, predicted 3.086 (0.06 %), then moves 4.8e-6 in 5 s
+cart coasting from 40: stops after 49.548 units at 2.48 s, predicted 49.379 (0.34 %), then moves 0.0e+0 in 5 s
+energy guard, grab: energy after release min -0.00 % of KE_max
+energy guard, collision: KE 3098 → 945, link ω -8.19 rad/s, guard removed 0.00e+0
+cart on 5°, friction off: a 82.31 vs 82.35 (-0.05 %)
+cart on 15°, friction off: a 244.50 vs 244.55 (-0.02 %)
+cart at 100 units/s, friction off, 10 s: energy 1.01 % (max 1.01 %), guard removed 10574 of 268553
+free cart with an off-centre crank (products of inertia 0.220), friction off, pushed to 40: after 10 s chassis speed 31.98, crank wheel |ω| ≤ 28.2 rad/s (rolling: 27.4), energy ≤ 0.00 % above start, chassis tilt ≤ 0.010 rad, joint error 1.5e-5

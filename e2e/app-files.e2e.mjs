@@ -51,8 +51,39 @@ export default async function ({ page, url, shot, assert, step }) {
       ['broken.knap.json', '{"version":1,"parts":[{"id":1,'],
       ['invalid.knap.json', JSON.stringify({ version: 1, parts: [{ id: 1, color: '#ff0000', cells: [{ x: 0, y: 0, z: 0, kind: 'pin', axis: 2 }, { x: 0, y: 0, z: 0, kind: 'pin', axis: 2 }] }], rootPartId: null, nextPartId: 2 })],
     ]) {
-      const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.keyboard.press(`${MOD}+o`)]);
-      await chooser.setFiles({ name, mimeType: 'application/json', buffer: Buffer.from(text) });
+      // Cmd/Ctrl+O: what the app is responsible for is calling click() on its file input inside the
+      // key's user activation; the file then arrives through that input's change event. Playwright's
+      // filechooser event is not used here: after an earlier intercepted chooser it is sometimes not
+      // emitted although click() ran with activation (review-m7-flake.mjs: 2 in 65 runs, every time
+      // the first Cmd+O after the Open button's chooser). The click is recorded and swallowed (no
+      // native chooser), and the file is set on the very input that was clicked.
+      await page.evaluate(() => {
+        const w = window;
+        w.__openClicks = [];
+        if (!w.__origInputClick) w.__origInputClick = HTMLInputElement.prototype.click;
+        HTMLInputElement.prototype.click = function () {
+          if (this.type === 'file') {
+            w.__openClicks.push({ role: this.dataset.role ?? null, accept: this.accept, active: navigator.userActivation?.isActive ?? null, connected: this.isConnected });
+            this.dataset.e2eClicked = '1';
+            return;
+          }
+          return w.__origInputClick.call(this);
+        };
+      });
+      await page.keyboard.press(`${MOD}+o`);
+      await page.waitForFunction(() => window.__openClicks.length > 0, null, { timeout: 5000 });
+      const clicks = await page.evaluate(() => {
+        const c = window.__openClicks;
+        HTMLInputElement.prototype.click = window.__origInputClick;
+        return c;
+      });
+      assert(clicks.length === 1, `${MOD}+O clicks one file input (${JSON.stringify(clicks)})`);
+      assert(clicks[0].active === true, `${MOD}+O clicks it with user activation (${JSON.stringify(clicks[0])})`);
+      assert(clicks[0].connected && /json/.test(clicks[0].accept), `the input is in the page and accepts JSON (${JSON.stringify(clicks[0])})`);
+      const input = page.locator('input[type=file][data-e2e-clicked="1"]');
+      assert((await input.count()) === 1, 'the clicked input is found');
+      await input.setInputFiles({ name, mimeType: 'application/json', buffer: Buffer.from(text) });
+      await input.evaluate((el) => delete el.dataset.e2eClicked);
       await page.waitForFunction(() => window.__knap.getState().banner !== '');
       const st = await state(page);
       console.log(`  [app-files] ${name}: ${st.banner.split('\n')[0]}`);

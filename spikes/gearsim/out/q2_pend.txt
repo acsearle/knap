@@ -1,0 +1,18 @@
+1:1 k 1 merge   : (E−E0)/mgL min -1.14e-5 max 0.0101 end 0.0101 | guardRemoved/mgL 0.0926 | same group true | period 0.4104 vs RK4 0.4104 | phase max 1.98e-4 teeth
+1:1 k 1 nomerge : (E−E0)/mgL min -0.9958 max -2.93e-6 end -0.9958 | guardRemoved/mgL 0.5818 | same group false | period 0.3562 vs RK4 0.4104 | phase max 8.22e-5 teeth
+1:1 k 1 guardoff: (E−E0)/mgL min -1.14e-5 max 0.1060 end 0.1060 | guardRemoved/mgL 0.0000 | same group false | period 0.4104 vs RK4 0.4104 | phase max 2.25e-4 teeth
+1:1 k 2 merge   : (E−E0)/mgL min -1.14e-5 max 0.0101 end 0.0101 | guardRemoved/mgL 0.0900 | same group true | period 0.4104 vs RK4 0.4104 | phase max 2.76e-5 teeth
+1:1 k 2 nomerge : (E−E0)/mgL min -0.9980 max -1.26e-5 end -0.9980 | guardRemoved/mgL 0.5706 | same group false | period 0.3521 vs RK4 0.4104 | phase max 4.20e-6 teeth
+1:1 k 2 guardoff: (E−E0)/mgL min -1.14e-5 max 0.1031 end 0.1031 | guardRemoved/mgL 0.0000 | same group false | period 0.4104 vs RK4 0.4104 | phase max 3.13e-5 teeth
+1:1 k 4 merge   : (E−E0)/mgL min -1.13e-5 max 0.0101 end 0.0101 | guardRemoved/mgL 0.0895 | same group true | period 0.4104 vs RK4 0.4104 | phase max 6.61e-6 teeth
+1:1 k 4 nomerge : (E−E0)/mgL min -0.9993 max -2.17e-5 end -0.9993 | guardRemoved/mgL 0.5733 | same group false | period 0.3458 vs RK4 0.4104 | phase max 2.95e-6 teeth
+1:1 k 4 guardoff: (E−E0)/mgL min -1.13e-5 max 0.1027 end 0.1027 | guardRemoved/mgL 0.0000 | same group false | period 0.4104 vs RK4 0.4104 | phase max 6.64e-6 teeth
+3:1 (arm on r 1.5) k 1 merge   : (E−E0)/mgL min -0.1474 max 0.0019 end -0.1446 | guardRemoved/mgL 0.0000 | same group true | period 0.4188 vs RK4 0.4306 | phase max 0.0011 teeth
+3:1 (arm on r 1.5) k 1 nomerge : (E−E0)/mgL min -0.9933 max -2.66e-6 end -0.9933 | guardRemoved/mgL 0.5852 | same group false | period 0.3812 vs RK4 0.4306 | phase max 0.0010 teeth
+3:1 (arm on r 1.5) k 1 guardoff: (E−E0)/mgL min -0.1474 max 0.0019 end -0.1446 | guardRemoved/mgL 0.0000 | same group false | period 0.4188 vs RK4 0.4306 | phase max 0.0011 teeth
+3:1 (arm on r 1.5) k 2 merge   : (E−E0)/mgL min -9.65e-6 max 0.0101 end 0.0101 | guardRemoved/mgL 0.1054 | same group true | period 0.4312 vs RK4 0.4306 | phase max 1.50e-4 teeth
+3:1 (arm on r 1.5) k 2 nomerge : (E−E0)/mgL min -0.9956 max -7.28e-6 end -0.9956 | guardRemoved/mgL 0.5757 | same group false | period 0.3750 vs RK4 0.4306 | phase max 6.90e-5 teeth
+3:1 (arm on r 1.5) k 2 guardoff: (E−E0)/mgL min -9.65e-6 max 0.1184 end 0.1184 | guardRemoved/mgL 0.0000 | same group false | period 0.4312 vs RK4 0.4306 | phase max 1.72e-4 teeth
+3:1 (arm on r 1.5) k 4 merge   : (E−E0)/mgL min -9.64e-6 max 0.0101 end 0.0101 | guardRemoved/mgL 0.1051 | same group true | period 0.4312 vs RK4 0.4306 | phase max 2.07e-5 teeth
+3:1 (arm on r 1.5) k 4 nomerge : (E−E0)/mgL min -0.9978 max -1.25e-5 end -0.9978 | guardRemoved/mgL 0.5650 | same group false | period 0.3688 vs RK4 0.4306 | phase max 4.35e-6 teeth
+3:1 (arm on r 1.5) k 4 guardoff: (E−E0)/mgL min -9.64e-6 max 0.1180 end 0.1180 | guardRemoved/mgL 0.0000 | same group false | period 0.4312 vs RK4 0.4306 | phase max 2.36e-5 teeth

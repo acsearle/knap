@@ -229,9 +229,46 @@ describe('resolveWheel (§7.2 Wheel tool)', () => {
     expect(partById(after, 1)!.cells.map((q) => q.rim)).toEqual([3, undefined]);
     const shrink = resolveWheel(m, hubPick(1, 1), true);
     expect(shrink).toMatchObject({ valid: true, mode: 'shrink', cellIndex: 0, from: 2.5, to: 2 });
-    // a hole only partly inside the disc, or in another layer, keeps its own wheel
-    const m2 = wheel(1, 2, [0, 0, 0], [c(1, 0, 0, 'pinHole', 2)]);
-    expect(resolveWheel(m2, hubPick(1, 1))).toMatchObject({ cellIndex: 1 });
+    // a hole whose centre lies outside the disc keeps its own wheel (was: (1,0) in r 1, "partly
+    // inside"; its centre is on the rim, which now counts as inside — DESIGN §7.2 after M7 review)
+    const m2 = wheel(1, 2, [0, 0, 0], [c(1, 1, 0, 'pinHole', 2)]);
+    expect(resolveWheel(m2, hubPick(1, 1))).toMatchObject({ valid: true, cellIndex: 1, to: 1 });
+    // (2,2) in r 2.5: the disc reaches into the hole's cell (rule 1 of §2.6 joins them) but the
+    // hole's centre is 2.83 from the hub, outside the disc: by §7.2's rule it keeps its own wheel
+    const m3 = wheel(2.5, 2, [0, 0, 0], [c(2, 2, 0, 'pinHole', 2)]);
+    expect(validateModel(m3)).toEqual([]);
+    expect(resolveWheel(m3, hubPick(1, 1))).toMatchObject({ cellIndex: 1 });
+    // … and so does one in another layer, even straight over the disc
+    const m4 = wheel(2.5, 2, [0, 0, 0], [c(1, 0, 1, 'pinHole', 2), c(0, 0, 1, 'pinHole', 2)]);
+    expect(resolveWheel(m4, hubPick(1, 1))).toMatchObject({ cellIndex: 1 });
+  });
+
+  it('a crank hole near the rim (centre inside the disc, the hole not wholly inside): Wheel acts on the enclosing wheel (M7 review)', () => {
+    // the reviewer's cases (2,1) in r 2.5, (0,2) in r 2 (centre on the rim), (1,1) in r 1.5 — all
+    // valid models joined through the disc's edge — and two more; ((2,2) in r 2.5 has its centre
+    // outside the disc: see the test above)
+    for (const [hx, hy, r] of [[2, 1, 2.5], [0, 2, 2], [1, 1, 1.5], [1, 0, 1], [-2, -1, 2.5], [-1, 2, 2.5]] as const) {
+      const m = wheel(r, 2, [0, 0, 0], [c(hx, hy, 0, 'pinHole', 2)]);
+      expect(validateModel(m), `valid (${hx},${hy}) r ${r}`).toEqual([]);
+      const what = `(${hx},${hy}) in r ${r}`;
+      const grow = resolveWheel(m, hubPick(1, 1));
+      expect(grow, what).toMatchObject({ partId: 1, cellIndex: 0, from: r, to: r + 0.5 });
+      expect(grow.description, what).toMatch(new RegExp(`^Grow wheel · part 1 · radius ${r + 0.5} `));
+      expect(grow.ghost, what).toMatchObject({ x: 0, y: 0, z: 0, rim: r + 0.5 });
+      if (grow.valid) expect(partById(grow.apply(m), 1)!.cells.map((q) => q.rim), what).toEqual([r + 0.5, undefined]);
+      const shrink = resolveWheel(m, hubPick(1, 1), true);
+      expect(shrink, what).toMatchObject({ mode: 'shrink', cellIndex: 0, from: r });
+      expect(shrink.to, what).toBe(r === 1 ? undefined : r - 0.5); // (1 → bare)
+      // never a disc on the crank hole itself
+      expect(shrink.ghost?.rim ?? null, what).toBeNull();
+    }
+    // along other axes too: a wheel ∥ X with a crank hole at (0, 2, 1) in r 2.5
+    const mx = addPart(emptyModel(), [makeCell(0, 0, 0, 'axleHole', 0, 2.5), makeCell(0, 2, 1, 'pinHole', 0)]).model;
+    expect(resolveWheel(mx, hubPick(1, 1))).toMatchObject({ cellIndex: 0, from: 2.5, to: 3 });
+    // two wheels of the part in that layer: the nearer hub
+    const two = addPart(emptyModel(), [makeCell(0, 0, 0, 'pinHole', 2, 2), makeCell(3, 0, 0, 'pinHole', 2, 1), makeCell(1, 0, 0, 'pinHole', 2), makeCell(2, 0, 0, 'pinHole', 2)]).model;
+    expect(resolveWheel(two, hubPick(1, 2))).toMatchObject({ cellIndex: 0 });
+    expect(resolveWheel(two, hubPick(1, 3))).toMatchObject({ cellIndex: 1 });
   });
 
   it('grows a bare hole by half a unit to radius 1, then 1.5 …; each is one setRim', () => {

@@ -34,12 +34,14 @@
 // slowed by one uniform factor. It counters Rapier's f32 spin-up and never adds energy.
 //
 // Wheels, ground and a free root (DESIGN §2.6, §5.1; DEVIATIONS §5 "Wheels, ground, free root"):
-//  - model.ground adds a fixed body with a half-space collider at groundLevel + (½ − HC) (groundY).
+//  - model.ground adds a fixed body with a half-space collider tangent to the lowest collider
+//    (shapes.ts groundPlane; groundLevel + (½ − HC) when a hole or a rim is lowest) (groundY).
 //    It is not one of `bodies`: no part, never removed, not in the energy guard.
 //  - A rim becomes two colliders (shapes.ts WheelShape): a native cylinder ("round") that meets only
-//    the ground and other round colliders, and a 32-gon prism ("hull") that meets only ordinary part
-//    colliders. Collision groups are set only when the model has a rim or a ground; otherwise every
-//    collider keeps Rapier's default groups, so such a model is simulated exactly as before.
+//    the ground and other round colliders, and the 32-gon prism cut into convex pieces ("hull",
+//    shapes.ts wheelHullPieces) that meet only ordinary part colliders. Collision groups are set
+//    only when the model has a rim or a ground; otherwise every collider keeps Rapier's default
+//    groups, so such a model is simulated exactly as before.
 //  - With a free root (rootIsFixed false) no body is fixed; bodies with a horizontal-axis rim
 //    touching the ground at Play are the sinks of the joint-friction load ranking (loadMasses).
 import type { ColliderDesc, EventQueue, ImpulseJoint, RigidBody, World } from '@dimforge/rapier3d-compat';
@@ -47,8 +49,8 @@ import { analyze } from '../core/kinematics';
 import type { Joint, KinematicGraph } from '../core/kinematics';
 import { groundLevel } from '../core/model';
 import type { Model } from '../core/types';
-import { E_FREE, HC, R_BORE, R_COLL_ROD } from '../geometry/dims';
-import { partShapes } from './shapes';
+import { HC, R_BORE } from '../geometry/dims';
+import { groundPlane, partShapes } from './shapes';
 import {
   add,
   axisAngle,
@@ -378,7 +380,7 @@ export class Simulation {
   /** Friction work (τ_f·|Δθ| + F_f·|Δs|) done in the last step, per energy-guard group root. */
   private readonly frictionWork = new Map<number, number>();
   /**
-   * y of the ground's physics plane (groundLevel + ½ − HC) at its pivot under the model's mean cell
+   * y of the ground's physics plane (shapes.ts groundPlane) at its pivot under the model's mean cell
    * centre; null without a ground (DESIGN §5.1 "Ground").
    */
   readonly groundY: number | null = null;
@@ -420,37 +422,23 @@ export class Simulation {
     if (level !== null) {
       if (!Number.isFinite(o.groundSlopeDeg) || Math.abs(o.groundSlopeDeg) >= 90)
         throw new Error(`groundSlopeDeg must be in (−90, 90) (got ${o.groundSlopeDeg})`);
-      const th = (o.groundSlopeDeg * Math.PI) / 180;
-      const nrm: Vec3 = [Math.sin(th), Math.cos(th), 0];
-      // The floor touches the model's lowest point along −n (nominal cells: unit cubes; rims: discs
-      // of radius r, one cell thick), lifted by ½ − HC like the level floor; for θ = 0 this is
-      // exactly groundLevel + (½ − HC). groundY is its height under the mean cell centre.
+      // The plane is tangent to the model's lowest ground-touching collider (shapes.ts groundPlane,
+      // shared with the edit-mode view floor): exactly groundLevel + (½ − HC) when a hole or a rim is
+      // lowest, E_FREE − HC = 0.02 lower for a pin or axle standing on its free end, and higher for a
+      // rod lying on its side (its prism reaches R_COLL_ROD below the axis). A first version only
+      // ever lowered the plane from groundLevel + (½ − HC), so a lying rod dropped 0.17 at Play
+      // (review finding). groundY is the plane's height under the mean cell centre.
+      const plane = groundPlane(model, o.groundSlopeDeg, o.cylinderSegments)!;
+      const nrm = plane.normal;
+      const d = plane.d;
       let cx = 0;
       let cz = 0;
       let n = 0;
-      let low = Infinity;
-      const half = 0.5 * (Math.abs(nrm[0]) + Math.abs(nrm[1]) + Math.abs(nrm[2]));
       for (const p of model.parts)
         for (const c of p.cells) {
           cx += c.x;
           cz += c.z;
           n++;
-          const h = c.x * nrm[0] + c.y * nrm[1] + c.z * nrm[2];
-          low = Math.min(low, h - half);
-          if (c.rim !== undefined) low = Math.min(low, h - c.rim * Math.sqrt(Math.max(0, 1 - nrm[c.axis]! ** 2)) - 0.5 * Math.abs(nrm[c.axis]!));
-        }
-      if (th === 0) low = level; // bit-exact level floor
-      let d = low + (0.5 - HC); // plane: n · x = d
-      // That is exact for hole cells (their colliders reach ±HC); a male cell's free end reaches
-      // E_FREE along its axis, so a pin or axle standing on end (or poking out below the lowest beam)
-      // would start E_FREE − HC = 0.02 inside the floor and be popped up (review finding). Lower the
-      // plane to the lowest male collider point along −n; it never rises.
-      for (const p of model.parts)
-        for (const c of p.cells) {
-          if (c.kind !== 'pin' && c.kind !== 'axle' && c.kind !== 'frictionPin') continue;
-          const na = Math.abs(nrm[c.axis]!);
-          const reach = E_FREE * na + R_COLL_ROD * Math.sqrt(Math.max(0, 1 - na * na));
-          d = Math.min(d, c.x * nrm[0] + c.y * nrm[1] + c.z * nrm[2] - reach);
         }
       cx /= n;
       cz /= n;
@@ -572,11 +560,11 @@ export class Simulation {
   }
 
   /**
-   * The two colliders of a rim (DESIGN §5.1 "Wheels"; shapes.ts WheelShape), positions relative to
+   * The colliders of a rim (DESIGN §5.1 "Wheels"; shapes.ts WheelShape), positions relative to
    * the body's reference point `ref`:
    *  - round: native cylinder (Rapier builds it along local Y; rotated onto the wheel axis), mass
    *    of the annulus set explicitly (f64 values, like the prisms), tyre friction, group `round`;
-   *  - hull: the bevelled 32-gon prism, density 0, part friction, group `hull`;
+   *  - hull: one convex-hull collider per piece of WheelShape.hull, density 0, part friction, group `hull`;
    *  - with a ground, the ground guard (WheelShape.guard): density 0, tyre friction, group `guard`.
    */
   private addWheel(sh: Extract<ReturnType<typeof partShapes>[number], { kind: 'wheel' }>, ref: Vec3, add: (cd: ColliderDesc) => void): void {
@@ -597,12 +585,14 @@ export class Simulation {
       .setRestitution(o.restitution)
       .setCollisionGroups(GROUP.round);
     add(round);
-    const pts = new Float32Array(sh.hull.length * 3);
-    sh.hull.forEach((q, i) => pts.set(sub(q, ref), i * 3));
-    const hull = RAPIER.ColliderDesc.convexHull(pts);
-    if (!hull) throw new Error('convex hull failed for a wheel');
-    hull.setDensity(0).setFriction(o.friction).setRestitution(o.restitution).setCollisionGroups(GROUP.hull);
-    add(hull);
+    for (const piece of sh.hull) {
+      const pts = new Float32Array(piece.length * 3);
+      piece.forEach((q, i) => pts.set(sub(q, ref), i * 3));
+      const hull = RAPIER.ColliderDesc.convexHull(pts);
+      if (!hull) throw new Error('convex hull failed for a wheel');
+      hull.setDensity(0).setFriction(o.friction).setRestitution(o.restitution).setCollisionGroups(GROUP.hull);
+      add(hull);
+    }
     if (this.groundY === null) return; // the guard only meets the ground
     const gp = new Float32Array(sh.guard.length * 3);
     sh.guard.forEach((q, i) => gp.set(sub(q, ref), i * 3));
@@ -619,7 +609,8 @@ export class Simulation {
    * with normal groundNormal (buildGroundCollider, created before every other body); not one of
    * `bodies`. buildGround finds the joint-friction sinks: dynamic
    * bodies with a rim about a horizontal axis whose lowest point (nominal radius r) is within
-   * GROUND_SINK_DIST of the nominal floor (groundLevel, i.e. the physics plane less ½ − HC).
+   * GROUND_SINK_DIST of the physics plane less ½ − HC (i.e. its round collider, radius r − 0.04,
+   * within GROUND_SINK_DIST of the plane).
    */
   private buildGroundCollider(): void {
     if (this.groundY === null) return;

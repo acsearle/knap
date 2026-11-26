@@ -1,0 +1,12 @@
+candidate r0.5 T8 end l2 pivot (1,3) β180° rep hull; lock direction −
+[friction]
+file:///Users/antony/Desktop/knap.nosync/spikes/teeth2/out/detail.mjs:747
+  if (settle(sc) === null) throw new Error("pawl did not settle on the gear");
+                                 ^
+
+Error: pawl did not settle on the gear
+    at mk (file:///Users/antony/Desktop/knap.nosync/spikes/teeth2/out/detail.mjs:747:34)
+    at friction (file:///Users/antony/Desktop/knap.nosync/spikes/teeth2/out/detail.mjs:764:20)
+    at file:///Users/antony/Desktop/knap.nosync/spikes/teeth2/out/detail.mjs:897:3
+
+Node.js v20.11.1

@@ -1,0 +1,10 @@
+candidate r2.5 T40 corner l3 pivot (0,5) β180° rep hull; lock direction −
+[speed]
+  load 4 τ0, NF 30
+  ω   1 rad/s (0.00208 rad/step, tooth passing 6.37 Hz): pawl max lift 0.0548 rad, max |ω_pawl| 3.11, touching 100% of steps, pawl max energy rise 0.0492 τ0·rad; after cut, gear ran back 0.559 pitch → caught
+  ω   3 rad/s (0.00625 rad/step, tooth passing 19.1 Hz): pawl max lift 0.0550 rad, max |ω_pawl| 3.10, touching 87.5% of steps, pawl max energy rise 0.0495 τ0·rad; after cut, gear ran back 0.0425 pitch → caught
+  ω  10 rad/s (0.0208 rad/step, tooth passing 63.7 Hz): pawl max lift 0.0601 rad, max |ω_pawl| 3.71, touching 56.4% of steps, pawl max energy rise 0.0543 τ0·rad; after cut, gear ran back 0.00 pitch → caught
+  ω  30 rad/s (0.0625 rad/step, tooth passing 191 Hz): pawl max lift 0.191 rad, max |ω_pawl| 11.1, touching 11.5% of steps, pawl max energy rise 0.198 τ0·rad; after cut, gear ran back 0.00 pitch → caught
+  ω  60 rad/s (0.125 rad/step, tooth passing 382 Hz): pawl max lift 0.796 rad, max |ω_pawl| 28.2, touching 3.85% of steps, pawl max energy rise 1.05 τ0·rad; after cut, gear ran back 0.00 pitch → caught
+  ω 100 rad/s (0.208 rad/step, tooth passing 637 Hz): pawl max lift 85.4 rad, max |ω_pawl| 96.9, touching 25.4% of steps, pawl max energy rise 18.3 τ0·rad; after cut, gear ran back 411 pitch → NOT caught
+  ω 200 rad/s (0.417 rad/step, tooth passing 1.27e+3 Hz): pawl max lift 205 rad, max |ω_pawl| 214, touching 40.0% of steps, pawl max energy rise 65.3 τ0·rad; after cut, gear ran back 0.00 pitch → caught

@@ -1,0 +1,45 @@
+rod    l1 pivot (1,3) β0 rest -44.0°  teeth +:3.65 skip −:3.52 tunnel  smooth +:2.74 tunnel −:2.26 tunnel
+rod    l1 pivot (2,2) β0 rest -52.6°  teeth +:2.80 tunnel −:4.17 skip  smooth +:2.13 tunnel −:2.58 tunnel
+rod    l1 pivot (2,3) β0 rest -84.2°  teeth +:2.40 tunnel −:1.56 tunnel  smooth +:2.13 tunnel −:1.62 tunnel
+rod    l2 pivot (0,3) β0 rest -23.0°  teeth +:2.15 tunnel −:3.65 tunnel  smooth +:1.78 tunnel −:2.34 tunnel
+rod    l2 pivot (0,3) β180 rest 203°  teeth +:2.74 tunnel −:2.10 tunnel  smooth +:2.34 tunnel −:1.78 tunnel
+rod    l2 pivot (0,4) β0 rest -48.4°  teeth +:4.64 tunnel −:3.05 tunnel  smooth +:2.23 tunnel −:1.58 tunnel
+rod    l2 pivot (0,4) β180 rest 228°  teeth +:3.05 tunnel −:4.59 tunnel  smooth +:1.58 tunnel −:2.23 tunnel
+rod    l2 pivot (1,2) β0 rest -31.9°  teeth +:3.28 tunnel −:23.7 tunnel  smooth +:2.08 tunnel −:2.46 tunnel
+rod    l2 pivot (1,3) β0 rest -45.1°  teeth +:2.23 tunnel −:3.92 tunnel  smooth +:1.91 tunnel −:1.93 tunnel
+rod    l2 pivot (1,4) β0 rest -64.2°  teeth +:26.1 tunnel −:1.58 tunnel  smooth +:1.69 tunnel −:1.56 tunnel
+rod    l2 pivot (1,4) β180 rest 215°  teeth +:1.89 tunnel −:23.7 tunnel  smooth +:1.87 tunnel −:2.43 tunnel
+rod    l2 pivot (2,0) β0 rest -87.0°  teeth +:1.10 tunnel −:3.12 tunnel  smooth +:1.10 tunnel −:1.37 tunnel
+rod    l2 pivot (2,1) β0 rest -68.7°  teeth +:2.18 tunnel −:9.65 tunnel  smooth +:1.38 tunnel −:2.03 tunnel
+rod    l2 pivot (2,2) β0 rest -63.9°  teeth +:1.62 tunnel −:7.06 tunnel  smooth +:1.45 tunnel −:1.80 tunnel
+rod    l2 pivot (2,3) β0 rest -71.3°  teeth +:1.69 tunnel −:1.54 tunnel  smooth +:1.52 tunnel −:1.50 tunnel
+rod    l2 pivot (2,4) β0 rest -87.1°  teeth +:11.7 tunnel −:1.09 tunnel  smooth +:1.37 tunnel −:1.17 tunnel
+rod    l2 pivot (2,4) β180 rest 215°  teeth +:2.98 tunnel −:37.4 tunnel  smooth +:1.82 tunnel −:3.74 tunnel
+rod    l3 pivot (0,2) β0 rest -23.4°  teeth +:2.55 tunnel −:133 skip  smooth +:1.98 tunnel −:2.40 tunnel  <== RATCHET
+rod    l3 pivot (0,2) β180 rest 203°  teeth +:169 skip −:2.58 tunnel  smooth +:2.40 tunnel −:1.98 tunnel  <== RATCHET
+rod    l3 pivot (0,3) β0 rest -33.3°  teeth +:2.61 tunnel −:15.4 tunnel  smooth +:1.80 tunnel −:1.65 tunnel
+rod    l3 pivot (0,3) β180 rest 213°  teeth +:18.2 tunnel −:2.61 tunnel  smooth +:1.67 tunnel −:1.80 tunnel
+rod    l3 pivot (0,4) β0 rest -44.5°  teeth +:1.78 tunnel −:3.70 tunnel  smooth +:1.72 tunnel −:1.47 tunnel
+rod    l3 pivot (0,4) β180 rest 225°  teeth +:3.65 tunnel −:2.00 tunnel  smooth +:1.47 tunnel −:1.72 tunnel
+rod    l3 pivot (0,5) β0 rest -58.3°  teeth +:27.4 tunnel −:1.43 tunnel  smooth +:1.60 tunnel −:1.40 tunnel
+rod    l3 pivot (0,5) β180 rest 238°  teeth +:1.42 tunnel −:30.9 tunnel  smooth +:1.40 tunnel −:1.62 tunnel  <== RATCHET
+rod    l3 pivot (1,1) β0 rest -63.8°  teeth +:1.91 tunnel −:107 skip  smooth +:1.49 tunnel −:7.23 tunnel  <== RATCHET
+rod    l3 pivot (1,2) β0 rest -51.5°  teeth +:2.40 tunnel −:12.7 tunnel  smooth +:1.40 tunnel −:2.58 tunnel
+rod    l3 pivot (1,3) β0 rest -53.7°  teeth +:1.65 tunnel −:14.9 tunnel  smooth +:1.45 tunnel −:1.72 tunnel
+rod    l3 pivot (1,3) β180 rest 195°  teeth +:18.9 tunnel −:1.80 tunnel  smooth +:2.26 tunnel −:1.58 tunnel
+rod    l3 pivot (1,4) β0 rest -60.6°  teeth +:3.79 tunnel −:2.00 tunnel  smooth +:1.42 tunnel −:1.32 tunnel
+rod    l3 pivot (1,4) β180 rest 211°  teeth +:1.76 tunnel −:1.78 tunnel  smooth +:1.76 tunnel −:1.72 tunnel
+rod    l3 pivot (1,5) β0 rest -71.5°  teeth +:34.4 tunnel −:1.24 tunnel  smooth +:1.27 tunnel −:1.23 tunnel  <== RATCHET
+rod    l3 pivot (1,5) β180 rest 231°  teeth +:2.21 tunnel −:59.0 tunnel  smooth +:1.60 tunnel −:1.72 tunnel  <== RATCHET
+rod    l3 pivot (2,1) β0 rest -89.1°  teeth +:0.931 tunnel −:3.57 tunnel  smooth +:0.909 tunnel −:1.02 tunnel
+rod    l3 pivot (2,2) β0 rest -75.9°  teeth +:1.47 tunnel −:8.35 tunnel  smooth +:1.02 tunnel −:1.37 tunnel
+rod    l3 pivot (2,3) β0 rest -72.3°  teeth +:1.17 tunnel −:1.35 tunnel  smooth +:1.09 tunnel −:1.24 tunnel
+rod    l3 pivot (2,4) β0 rest -77.4°  teeth +:1.33 tunnel −:1.11 tunnel  smooth +:1.14 tunnel −:1.10 tunnel
+rod    l3 pivot (2,4) β180 rest 203°  teeth +:2.05 tunnel −:5.36 tunnel  smooth +:1.56 tunnel −:2.05 tunnel
+rod    l3 pivot (2,5) β0 rest -90.1°  teeth +:42.7 tunnel −:0.942 tunnel  smooth +:1.01 tunnel −:0.887 tunnel  <== RATCHET
+rod    l3 pivot (2,5) β180 rest 225°  teeth +:1.87 tunnel −:48.1 tunnel  smooth +:1.52 tunnel −:2.87 tunnel  <== RATCHET
+rod    l3 pivot (3,4) β180 rest 202°  teeth +:1.82 tunnel −:44.8 tunnel  smooth +:1.84 tunnel −:1.91 tunnel  <== RATCHET
+rod    l3 pivot (3,5) β180 rest 232°  teeth +:1.91 tunnel −:13.5 skip  smooth +:1.84 tunnel −:21.0 skip
+rod    l3 pivot (4,4) β180 rest 209°  teeth +:2.23 tunnel −:78.7 skip  smooth +:1.91 tunnel −:5.17 tunnel  <== RATCHET
+rod    l3 pivot (5,3) β180 rest 202°  teeth +:2.32 tunnel −:13.5 skip  smooth +:2.32 tunnel −:14.9 skip
+r 2.5: 44 resting candidates, 439 simulations, 158 cpu-s

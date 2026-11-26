@@ -1,0 +1,16 @@
+rod    l1 pivot (0,1) β0 rest -36.5°  teeth +:0.287 free −:0.787 skip  smooth +:0.261 free −:0.287 free
+rod    l1 pivot (0,1) β180 rest 217°  teeth +:2.37 skip −:0.312 tunnel  smooth +:0.287 free −:0.261 free
+rod    l2 pivot (0,2) β0 rest -64.6°  teeth +:0.357 tunnel −:0.232 free  smooth +:0.137 free −:0.156 free
+rod    l2 pivot (0,2) β180 rest 245°  teeth +:0.232 free −:0.357 tunnel  smooth +:0.156 free −:0.137 free
+rod    l2 pivot (1,1) β180 rest 202°  teeth +:2.10 skip −:0.481 tunnel  smooth +:0.604 tunnel −:0.280 free
+rod    l2 pivot (1,2) β180 rest 222°  teeth +:0.759 skip −:1.04 skip  smooth +:0.203 free −:0.210 free
+rod    l2 pivot (2,2) β180 rest 216°  teeth +:0.340 tunnel −:0.665 skip  smooth +:0.252 free −:0.953 skip
+rod    l3 pivot (0,3) β0 rest -75.5°  teeth +:0.336 skip −:0.352 skip  smooth +:0.0988 free −:0.0965 free
+rod    l3 pivot (0,3) β180 rest 255°  teeth +:0.352 tunnel −:0.344 skip  smooth +:0.0942 free −:0.100 free
+rod    l3 pivot (1,2) β180 rest 233°  teeth +:1.50 skip −:0.267 free  smooth +:1.89 skip −:0.187 free
+rod    l3 pivot (1,3) β180 rest 238°  teeth +:0.597 skip −:0.690 skip  smooth +:0.150 free −:0.149 free
+rod    l3 pivot (2,1) β180 rest 197°  teeth +:0.0298 free −:0.0464 free  smooth +:0.759 skip −:0.309 tunnel
+rod    l3 pivot (2,2) β180 rest 209°  teeth +:3.01 tunnel −:0.604 tunnel  smooth +:0.284 free −:0.182 free
+rod    l3 pivot (2,3) β180 rest 227°  teeth +:0.379 tunnel −:3.92 skip  smooth +:0.154 free −:0.365 tunnel
+rod    l3 pivot (3,2) β180 rest 203°  teeth +:0.448 tunnel −:2.49 tunnel  smooth +:0.189 free −:0.511 tunnel
+r 0.5: 15 resting candidates, 209 simulations, 53.1 cpu-s

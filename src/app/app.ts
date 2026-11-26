@@ -15,7 +15,7 @@
 // included (the viewport is created with keyboard: false), after the open dialog and the open
 // Examples menu have had their say. Space on a keyboard-focused button / checkbox activates that
 // control; buttons and the checkbox clicked with the mouse are blurred so Space stays Play.
-import { effectiveRootId, emptyModel, groundLevel, partById, rootIsFixed, setFixRoot, setGround, setPartColor, setRoot } from '../core';
+import { effectiveRootId, emptyModel, partById, rootIsFixed, setFixRoot, setGround, setPartColor, setRoot } from '../core';
 import type { Model } from '../core';
 import { EXAMPLES, buildExample, exampleByName } from '../core/examples';
 import { analyze } from '../core/kinematics';
@@ -55,9 +55,9 @@ import {
   withModifiers,
 } from '../editor';
 import type { CameraBasis, OpResult, Proposal, StorageLike, Tool, ToolState, WheelProposal } from '../editor';
-import { HC } from '../geometry/dims';
 import { DEFAULT_FRICTION_LEVEL, JOINT_FRICTION } from '../physics';
 import type { FrictionLevel } from '../physics';
+import { groundPlane } from '../physics/shapes';
 import { Viewport, cameraBasis, defaultCamera, jointGlyphsFromGraph } from '../view';
 import type { ViewportPointerEvent } from '../view';
 import { Banner, aboutDialog, helpDialog } from '../ui/dialogs';
@@ -444,7 +444,8 @@ export class App {
   /**
    * The floor in the view (§6.1 Ground, drawn the same in both modes): while simulating at the
    * simulation's own floor level (sim.groundY); in edit mode at the same level computed from the
-   * model (groundLevel + (½ − HC), DEVIATIONS §6 "Wheels"), following every edit.
+   * model by the function the Simulation uses (physics/shapes groundPlane: tangent to the lowest
+   * ground-touching collider, DESIGN §5.1 "Ground"), following every edit, so it does not move at Play.
    */
   private updateFloor(): void {
     const s = this.session;
@@ -453,8 +454,8 @@ export class App {
       this.vp.setFloor(y === null ? null : { y });
       return;
     }
-    const lvl = groundLevel(this.history.current);
-    this.vp.setFloor(lvl === null ? null : { y: lvl + (0.5 - HC) });
+    const plane = groundPlane(this.history.current);
+    this.vp.setFloor(plane === null ? null : { y: plane.d });
   }
 
   private updateKinematicsOverlay(): void {
@@ -498,8 +499,8 @@ export class App {
     const hit = pickCell(m, ray);
     const grid = hit ? null : pickGrid(ray);
     this.status.setHover(describeHover(m, hit, grid));
-    // The colour of the part under the cursor: overlays drawn over it switch to a contrasting variant
-    // when they are close to it (overlayColor in the view).
+    // The colour of the part under the cursor: overlays drawn over it change treatment (white fill,
+    // bold outline) when their colour is close to it (overlayStyle in the view).
     const over = hit ? m.parts.find((q) => q.id === hit.partId)?.color : undefined;
     const t = this.tool.tool;
     if (t === 'select') {

@@ -1569,6 +1569,198 @@ superseded, it says so here.
 - **Not changed**: the top bar clips Friction / Help / About at 1024 px wide (DESIGN requires
   1280 and up).
 
+## Fixes after the independent verification of milestone 7, and the gear model rules
+
+An independent pass over milestone 7 (reports: `spikes/review-m7/REPORT.md`, `REPORT-ui.md`) found
+seven defects. The entries below record what was changed and measured. They supersede, in "Fixes
+after the three adversarial reviews" above: "Floor plane at a male's free end" (the edit floor is
+now the physics plane), the "KNOWN LIMIT … sinks into the beam" entry (was understated as 0.37; the
+probe sampled only −HC, 0, +HC; measured up to 0.458; now ≤ 0.0082 except the one r 4 case below),
+and "Wheel tool on a crank hole" (now also holes the disc only partly covers).
+
+### Fixes after the milestone-7 verification (physics; DESIGN §5.1 "Ground", "Wheels")
+
+- **Floor tangent to the lowest collider** (`shapes.ts` `lowestGroundPoint` / `groundPlane`, used by
+  the `Simulation` constructor and by `App.updateFloor` for the edit-mode view floor).
+  - *Where:* in `src/physics/shapes.ts`, not `src/geometry/colliders.ts` as the task suggested. It
+    is computed from `partShapes`, i.e. the colliders exactly as Rapier gets them: the
+    circumscribed 16-gon prisms (four faces axis-aligned, so a horizontal rod rests on a face
+    exactly `R_COLL_ROD` below its axis), the 0.01 cap bevel, liftarm runs, boxes, and each wheel's
+    round collider (a native cylinder, exact support). Wheel hull pieces never meet the ground and
+    the guard lies inside the round collider, so they do not count. Built in `geometry`, it would
+    have had to duplicate the prism construction (bevel, keep sets, runs) to be exact on a tilted
+    floor; `geometry` must not import `physics`. It is pure (no Rapier) and `app.ts` imports it from
+    `physics/shapes`.
+  - Only parts whose nominal geometry is within 1 unit of the lowest nominal point are built (a
+    collider point is never above its cell centre, ≤ 0.87 above that cell's nominal low); a brute
+    force over every collider point agrees (tests/physics/ground.test.ts).
+  - On a level floor, a result within 1e-9 of `groundLevel + (½ − HC)` is snapped to it, so every
+    model whose lowest point is a hole or a rim keeps its floor bit for bit (and its trajectory).
+  - Measured with `spikes/review-m7/floorlib` `initialGap`: |gap| ≤ 1.2e-16 for all 16 models at 0°,
+    5° and 15° (the two Cart cases at 0°), including the 2-pin lying along X (was 0.170) and the
+    axle under a beam (was 0.170). On the tilted floor the plane now uses the same collider points
+    along its normal (at review it floated by up to 0.104).
+  - The view floor in edit mode is the physics plane in every case, so it no longer moves at Play.
+    This replaces "for a model standing on a male end, `sim.groundY` is 0.02 below the edit-mode
+    floor the view draws" (§5 "Floor plane at a male's free end"): the plane is no longer only
+    lowered, and the edit floor follows it. A model whose lowest part is a rod lying on its side now
+    has its floor at that rod, 0.17 above `groundLevel + 0.04`; the parts above it fall onto the rod
+    if they are not resting on it (e.g. the review's axle under an unmated beam: the beam drops
+    0.25 onto the axle, KE 1.06e3 in 0.05 s, which is physics, not a floor pop).
+  - The joint-friction sinks (`buildGround`) are unchanged: a rim counts when its round collider
+    is within `GROUND_SINK_DIST` of the plane.
+
+- **Wheel hull: 32 wedges × 2 slabs instead of one bevelled 32-gon prism** (`shapes.ts`
+  `wheelHullPieces(center, axis, radius, halfLength)`, `WHEEL_SLABS = 2`; `WheelShape.hull` is now
+  `Vec3[][]`). The union is the same circumscribed 32-gon prism over the round collider (rim
+  vertices at (i + ½)·11.25°, four sides axis-aligned). Each piece is the triangle prism (axis,
+  vertex i, vertex i + 1) over one slab: 6 points, every face ≤ 4 vertices, no bevel. 64 convex-hull
+  colliders per wheel, density 0, part friction, group `hull`. The round collider (mass, ground,
+  wheels) and the ground guard are unchanged. Gears can use the same function at their tip radius.
+  - *Cause 1, a wheel lying across a beam (0.37–0.46):* found by printing Rapier's manifolds. The
+    tilted wheel leans on the beam's top edge, and parry returns **one** contact point for the
+    beam edge against the hull's end face (alternating between the two ends of the clipped segment,
+    x = ±1.134). The wheel pivots on it and slides down through the beam onto the floor (contact
+    depth −0.026 → −0.215 in 64 steps at constant impulse). Not the 4-vertex face limit and not the
+    hull's density: a native cylinder in the hull's place sank the same (0.37–0.45), and it ran away
+    on beams when upright (the spike's known runaway). With wedges, each piece the edge crosses has
+    its own manifold.
+  - *Cause 2, upright wheels and the parked cart on a loose beam (0.03–0.165):* Rapier's contacts
+    between two dynamic bodies are soft (`contact_natural_frequency`, 30 Hz), and the resting depth
+    grows with the load per contact point relative to the contact's projected mass; with a fixed
+    beam the same wheel rests 0.002–0.003 deep. Measured: substeps (30 → 240), PGS iterations (1 →
+    4) and the energy guard made no difference; the natural frequency did (5×5 plate on a loose
+    beam: 0.019 at 30 Hz, 0.0012 at 120 Hz, 2.1 at 10 Hz), but it is global and would change every
+    recorded trajectory. More contact points do it per pair: an upright wheel stands on one or two
+    rim facets (4 points per manifold); two slabs double them.
+  - *Alternatives measured* (same cases; depth = deepest of 4 radii × 64 angles × 5 axial positions
+    (−HC, −HC/2, 0, +HC/2, +HC), spikes/review-m7/depthlib; lying = r 1.5/2.5/4 × beam 0/1/2 off the
+    hub × loose/fixed, at 1/5/20 s; upright r 1/1.5/2.5 on a loose 11-hole beam; parked armless Cart
+    with a beam under one wheel / under the x 0 wheels, 20 s):
+
+    | hull | lying, worst | upright r 1 / 1.5 / 2.5 at 20 s | parked one wheel / x 0 wheels at 20 s | Cart cost |
+    |---|---|---|---|---|
+    | one bevelled 32-gon (first hull) | 0.456 | 0.026 / 0.033 / 0.061 | 0.165 / 0.079 | 1 |
+    | native cylinder | 0.454 | runs away (−318 … −529) | 0.158 / 0.099 | – |
+    | 16 wedges (quad caps) | 0.058 | 0.019 / 0.027 / 0.048 | 0.080 / 0.048 | ×1.07 |
+    | 32 wedges | 0.059 | 0.007 / 0.012 / 0.022 | 0.064 / 0.034 | ×1.12 |
+    | 16 wedges × 2 slabs | 0.068 | 0.006 / 0.008 / 0.014 | 0.041 / 0.030 | ×1.09 |
+    | **32 wedges × 2 slabs** | 0.067 (r 4, 1 off, loose; next 0.018) | 0.003 / 0.004 / 0.008 | 0.023 / 0.015 | ×1.15 |
+
+    Rejected: the native cylinder (no better lying, runaway upright); 16 or 32 wedges in one slab
+    (upright r 2.5 and the parked cart above 0.012 / 0.05); 16 × 2 (cheaper, but upright r 2.5 0.014
+    and parked 0.041, against 0.008 and 0.023). Not tried: contact skin (it would float every wheel
+    by the skin on fixed parts), dominance groups (a loose beam could no longer push a wheel).
+  - *Cost* (interleaved medians of 5 × 240 steps on the loaded machine, ratios to the first hull):
+    Cart ×1.15, Crank wheel ×1.41 (noisy: 16 × 2 read ×0.91 in the same run), a parked cart with a
+    wheel on a beam ×2.0, an upright wheel resting on a loose beam ×2.4. The extra cost is paid only
+    while a wheel's bounding box overlaps a part's.
+  - *Drops* (depth at 5 s): the review's distribution (40 each onto a loose 15-hole beam, offset
+    within ±r, 2–7 layers): r 1.5 worst 0.0034, r 2.5 worst 0.0100, none > 0.05 (review: 24/40 and
+    31/40 > 0.1, worst 0.457). r 4 onto a loose beam (20): 2 above 0.05 (0.056, 0.066; both 1 off
+    the hub, the beam-on-edge limit below). Onto a fixed beam (r 1.5 / 2.5 / 4, 10 each): ≤ 0.0037.
+  - *Final numbers* (same probe): lying, built in place: ≤ 0.0082 for every r 1.5 / 2.5 case and r 4
+    0 or 2 off the hub, fixed beams ≤ 0.0001 (slightly negative where the wheel rests a hair above);
+    r 4, 1 off the hub, loose: 0.067 / 0.065 / 0.054 (limit below). Upright on a loose beam at 1 /
+    5 / 20 s: r 1 0.0029 / 0.0029 / 0.0029, r 1.5 0.0040 / 0.0043 / 0.0043, r 2.5 0.0070 / 0.0077 /
+    0.0077 (spikes/review-m7/upright.test.ts also: r 4 0.0154; fixed beams 0.0004–0.0008, were
+    0.0022–0.0035). Parked armless Cart at 1 / 5 / 20 s: beam under one wheel 0.0175 / 0.0241 /
+    0.0232 (was 0.165 at 20 s), under the x 0 wheels 0.0105 / 0.0154 / 0.0152 (was 0.079).
+  - *Not measured by the probe, and unchanged in kind:* a loose beam carrying a wheel sinks into
+    the floor itself (Rapier's half-space contact is soft too, and the beam carries the wheel's
+    weight): 0.014–0.033 under an upright wheel, 0.053–0.058 under an r 4 lying wheel or the parked
+    cart's wheel (beam's lowest collider point below the plane, at 20 s).
+  - *Recorded hashes:* none of the seven recorded example hashes has a wheel or a ground, and none
+    changed (tests/physics/friction.test.ts). No hash of a wheel example is recorded; Cart and Crank
+    wheel trajectories change where a hull touches a part.
+
+- **Known failure envelope, after these fixes** (replaces the lying-wheel entry and widens nothing
+  else):
+  - *A heavy wheel lying across a loose beam rolls the beam onto its edge, and the beam sinks into
+    the floor.* r 4 lying flat across a loose 15-hole beam 1 off the hub: the wheel (mass 45) tips
+    toward the floor and presses the beam's (12.5) near edge; the beam rolls ≈ 3.7° about its long
+    axis, past the 1.5–3.5° slope of the bevel facets at its rounded ends, and parry's half-space
+    contact then uses one end's facet (2–3 points at x ≈ ±7.4) instead of the bottom face. The beam
+    drops ≈ 0.6 into the floor within 0.1 s; the energy guard keeps the recovery (which raises
+    potential energy) from running: beam 0.45 / 0.37 / 0.32 / 0.36 into the floor at 1 / 5 / 10 /
+    20 s (centre − HC below the plane; its lowest collider point 0.66 at worst, 0.39 at 20 s;
+    energy guard off: it recovers to 0.04 by 40 s, moving 0.5 units/s on the way), and the
+    wheel 0.067 / 0.065 / 0.053 / 0.054 deep in the beam. This is the ordinary prisms' bevel
+    (`BEVEL` 0.01), not the wheel's construction; changing those prisms changes every recorded
+    trajectory, so it is left. Every other lying case ≤ 0.018. Test: m7-sim "KNOWN LIMIT: an r 4
+    wheel lying across a loose beam …".
+  - *Far from the floor's pivot* (not fixed, as instructed): a loose wheel 1000 units from the
+    floor's pivot drifts 4.21e-3 / 1.295e-2 / 2.19e-2 in 10 / 20 / 30 s (≈ 1e-2 per 20 s; 300 away
+    1.07e-2 in 30 s; 100 away 1.8e-3 in 20 s). §5.3 "Rest" (< 0.01) fails from about 300 units at
+    30 s. Needs a model 600+ units wide (the pivot is the mean cell centre). Fix when needed: put
+    the half-space's origin under each contact region, or re-centre it on the model every step.
+    Test: m7-sim "KNOWN LIMIT: a loose wheel 1000 units from the floor's pivot …" (asserts
+    0.009 < |dx| < 0.017).
+  - *f32 positions far from the origin* (not fixed, as instructed): Rapier stores positions in
+    f32, ulp(5000) = 4.9e-4, so slow motion stalls below ≈ ulp/dt = 0.23 units/s at 5000 units from
+    the origin (0.03 at 1000, 3.7e-3 at 100). The Cart example translated by 5000 freezes after
+    2 s (chassis dx 0.049, 0.0615, then 0.0615 constant); an armless Cart parked ≥ 100 away shows
+    dx exactly 0 over 10 s. Fix when needed: simulate in a frame centred on the model (subtract the
+    mean cell centre from every Rapier position, add it back for the view).
+  - *Free four-bar on the floor creeps at a constant rate:* ≈ 4e-3 units/s (max body drift per
+    10 s over 10–20 / 20–30 / 30–40 s: 0.0375 / 0.0420 / 0.0424 at friction 0.2, 0.0389 / 0.0386 /
+    0.0422 at 0); it does not decay, so it is ≈ 2.5 units in 10 minutes. (The "0.037 per 10 s"
+    figure is the same rate.)
+
+### Rim bridges for male crank cells, and web clipping (§4.2)
+- A male cell (pin, axle, friction pin) in the hub's layer that the nominal disc overlaps is bridged to the rim when the drawn rim (r − 0.03) reaches less than 0.1 into the rod's in-plane footprint. The footprint is a circle of radius R_ROD for a rod parallel to the hub axis. For a perpendicular rod it is a rectangle ±R_ROD across and ±(E_FREE − CHAMFER) along: the chamfered tip is not counted, and a connected end is assumed free, which errs toward bridging. The web has the hole web's shape, a hull of radius-0.36 circles at the cell and inside the rim, ±H thick, so it reads as a boss round the rod.
+- Every rim web (holes and males) is clipped to the nominal disc (inscribed polygon of radius r) ∪ the crank cell's own square. This removes the old reach of up to 0.252 beyond r into empty disc-owned cells (r 3, crank (2,3)). It opens no gap, but it narrows one joint: at r 3, crank (2,3) the cube overlaps the disc by only 0.085, and the web's narrowest solid arc just outside the drawn rim is now 0.186 wide × 0.94 thick (it was 0.714). Inside nominal disc ∪ own cell nothing wider is possible there. Other joints: r 4 (2,4) 0.48 (was 0.71), r 1 (1,1) 0.52, r 2.5 (2,2) pin 0.705.
+- An in-layer male rod's free ends (±E_FREE = 0.48) stand 0.01 proud of the boss's ±H faces, as they already do for a male cell covered by the rim.
+
+### §6.1 Contact shadow: hysteresis of the >128-unit frame (fixer, after the M7 review)
+- The "previous frame carried along with the parts inside it" is computed from the boxes alone, without part identities: the casters overlapping the previous frame now. Per axis the frame moves by the least whole number of texels (0.125) that puts their footprint plus SHADOW_MARGIN inside it. If those casters span more than 128 on an axis, the frame stays put on that axis. A previous frame smaller than 128 (the model has just spread past 128) is first widened to 128 about its centre.
+- Switch rule: another candidate square must hold at least 1.25× the carried frame's footprint and strictly more (`SHADOW_SWITCH_GAIN`). Among equal best challengers, the one nearest the previous frame wins.
+- Measured, e2e/review-m7-cluster.mjs: 0 changes standing still at 150 and at 125 apart (was 16 and 18); 1 change driving apart (was 64).
+
+### §7.3 Back side: "the rod that passes through that hole"
+- Taken as the male part's cells in line with the male cell in the hole, along that cell's axis, contiguous, both ways. Only their cubes count; picking is against cell cubes, so a ray inside the rod's cell square but outside R_ROD also counts as "inside the rod".
+- Other male cells of that part, not in that line, do not extend the hole's part, so a back face of the hole's part that touches them is still pickable.
+- A hole part with only a rod crossed in an interval, or whose interval ends in rod material, gives no crossing. This is the same rule the male side already used for its host.
+
+### §7.3 overlay treatment
+- "Close" = sRGB distance < 0.3, the same threshold as before. With the current palette, bold applies to: accent over Blue; red over Red and over Orange.
+- Bold drawing:
+  - Lines at double width (face 4 px, erase cell 3.5 px, band 4 px, times DPR); the white under-stroke stays 3 px wider than the line.
+  - White fill at higher opacity: face 0.5 (0.42 seen through the part), erase cell 0.32, band 0.4.
+- Ghosts have no line overlay, so their "outline" is the silhouette rim: the bold ghost is a white body with a rim in the semantic colour, falloff rim^0.7 (the white see-through rim keeps rim^3).
+- Known weak cells, from the contact sheets:
+  - Bold white ghosts that sit mostly over the light background read only by their pale blue rim.
+  - The refused wheel-growth ghost on red and orange parts reads as a pink wash, with red only at the disc silhouette.
+
+### §7.2 Wheel tool: "centre lies inside a wheel"
+- The centre counts as inside when it is on the rim too (distance ≤ r); the task required (0,2) in r 2.
+- With several such wheels in the layer, the nearest hub wins, then the lower cell index.
+- The task's example (2,2) in r 2.5 has its centre 2.83 from the hub, outside the disc, so by this wording it keeps its own disc. If the owner wants every hole that the disc reaches into to act on the wheel, the rule would be "the disc overlaps the hole's cell" instead.
+
+### e2e/app-files: Cmd/Ctrl+O
+- The test no longer depends on Playwright's filechooser event after an earlier intercepted chooser. It checks that the app clicks its file input inside the key's user activation, then sets the file on that input.
+- Result: 60/60 runs passed (the review measured 2 failures in 65 with the old test).
+- src/app/files.ts is unchanged: no fresh input per open, since the test no longer needs it.
+
+### Supervisor notes on the above
+- **Wheel tool, (2, 2) in a radius-2.5 wheel:** DESIGN §7.2 is changed to "the wheel's disc overlaps
+  the hole's cell" (the same cells rule 1 of §2.6 joins to the wheel and §4.2 bridges), so this
+  case acts on the wheel too. Implemented with the Gear tool (milestone 8).
+- `e2e/review-ux2-ref.mjs` / `review-ux2-back.mjs` hold the Back side rule before the rod change
+  and are kept only as a record; `tests/review/ux2.review.test.ts` carries the current reference.
+
+## Gears (core, §2.7)
+
+- **A gear's hub cell is its gear.** Rule 1 read literally (a tip disc must not overlap any cell of another part) makes every pair with an 8 impossible: the 8's tip disc (r_t = 0.594) reaches into the face-neighbour cell, so an 8+8 mesh at distance 1 is blocked by the other 8's hub cell. Likewise 8+24 at 2 and 8+40 at 3 are blocked because the bigger gear's tips reach into the 8's hub cube. Yet §2.7 lists all three as meshing pairs. Fix in `src/core/model.ts`: other discs meet the hub cell of a gear only through the disc–disc rules (rules 2–4: tip × wheel disc, gear × gear four-way, crossed tips), never as a cube. This applies within one part (rule 5) too. Effect beyond the listed meshes: a 24 and an 8 at offset (2,1) are allowed, because their tip discs clear (√5 = 2.236 ≥ 2 + 3/16) though the 24's tips cross the 8's hub-cube corner. A plain wheel's hub cube lies inside its own disc (r ≥ 1), so treating it either way gives the same answers.
+- **Consequence: removing a gear is not always allowed.** When a gear stops being a gear (setRim/setGear undefined, or setRim to a plain radius), its hub becomes an ordinary cell again. It is then checked against other gears' tips and its own part's gears. Example: an 8 meshing with an adjacent 8 cannot lose its teeth ("(0, 0, 0) is inside the gear of part 2"); removing the whole cell is still fine. Found by the fuzz.
+- **Pairs within one part.** Rules 2–4 also apply to discs of the same part. A gear's tip disc must not overlap a plain wheel of its own part ("the wheel at hub … would cut into the teeth of this part's gear …"). Two gears of one part must be clear of each other: at exactly r₁ + r₂ the reason is "two gears of one part cannot mesh (…)"; any closer or in the clash band, "the gear at hub … would cut into the teeth of this part's gear …". Two plain wheels of one part still fuse as before.
+- **Reasons and codes.** Reason texts chosen: "gear teeth would hit part N at (x, y, z)", "gear teeth would hit part N: its wheel (hub …, radius r)", "the wheel would hit the gear teeth of part N (hub …)", "(x, y, z) is inside the gear of part N", "gears would overlap: the gear of part N (hub …)", "the teeth would clash with the gear of part N (hub …)", "… (hub …; crossed axes — there are no bevel gears)", "these gears can only mesh in a straight line along the grid (the gear of part N, hub …)", "(x, y, z) would cut into the teeth of this part's gear (hub …)". validateModel uses code 'overlap' between parts and a new code 'gear' within one part.
+- **teeth values.** `teeth` must be exactly `true` when present; `false`/`null`/other values are rejected rather than ignored (same strictness as `rim`).
+- **Version 3 without teeth is valid** (like version 2 without v2 features), so that setGear then setGear(undefined) leaves a valid model. Ops never lower a version: setGround/setFixRoot now raise to at least 2 instead of setting 2. The four existing tests that asserted `version: 3` is invalid need version 4. The three in tests/core were changed; tests/review/core.review.test.ts:135 was not (not owned).
+- **wheelsAt (picking) reports a gear by its pitch disc**, not its tip disc. The blocking checks use the tip disc.
+- **API shape.** gearMeshes' sides carry `index` (cell index within the part) besides partId and cell, plus a common `axis`. isWebCell takes (gearCell, cell) — the part is not needed (the caller decides they belong to one part).
+- **Diagonal meshes.** No phase solve; the diagonal 40+40 at (3,4)/(4,3) is simply blocked, as §2.7 says.
+
 ## §9 Tooling
 
 - **Vitest 4.1** (not 3.x): 3.x pulls in `tinypool`/`@vitest/mocker` versions with published

@@ -119,11 +119,20 @@ function insidePart(part: Part, p: readonly number[]): boolean {
   return false;
 }
 
-/** A host of a male part (a part whose hole holds one of its male cells), with the ray in its frame. */
+/**
+ * A host of a male part (a part whose hole holds one of its male cells), or a rod standing in one
+ * of a part's holes (`cubes`: only those cells' cubes), with the ray in its frame.
+ */
 interface RefHost {
   part: Part;
   o: V3;
   d: V3;
+  cubes?: readonly Cell[];
+}
+
+/** Strictly inside the given cells' cubes. */
+function insideCubes(cells: readonly Cell[], p: readonly number[]): boolean {
+  return cells.some((q) => Math.abs(p[0]! - q.x) < 0.5 && Math.abs(p[1]! - q.y) < 0.5 && Math.abs(p[2]! - q.z) < 0.5);
 }
 
 /**
@@ -134,10 +143,10 @@ interface RefHost {
 function refPartExit(part: Part, o: V3, d: V3, hosts: readonly RefHost[] = []): RefExit | null {
   const cand: number[] = [];
   for (const hh of hosts)
-    for (const q of hh.part.cells) {
+    for (const q of hh.cubes ?? hh.part.cells) {
       const h = [q.x, q.y, q.z];
       for (let a = 0; a < 3; a++) if (hh.d[a] !== 0) for (const s of [-0.5, 0.5]) cand.push((h[a]! + s - hh.o[a]!) / hh.d[a]!);
-      const r = rimR(q);
+      const r = hh.cubes ? null : rimR(q);
       if (r !== null) {
         const a = q.axis;
         const [u, v] = [0, 1, 2].filter((k) => k !== a) as [number, number];
@@ -148,7 +157,11 @@ function refPartExit(part: Part, o: V3, d: V3, hosts: readonly RefHost[] = []): 
         if (A > 0 && D > 0) cand.push((-B - Math.sqrt(D)) / (2 * A), (-B + Math.sqrt(D)) / (2 * A));
       }
     }
-  const inHost = (t: number): boolean => hosts.some((hh) => insidePart(hh.part, [hh.o[0] + t * hh.d[0], hh.o[1] + t * hh.d[1], hh.o[2] + t * hh.d[2]]));
+  const inHost = (t: number): boolean =>
+    hosts.some((hh) => {
+      const p = [hh.o[0] + t * hh.d[0], hh.o[1] + t * hh.d[1], hh.o[2] + t * hh.d[2]];
+      return hh.cubes ? insideCubes(hh.cubes, p) : insidePart(hh.part, p);
+    });
   for (const q of part.cells) {
     const h = [q.x, q.y, q.z];
     for (let a = 0; a < 3; a++) if (d[a] !== 0) for (const s of [-0.5, 0.5]) cand.push((h[a]! + s - o[a]!) / d[a]!);
@@ -248,6 +261,37 @@ function refBack(m: Model, ray: Ray, tf?: (id: number) => PartTransform | null):
         hd = mulT(M, ray.dir);
       }
       hosts.push({ part: hp, o: ho, d: hd });
+    }
+    // §7.3 "one solid both ways": the rods standing in this part's holes (another part's male cell
+    // in the hole and that part's male cells in line with it along its axis) extend this part too.
+    for (const mp of m.parts) {
+      if (mp === part) continue;
+      const rod: Cell[] = [];
+      for (const h of part.cells) {
+        if (!isHole(h.kind)) continue;
+        const male = mp.cells.find((q) => isMale(q.kind) && q.x === h.x && q.y === h.y && q.z === h.z);
+        if (!male) continue;
+        const a = male.axis;
+        for (const sgn of [1, -1])
+          for (let k = sgn === 1 ? 0 : -1; ; k += sgn) {
+            const pos = [male.x, male.y, male.z];
+            pos[a] = pos[a]! + k;
+            const q = mp.cells.find((r) => r.x === pos[0] && r.y === pos[1] && r.z === pos[2]);
+            if (!q || !isMale(q.kind) || q.axis !== a) break;
+            if (!rod.includes(q)) rod.push(q);
+          }
+      }
+      if (!rod.length) continue;
+      let ro = ray.origin as V3;
+      let rd = ray.dir as V3;
+      if (tf) {
+        const T = tf(mp.id);
+        if (!T) continue;
+        const M = qmat(T.q);
+        ro = mulT(M, [ray.origin[0] - T.p[0], ray.origin[1] - T.p[1], ray.origin[2] - T.p[2]]);
+        rd = mulT(M, ray.dir);
+      }
+      hosts.push({ part: mp, o: ro, d: rd, cubes: rod });
     }
     const e = refPartExit(part, o, d, hosts);
     if (!e) continue;
@@ -425,8 +469,12 @@ describe('pickBack (§7.3): the back face under the cursor', () => {
     // beam (part 1) along X; a 3-long pin (part 2) ∥ Z through its middle hole
     const m = modelOf([0, 1, 2].map((x) => c(x, 0, 0, 'pinHole', 2)), [c(1, 0, -1, 'pin', 2), c(1, 0, 0, 'pin', 2), c(1, 0, 1, 'pin', 2)]);
     expect(validateModel(m)).toEqual([]);
-    // along the pin's axis from the front: the beam's back face around the pin comes first
-    expect(pickBack(m, { origin: [1.05, 0.03, 9], dir: [0, 0, -1] })).toMatchObject({ partId: 1, cellIndex: 1, dir: 5 });
+    // along the pin's axis from the front: the beam's back face at z = −½ is still inside the pin
+    // (one solid both ways, DESIGN §7.3 as updated after the M7 review; was: the beam's back face
+    // around the pin), so the pin's far end is picked
+    expect(pickBack(m, { origin: [1.05, 0.03, 9], dir: [0, 0, -1] })).toMatchObject({ partId: 2, cellIndex: idx(m, 2, 1, 0, -1), dir: 5 });
+    // along the axis but outside the pin's cell square: the beam's own back face
+    expect(pickBack(m, { origin: [0.3, 0.03, 9], dir: [0, 0, -1] })).toMatchObject({ partId: 1, cellIndex: 0, dir: 5 });
     // with the beam filtered out: the pin's far end
     expect(pickBack(m, { origin: [1.05, 0.03, 9], dir: [0, 0, -1] }, { filter: (p) => p.id === 2 })).toMatchObject({ partId: 2, cellIndex: idx(m, 2, 1, 0, -1), dir: 5 });
     // across the beam through the shared cell (both leave it at once): the hole's part wins the tie
@@ -487,10 +535,13 @@ describe('pickBack (§7.3): the back face under the cursor', () => {
     const across = pickBack(k, { origin: [-6, 1.1, 0.05], dir: [1, 0, 0] })!;
     expect(across.tread).toBe(true);
     expect(across.point[0]).toBeCloseTo(Math.sqrt(2.5 ** 2 - 1.21), 9);
-    // a 3-long axle through the hub sticking out both sides: the wheel's far face comes first
+    // a 3-long axle through the hub sticking out both sides: down the axle the hub's far face is
+    // still inside the axle (§7.3 both ways, as updated after the M7 review; was: the wheel's far
+    // face), so the axle's far end; through the disc beside the hub, the wheel's far face
     const ax = addPart(m, [makeCell(0, 0, -1, 'axle', 2), makeCell(0, 0, 0, 'axle', 2), makeCell(0, 0, 1, 'axle', 2)]).model;
     expect(validateModel(ax)).toEqual([]);
-    expect(pickBack(ax, { origin: [0.05, 0.02, 5], dir: [0, 0, -1] })).toMatchObject({ partId: 1, cellIndex: 0, dir: 5 });
+    expect(pickBack(ax, { origin: [0.05, 0.02, 5], dir: [0, 0, -1] })).toMatchObject({ partId: 2, cellIndex: 0, pos: [0, 0, -1], dir: 5 });
+    expect(pickBack(ax, { origin: [1.2, 0.02, 5], dir: [0, 0, -1] })).toMatchObject({ partId: 1, cellIndex: 0, dir: 5, virtual: [1, 0, 0] });
     const R = lcg(19);
     for (const model of [m, k, ax]) {
       for (let i = 0; i < 400; i++) {
@@ -858,6 +909,90 @@ describe('resolveBuild on a back-face pick (§7.3)', () => {
 
 // ---------------------------------------------------------------------------------------------
 // State
+
+describe('Back side: a male and its hole are one solid both ways (§7.3, M7 review)', () => {
+  // beam (part 1) (0..4, 0, 0) ∥ Z holes; an axle (part 2) (2, 0, −1..1) through its middle hole
+  const beam = () => [0, 1, 2, 3, 4].map((x) => c(x, 0, 0, 'pinHole', 2));
+  const axleBeam = () => modelOf(beam(), [c(2, 0, -1, 'axle', 2), c(2, 0, 0, 'axle', 2), c(2, 0, 1, 'axle', 2)]);
+  const pinBeam = () => modelOf(beam(), [c(2, 0, 0, 'pin', 2), c(2, 0, 1, 'pin', 2)]);
+
+  it('axle through a beam, along the rod: the axle’s far end, and the click extends the axle', () => {
+    const m = axleBeam();
+    expect(validateModel(m)).toEqual([]);
+    // FRONT view straight down the axle (review: the beam's −Z face at z = −½, buried in the axle)
+    for (const [x, y] of [[2, 0], [2.05, 0.03], [1.7, -0.4], [2.45, 0.45]] as const) {
+      const r: Ray = { origin: [x, y, 20], dir: [0, 0, -1] };
+      const h = pickBack(m, r)!;
+      expect(h, `${x},${y}`).toMatchObject({ partId: 2, pos: [2, 0, -1], dir: 5, back: true });
+      expect(h.point[2]).toBeCloseTo(-1.5, 12);
+      expectAgree(h, refBack(m, r), `axle ${x},${y}`);
+    }
+    // and the axle tool with Alt there extends the axle to (2, 0, −2)
+    const s = withModifiers(st('axle'), { alt: true });
+    const r: Ray = { origin: [2.05, 0.03, 20], dir: [0, 0, -1] };
+    const p = resolveBuild(m, buildPick(m, r, s), null, s);
+    expect(p).toMatchObject({ valid: true, action: 'extend', backSide: true });
+    expect([p.cell!.x, p.cell!.y, p.cell!.z]).toEqual([2, 0, -2]);
+    expect(p.description).toMatch(/back side \(−Z\)/);
+    const res = p.apply(m);
+    expect(res.partId).toBe(2);
+    expect(partById(res.model, 2)!.cells.map((q) => q.z).sort()).toEqual([-1, -2, 0, 1].sort());
+    // from behind (+Z travel) symmetrically: the axle's far end at z = +1.5
+    expect(pickBack(m, { origin: [2.1, 0.1, -20], dir: [0, 0, 1] })).toMatchObject({ partId: 2, pos: [2, 0, 1], dir: 4 });
+    // beside the axle (another hole's square): the beam's own back face
+    expect(pickBack(m, { origin: [1.1, 0.1, 20], dir: [0, 0, -1] })).toMatchObject({ partId: 1, pos: [1, 0, 0], dir: 5 });
+  });
+
+  it('axle through a beam, across the rod: unchanged (the beam leaves where the axle does, or the axle where it sticks out)', () => {
+    const m = axleBeam();
+    // down −Y through the shared cell: both leave it at y = −½, the hole's part wins (as before)
+    expect(pickBack(m, { origin: [2.1, 20, 0.05], dir: [0, -1, 0] })).toMatchObject({ partId: 1, pos: [2, 0, 0], dir: 3 });
+    // down −Y through the axle where it sticks out behind the beam: the axle
+    expect(pickBack(m, { origin: [2.1, 20, -1.05], dir: [0, -1, 0] })).toMatchObject({ partId: 2, pos: [2, 0, -1], dir: 3 });
+    // along the beam (+X) through the axle: the axle is buried in the beam, the beam's far end
+    expect(pickBack(m, { origin: [-20, 0.1, 0.1], dir: [1, 0, 0] })).toMatchObject({ partId: 1, pos: [4, 0, 0], dir: 0 });
+    // along the beam just behind it (z −1): only the axle's stub is crossed
+    expect(pickBack(m, { origin: [-20, 0.1, -1.1], dir: [1, 0, 0] })).toMatchObject({ partId: 2, pos: [2, 0, -1], dir: 0 });
+    const R = lcg(4242);
+    for (let k = 0; k < 600; k++) {
+      const r = randomRay(R, 3, [2, 0, 0]);
+      expectAgree(pickBack(m, r), refBack(m, r), `axleBeam #${k}`);
+    }
+  });
+
+  it('pin in a beam (flush behind, proud in front), along and across the rod', () => {
+    const m = pinBeam();
+    expect(validateModel(m)).toEqual([]);
+    // along the rod from the front: the beam's face at z = −½ and the pin's end coincide; the pin
+    // wins within R_ROD of the axis (as for the front pick), the hole outside it
+    expect(pickBack(m, { origin: [2.02, 0.01, 20], dir: [0, 0, -1] })).toMatchObject({ partId: 2, pos: [2, 0, 0], dir: 5 });
+    expect(pickBack(m, { origin: [2 + R_ROD + 0.05, 0.01, 20], dir: [0, 0, -1] })).toMatchObject({ partId: 1, pos: [2, 0, 0], dir: 5 });
+    // along the rod from behind: in through the beam, still inside the pin at the beam's front face
+    // z = +½ (was: that face, buried in the pin), so the pin's front end at z = 1.5
+    expect(pickBack(m, { origin: [2.3, 0.3, -20], dir: [0, 0, 1] })).toMatchObject({ partId: 2, pos: [2, 0, 1], dir: 4 });
+    // across: down −Y through the shared cell, the hole's part; through the proud end, the pin
+    expect(pickBack(m, { origin: [2.1, 20, 0.05], dir: [0, -1, 0] })).toMatchObject({ partId: 1, pos: [2, 0, 0], dir: 3 });
+    expect(pickBack(m, { origin: [2.1, 20, 1.05], dir: [0, -1, 0] })).toMatchObject({ partId: 2, pos: [2, 0, 1], dir: 3 });
+    // along the beam: the pin is buried, the beam's far end
+    expect(pickBack(m, { origin: [20, 0.1, 0.1], dir: [-1, 0, 0] })).toMatchObject({ partId: 1, pos: [0, 0, 0], dir: 1 });
+    const R = lcg(777);
+    for (let k = 0; k < 600; k++) {
+      const r = randomRay(R, 3, [2, 0, 0]);
+      expectAgree(pickBack(m, r), refBack(m, r), `pinBeam #${k}`);
+    }
+  });
+
+  it('an axle through two stacked beams: no beam face inside it is picked', () => {
+    const m = modelOf(beam(), [0, 1, 2, 3, 4].map((x) => c(x, 0, 1, 'pinHole', 2)), [-1, 0, 1, 2].map((z) => c(2, 0, z, 'axle', 2)));
+    expect(validateModel(m)).toEqual([]);
+    expect(pickBack(m, { origin: [2.1, 0.1, 20], dir: [0, 0, -1] })).toMatchObject({ partId: 3, pos: [2, 0, -1], dir: 5 });
+    expect(pickBack(m, { origin: [2.1, 0.1, -20], dir: [0, 0, 1] })).toMatchObject({ partId: 3, pos: [2, 0, 2], dir: 4 });
+    // the rod is the axle's cells in line through the hole; a hole part filtered out changes nothing
+    expect(pickBack(m, { origin: [2.1, 0.1, 20], dir: [0, 0, -1] }, { filter: (p) => p.id !== 1 })).toMatchObject({ partId: 3, pos: [2, 0, -1] });
+    // with the axle filtered out the beams are no longer extended by it: the front beam's back face
+    expect(pickBack(m, { origin: [2.1, 0.1, 20], dir: [0, 0, -1] }, { filter: (p) => p.id !== 3 })).toMatchObject({ partId: 2, pos: [2, 0, 1], dir: 5 });
+  });
+});
 
 describe('Back side state', () => {
   it('Alt never latches backSide; the [B] toggle survives tool changes and modifiers', () => {

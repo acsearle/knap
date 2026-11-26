@@ -1,0 +1,8 @@
+candidate r1 T16 corner l2 pivot (1,3) β0° rep hull; lock direction +
+[friction]
+  μ 0: lock 24.3 τ0 (tunnel, pawl lift 0.0583 rad, max penetration 0.142)  free 0.137 τ0 (free)  ratio 178
+  μ 0.05: lock 24.9 τ0 (tunnel, pawl lift 0.0541 rad, max penetration 0.148)  free 0.156 τ0 (free)  ratio 160
+  μ 0.2: lock 25.2 τ0 (tunnel, pawl lift 0.0522 rad, max penetration 0.149)  free 0.258 τ0 (free)  ratio 97.6
+  contact friction 0: lock 25.2 τ0 (skip)  free 0.208 τ0 (free)
+  contact friction 0.2: lock 24.9 τ0 (skip)  free 0.234 τ0 (free)
+  contact friction 0.8: lock 25.2 τ0 (skip)  free 0.298 τ0 (free)

@@ -30,9 +30,12 @@
 // - Mass properties are those of the un-bevelled prism, computed analytically and set on the
 //   collider, so the bevel changes the contact geometry only.
 // - A wheel's rim (a 'disc' primitive) becomes a WheelShape: a native cylinder for the ground and
-//   other wheels plus a 32-gon prism (bevel 0.02·r) for every other part (DESIGN §5.1 "Wheels").
+//   other wheels plus the 32-gon prism cut into 32 wedges × 2 slabs for every other part, and a
+//   bevelled ground guard (DESIGN §5.1 "Wheels").
+// - groundPlane: the floor tangent to the lowest of these colliders (DESIGN §5.1 "Ground").
 // Pure: no Rapier import.
-import type { Axis, Part } from '../core/types';
+import { groundLevel } from '../core/model';
+import type { Axis, Model, Part } from '../core/types';
 import { HC, RIM_COLL_INSET } from '../geometry/dims';
 import { partColliders } from '../geometry/colliders';
 import { partOrigin } from '../geometry/topology';
@@ -59,9 +62,9 @@ export type Shape =
  *  - round: a native cylinder (`center`, `axis`, `radius`, `halfLength`) carrying `mass` — the
  *    annulus between the hub barrel (`innerRadius`) and the rim at unit density (the hub's own
  *    prism already carries the barrel); it meets only the ground and other wheels' round colliders;
- *  - hull: `hull`, the circumscribed WHEEL_SEGMENTS-gon prism over the same cylinder with an
- *    end-face bevel of WHEEL_BEVEL·r (r = the nominal rim radius), density 0; it meets only
- *    ordinary part colliders.
+ *  - hull: `hull`, convex pieces (wheelHullPieces) whose union is the circumscribed
+ *    WHEEL_SEGMENTS-gon prism over the same cylinder, density 0; they meet only ordinary part
+ *    colliders.
  * World coordinates (edit time), like the other shapes.
  */
 export interface WheelShape {
@@ -75,10 +78,11 @@ export interface WheelShape {
   rim: number;
   /** Unit-density annulus: volume, centre of mass (= center), inertia about it in world axes. */
   mass: PieceMass;
-  hull: Vec3[];
+  /** The hull's convex pieces (wheelHullPieces), each a point list for one convex-hull collider. */
+  hull: Vec3[][];
   /**
    * Ground guard: a WHEEL_SEGMENTS-gon prism inscribed in the round collider, GUARD_INSET_R smaller
-   * in radius and GUARD_INSET_A in half-length (bevel as the hull), density 0, meeting only the
+   * in radius and GUARD_INSET_A in half-length (end-face bevel WHEEL_BEVEL·r), density 0, meeting only the
    * ground. It never touches the floor while the wheel stands, rolls upright or lies flat, and
    * catches a tilted wheel whose native cylinder Rapier lets sink into the half-space (measured: a
    * wobbling r = 4 wheel 1.04 units deep; DEVIATIONS §5 "Wheels, ground, free root").
@@ -86,12 +90,26 @@ export interface WheelShape {
   guard: Vec3[];
 }
 
-/** Sides of a wheel's hull prism (DESIGN §5.1 "Wheels": a 32-gon). */
+/** Sides of a wheel's hull polygon and of its ground guard (DESIGN §5.1 "Wheels": a 32-gon). */
 export const WHEEL_SEGMENTS = 32;
 /**
- * End-face bevel of a wheel's hull per unit of rim radius (DESIGN §5.1: 0.02·r; Rapier's hull
- * builder merges facets flatter than ≈ r/80…r/100 back into one face, and parry keeps only 4
- * vertices of a face — spikes/wheels/REPORT.md §1).
+ * The wheel hull's pieces (DESIGN §5.1 "Wheels", requirement added in review; DEVIATIONS §5): the
+ * 32-gon prism is cut into WHEEL_SEGMENTS pie wedges about the axis (one rim side each: a triangle
+ * prism, every face ≤ 4 vertices, no bevel needed) and WHEEL_SLABS slabs along it.
+ *  - Wedges: one bevelled 32-gon prism gave a single contact point where a beam's edge crossed its
+ *    end face (parry clips the two faces to one point there), so a wheel lying across a beam
+ *    pivoted on it and sank through (0.37–0.46 of HC = 0.46). With wedges every piece the edge
+ *    crosses adds its own manifold.
+ *  - Slabs: Rapier's contacts between two dynamic bodies are soft, and the resting depth grows with
+ *    the load per contact point; a wheel standing on a loose beam rests on one or two rim facets
+ *    (4 points each), which sank 0.02–0.06. Two slabs double the points.
+ * Measured (spikes in the report): 32 wedges × 2 slabs; 16 × 1, 32 × 1 and 16 × 2 were rejected.
+ */
+export const WHEEL_SLABS = 2;
+/**
+ * End-face bevel of the wheel's ground guard per unit of rim radius (0.02·r; Rapier's hull builder
+ * merges facets flatter than ≈ r/80…r/100 back into one face, and parry keeps only 4 vertices of a
+ * face — spikes/wheels/REPORT.md §1). (The first hull, a single prism, had the same bevel.)
  */
 export const WHEEL_BEVEL = 0.02;
 /**
@@ -220,6 +238,41 @@ export function prismShape(
   return bevelledPrism(center, axis, u, halfLength, poly, bevel);
 }
 
+/**
+ * Convex pieces of a wheel's hull (see WHEEL_SLABS): the circumscribed WHEEL_SEGMENTS-gon prism over
+ * the cylinder of `radius` and ±`halfLength` about `axis` through `center` (rim vertices at angles
+ * (i + ½)·360°/n from u = axis + 1, so four sides are axis-aligned and the polygon rests at exactly
+ * `radius`, like prismShape), cut into one wedge per side — the triangle (axis, vertex i, vertex
+ * i + 1) — and WHEEL_SLABS equal slabs along the axis. Each piece is 6 points. A function of
+ * (radius, halfLength) only, so gears can use it at their tip radius.
+ */
+export function wheelHullPieces(center: Vec3, axis: Axis, radius: number, halfLength: number): Vec3[][] {
+  const n = WHEEL_SEGMENTS;
+  const R = radius / Math.cos(Math.PI / n);
+  const u = ((axis + 1) % 3) as Axis;
+  const v = ((axis + 2) % 3) as Axis;
+  const at = (pu: number, pv: number, h: number): Vec3 => {
+    const p: Vec3 = [center[0], center[1], center[2]];
+    p[u] += pu;
+    p[v] += pv;
+    p[axis] += h;
+    return p;
+  };
+  const out: Vec3[][] = [];
+  for (let k = 0; k < WHEEL_SLABS; k++) {
+    const lo = -halfLength + (2 * halfLength * k) / WHEEL_SLABS;
+    const hi = -halfLength + (2 * halfLength * (k + 1)) / WHEEL_SLABS;
+    for (let i = 0; i < n; i++) {
+      const a = gonVertex(R, n, i);
+      const b = gonVertex(R, n, (i + 1) % n);
+      const piece: Vec3[] = [];
+      for (const h of [lo, hi]) piece.push(at(0, 0, h), at(a.u, a.v, h), at(b.u, b.v, h));
+      out.push(piece);
+    }
+  }
+  return out;
+}
+
 /** The wheel shape of a disc primitive at world centre `center` (see WheelShape). */
 export function wheelShape(center: Vec3, axis: Axis, radius: number, halfLength: number, innerRadius: number, rim: number): WheelShape {
   const L = 2 * halfLength;
@@ -228,10 +281,76 @@ export function wheelShape(center: Vec3, axis: Axis, radius: number, halfLength:
   const inertia: Vec3 = [0, 0, 0];
   for (let k = 0; k < 3; k++) inertia[k] = k === axis ? (volume * r2) / 2 : (volume * (3 * r2 + L * L)) / 12;
   const u = ((axis + 1) % 3) as Axis;
-  const hull = prismShape(center, axis, radius, halfLength, WHEEL_SEGMENTS, u, 0, WHEEL_BEVEL * rim).points;
+  const hull = wheelHullPieces(center, axis, radius, halfLength);
   const inR = (radius - GUARD_INSET_R) * Math.cos(Math.PI / WHEEL_SEGMENTS); // vertices at radius − GUARD_INSET_R
   const guard = prismShape(center, axis, inR, halfLength - GUARD_INSET_A, WHEEL_SEGMENTS, u, 0, WHEEL_BEVEL * rim).points;
   return { kind: 'wheel', center: [...center], axis, radius, halfLength, innerRadius, rim, mass: { volume, com: [...center], inertia }, hull, guard };
+}
+
+/** Default sides of the prisms standing in for collider cylinders (SimOptions.cylinderSegments). */
+export const DEFAULT_CYLINDER_SEGMENTS = 16;
+
+/**
+ * Lowest point along −n of every collider that meets the ground, as min n·x (n a unit vector, edit-
+ * time world coordinates): the prisms' vertices and the boxes' corners exactly as partShapes builds
+ * them (so a rod's circumscribed polygon and the caps' bevel count), and each wheel's round collider
+ * (a native cylinder, exact support). A wheel's hull pieces never meet the ground and its guard lies
+ * inside the round collider, so neither counts. Infinity for a model without cells. Pure.
+ *
+ * Only parts whose nominal geometry (unit cubes, rim discs) reaches within 1 unit of the lowest
+ * nominal point are built: every collider point of a cell lies no higher than the cell centre, which
+ * is at most 0.87 above that cell's nominal low, so a part beyond the margin cannot hold the minimum.
+ */
+export function lowestGroundPoint(parts: readonly Part[], n: Vec3, segments = DEFAULT_CYLINDER_SEGMENTS): number {
+  const dot = (q: Vec3) => q[0] * n[0] + q[1] * n[1] + q[2] * n[2];
+  const half = 0.5 * (Math.abs(n[0]) + Math.abs(n[1]) + Math.abs(n[2]));
+  const nominal = parts.map((p) => {
+    let lo = Infinity;
+    for (const c of p.cells) {
+      const h = c.x * n[0] + c.y * n[1] + c.z * n[2];
+      lo = Math.min(lo, h - half);
+      if (c.rim !== undefined) lo = Math.min(lo, h - c.rim * Math.sqrt(Math.max(0, 1 - n[c.axis]! ** 2)) - 0.5 * Math.abs(n[c.axis]!));
+    }
+    return lo;
+  });
+  let floor = Infinity;
+  for (const lo of nominal) floor = Math.min(floor, lo);
+  let low = Infinity;
+  parts.forEach((p, i) => {
+    if (!(nominal[i]! <= floor + 1)) return;
+    for (const sh of partShapes(p, segments)) {
+      if (sh.kind === 'hull') for (const q of sh.points) low = Math.min(low, dot(q));
+      else if (sh.kind === 'box') {
+        const e = sh.halfExtents;
+        low = Math.min(low, dot(sh.center) - Math.abs(n[0]) * e[0] - Math.abs(n[1]) * e[1] - Math.abs(n[2]) * e[2]);
+      } else {
+        const na = Math.abs(n[sh.axis]!);
+        low = Math.min(low, dot(sh.center) - sh.radius * Math.sqrt(Math.max(0, 1 - na * na)) - sh.halfLength * na);
+      }
+    }
+  });
+  return low;
+}
+
+/**
+ * The ground plane of a model (DESIGN §5.1 "Ground"; null unless model.ground): normal
+ * (sin θ, cos θ, 0) for a floor tilted by `slopeDeg` about +Z, and d with the plane n·x = d tangent
+ * to the model's lowest ground-touching collider (lowestGroundPoint). On a level floor d is the
+ * plane's height; when it agrees with groundLevel + (½ − HC) to 1e-9 (a hole or a rim is lowest) it
+ * is exactly that value, so those floors are bit-identical to the first construction. The edit-mode
+ * view floor and the Simulation both use this, so the drawn floor does not move at Play.
+ */
+export function groundPlane(model: Model, slopeDeg = 0, segments = DEFAULT_CYLINDER_SEGMENTS): { normal: Vec3; d: number } | null {
+  const level = groundLevel(model);
+  if (level === null) return null;
+  const th = (slopeDeg * Math.PI) / 180;
+  const normal: Vec3 = [Math.sin(th), Math.cos(th), 0];
+  let d = lowestGroundPoint(model.parts, normal, segments);
+  if (th === 0) {
+    const conventional = level + (0.5 - HC);
+    if (Math.abs(d - conventional) <= 1e-9) d = conventional;
+  }
+  return { normal, d };
 }
 
 type Cyl = Extract<ColliderPrim, { shape: 'cylinder' }>;

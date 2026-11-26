@@ -94,16 +94,18 @@ or male+hole of the *same* part).
 type Axis = 0 | 1 | 2;
 type Kind = 'pinHole' | 'axleHole' | 'axle' | 'pin' | 'frictionPin';
 interface Cell { x: number; y: number; z: number; kind: Kind; axis: Axis;
-                 rim?: number }      // wheel radius, §2.6; hole cells only
+                 rim?: number;       // wheel radius, §2.6; hole cells only
+                 teeth?: true }      // the rim is a gear, §2.7; only with rim ∈ GEAR_RADII
 interface Part { id: number; color: string /* '#rrggbb' */; cells: Cell[] }
-interface Model { version: 1 | 2; parts: Part[]; rootPartId: number | null; nextPartId: number;
+interface Model { version: 1 | 2 | 3; parts: Part[]; rootPartId: number | null; nextPartId: number;
                   ground?: boolean;   // §2.6; absent = false
                   fixRoot?: boolean } // §2.6; absent = true
 ```
 
 `version` is 2 as soon as a model uses `rim`, `ground` or `fixRoot` (the operations that set them
 set it) and is otherwise left alone; version 1 files load unchanged and a model that uses none of
-the three behaves exactly as before.
+the three behaves exactly as before. `version` is 3 as soon as any cell has `teeth` (§2.7);
+versions 1 and 2 load unchanged.
 
 `rootPartId` designates the part fixed in space during simulation. If it is `null` or stale, the
 part with the lowest id is the root. The model is plain JSON (this is also the file format,
@@ -151,6 +153,13 @@ groundLevel(m): number | null                     // null when ground is off or 
 // disc.ts — exact overlap tests (integer / half-integer arithmetic, no epsilons)
 discOverlapsCell(hub, axis, r, pos): boolean; discCoversCell(hub, axis, r, pos): boolean
 discsOverlap(hubA, axisA, rA, hubB, axisB, rB): boolean
+// gears (§2.7)
+GEAR_RADII = [0.5, 1, 1.5, 2.5]; GEAR_TIP = 3/32   // teeth = 16·r → 8, 16, 24, 40
+gearTeeth(r): number
+canSetGear(m, partId, pos, r: number | undefined): { ok: true } | { ok: false; reason: string }
+setGear(m, partId, pos, r | undefined): Model       // sets rim = r and teeth; undefined → bare cell
+gearMeshes(m): { a: { partId, cell }, b: { partId, cell }, teethA, teethB }[]   // edit-time meshes
+gearPlaneBasis(axis): [u: Axis, v: Axis]            // (Y,Z), (Z,X), (X,Y) for axis X, Y, Z
 ```
 
 A `WorldIndex` (position → cells with part ids) helper is expected; rebuild it per call or cache
@@ -166,8 +175,7 @@ The numbers come from a feasibility spike (`spikes/wheels/`, Rapier 0.21).
 about the cell's axis, one cell thick (the cell's own layer). `r` is a multiple of ½ with
 `1 ≤ r ≤ 4`; absent means a bare cell (whose barrel is the "radius ½" wheel). The cell is the
 wheel's **hub**. A part may have any number of rims and any other cells: a wheel is just a part.
-Male cells never carry a rim. Toothed rims (gears, `16·r` teeth) are a later feature and will
-reuse this field.
+Male cells never carry a rim. A rim with `teeth` is a gear (§2.7); `r = ½` exists only as a gear.
 
 **Disc geometry for the rules** (nominal, exact): the disc occupies, in the hub's layer, the
 points within distance `r` of the hub axis. A grid cell is a closed unit cube. *Overlap* means an
@@ -209,6 +217,76 @@ own lowest point.
 **Free root.** `fixRoot: false` means no part is fixed in space — a vehicle. It only has an
 effect while the ground is on (`rootIsFixed`): without a floor a model with nothing fixed would
 just fall away, so the root stays fixed then. Default: fixed.
+
+### 2.7 Gears
+
+Added after user request ("gear wheels … simple gears that mesh stably can become efficient
+angle constraints"), with the owner's call for **real tooth counts**. Numbers come from four
+spikes: `spikes/gearlook/` (placement, phase, profile, drawing), `spikes/gearsim/` (the mesh
+constraint inside the real simulation), `spikes/adaptive/` (smaller steps at speed) and
+`spikes/teeth2/` (tooth colliders — rejected, see §10). Each has a `REPORT.md`.
+
+**A gear is a toothed rim**: a hole cell with `rim = r` and `teeth: true`, `r ∈ GEAR_RADII =
+{½, 1, 1½, 2½}`. `r` is the **pitch radius**; the gear has `T = 16·r` teeth (8, 16, 24, 40),
+module ⅛ unit (1 mm), circular pitch `p = π/8`. `teeth` on any other radius, or `rim = ½`
+without `teeth`, is invalid. Everything §2.6 says about rims holds for gears (hub, one layer
+thick, moves with its cell, no part in the kinematic analysis) except where this section says
+otherwise.
+
+Two nominal radii matter: the **pitch radius** `r` (meshing) and the **tip radius**
+`r_t = r + GEAR_TIP = r + 3/32` (blocking — the drawn tooth tips, which is also about where real
+ones are). All tests below are exact (work in units of 1/32).
+
+**Meshing.** Two gears of *different parts* **mesh** iff their axes are parallel, they are in
+the same layer, their hubs are in line along a grid axis (one in-plane offset is 0) and the
+hub distance is exactly `r₁ + r₂`. The pairs that can mesh on the grid: 8+8 (1 apart), 8+24 and
+16+16 (2), 8+40 and 24+24 (3), 24+40 (4), 40+40 (5). A 16-tooth gear meshes only with another
+16 (its sums with the others are 1½, 2½, 3½). `gearMeshes(m)` lists them. A mesh is not a
+mate and not part of §3: it is enforced by the simulation (§5.1 "Gears"), where gears also
+come into and out of mesh while running.
+
+**Tooth phase (a convention, not data).** With `(u, v) = gearPlaneBasis(axis)`, tooth `k` of a
+gear at rest is centred at angle `(k + ¼)·2π/T` from `+u` toward `+v`, about its hub, in
+**world** axes. With this quarter-pitch offset every pair that meshes by the rule above has its
+teeth interleaved exactly (4 divides every `T`; proved and enumerated in the spike), wherever
+the gears are and whichever way their parts are turned, with nothing to solve or store. Tooth
+0 is the **index tooth** (§4.2, §6.1).
+
+**Blocking (replaces rule 2 of §2.6 for a gear's disc).**
+1. *Other parts' cells:* a gear's **tip disc** (radius `r_t`) must not overlap any cell of
+   another part, with the usual exception of a male mated in a hole of the gear's part.
+   (So an 8-tooth gear cannot have another part's ordinary cell beside it in its layer; a 24
+   not at distance 2 in line; as in reality.) **A gear's hub cell is its gear:** other discs
+   meet it only through rules 2–4, never as a cube — otherwise every mesh with an 8 would be
+   blocked by the 8's own hub cube. (So a 24 and an 8 at offset `(2,1)` are allowed: their tip
+   discs clear.)
+2. *Plain wheels (any part):* tip disc × wheel disc must not overlap (generic disc tests with
+   `r_t`).
+3. *Other gears, parallel axes, same layer,* hub distance `d`, `s = r₁ + r₂`:
+   `d < s` → overlap; `d = s` → a mesh if in line along a grid axis and the gears belong to
+   different parts, otherwise blocked (the diagonal 40+40 at `(3,4)` would need a per-train
+   phase solve — deferred, reason "these gears can only mesh in a straight line along the
+   grid"; two gears of one part cannot mesh); `s < d < s + 3/16` → blocked, "the teeth would
+   clash" (tips overlap without meshing, e.g. 16+40 at `(2,3)`); `d ≥ s + 3/16` → clear.
+4. *Other gears, perpendicular axes:* tip disc × tip disc must not overlap. There are no bevel
+   gears.
+5. *The gear's own part, in the gear's layer.* Besides the hub, a cell of the same part in the
+   gear's layer must either lie in the **web** — centre offset `du² + dv² ≤ (r − ½)²` and axis
+   ∥ the hub axis (a crank hole or crank pin: `(1,0)` on a 24; `(1,0)`, `(1,1)`, `(2,0)` and
+   their images on a 40; none on an 8 or 16) — or not be overlapped by the tip disc at all.
+   Reason: "would cut into the teeth of this part's gear". Rule 1 of §2.6 connects the web
+   cells to the hub (by the pitch disc). Rules 2–4 apply between discs of one part too: a
+   gear's tips must clear its own part's plain wheels and other gears (two plain wheels of
+   one part still fuse).
+6. *Taking the teeth off.* A gear that stops being one (plain wheel, or bare) is checked like a
+   new wheel or an ordinary cell: an 8 meshing with an adjacent 8 cannot become a bare hole
+   there ("inside the gear of part N"); erasing the cell is still allowed.
+Reasons read "gear teeth would hit part N", "the teeth would clash with the gear of part N",
+"inside the gear of part N". `validateModel`, `canAddCell`, `movePart`, `rotatePart`,
+`canSetRim`, `canSetGear` enforce all of it.
+
+**Ground level.** For `groundLevel` a gear with a horizontal axis reaches `y_hub − r − ⅛`
+(its collider's tip radius `r + 0.085` plus the usual 0.04, §5.1).
 
 ---------------------------------------------------------------------------------------------
 
@@ -358,9 +436,36 @@ from the hub ring to the edge, continued across the tread. It must be legible at
 of a small model for `r ≥ 1`, from both sides and edge-on; the technique (cut geometry that the
 outline pass picks up, or a painted line) is the implementer's choice. Use about 40 segments
 per unit of radius (48 at `r = 1`, 160 at `r = 4`) so the tread never reads as a polygon.
-Because the drawn rim is slightly smaller than the nominal disc, a hole that rule 1 of §2.6
-joins to the wheel only through the disc's edge is bridged to the rim by a short web, so the
-part is always drawn as one piece.
+Because the drawn rim is slightly smaller than the nominal disc, a cell that rule 1 of §2.6
+joins to the wheel only through the disc's edge — a hole **or a male** (a crank pin built
+into the wheel's part; review found those drawn as a separate floating rod) — is bridged to
+the rim by a short web, so the part is always drawn as one piece. The web stays inside the
+cells the disc already owns.
+
+Per **gear** (§2.7), instead of the rim cylinder: a prism of the gear's outline about the hub
+axis, extent `[−H, +H]`, no chamfer.
+- Outline: `T = 16·r` involute teeth, pressure angle 20°, module ⅛; tip radius
+  `r + 3/32`, root radius `r − 5/32`; tooth thickness on the pitch circle `π/16 − 0.025`
+  (0.05 backlash per pair); below the base circle `r·cos 20°` the flank continues **parallel**
+  (constant width) down to the root, not radially (radial gives the 8-tooth gear petal-thin
+  necks). 5 points per involute flank, 2 segments on each tip land and each root land. Tooth
+  `k` is centred at `(k + ¼)·2π/T` from `+u` toward `+v` (§2.7) — the solid is built in the
+  part's edit-time world orientation, so the phase convention holds by construction.
+  Measured in the spike: two such gears at mesh distance clear each other by ≥ 0.0157 through
+  a whole mesh cycle for every size pair, and by ≥ 0.0048 at 0.02 closer.
+- An 8-tooth gear's root (0.344) is inside the cell's barrel (`H`): its hub contributes **no
+  barrel** in the gear's slab — the gear is the cell. An axial in-part connection is bridged by
+  a cylinder of the root radius.
+- Web cells (§2.7 rule 5) contribute their bores (and rods) but **no barrel or web positive**
+  inside the gear's slab — a crank hole is a bore through the gear, leaving ≥ 0.034 of wall to
+  the tooth roots.
+- *Index:* tooth 0 is painted in the mark colour (flanks and tip land) on every gear — the only
+  index an 8-tooth gear has room for; gears with `r ≥ 1` also carry the wheel's face groove
+  along `+u`, from radius ½ to 0.05 inside the root (not across the teeth).
+- The tooth band (flanks, tip lands, root lands) is flagged as one **soft patch** for the
+  outline pass (§6.1): `MeshData` gains an optional per-vertex patch id and a set of soft
+  patch ids.
+- Cost measured in the spike: 672 / 1216 / 1728 / 2752 triangles for 8 / 16 / 24 / 40 teeth.
 
 Bores are subtracted after all positives are united, so a bore always cuts cleanly through its
 own cell.
@@ -392,6 +497,12 @@ type ColliderPrim =
 
 - rim → `{ shape: 'disc'; center; axis; radius: r − (½ − HC) = r − 0.04; halfLength: HC; cell }`.
   The physics layer turns it into three colliders (§5.1 "Wheels").
+
+- gear → `{ shape: 'disc'; …; radius: r + 0.085; halfLength: HC; cell; gear: { pitch: r } }`
+  (tip radius, 0.04 inside the nominal tip `r + ⅛`). The hub and the web cells of a gear
+  yield **no** cylinder or box of their own inside the gear's slab — the disc stands for them
+  (otherwise an 8-tooth gear's barrel, or a crank hole's, overlaps the partner's tip disc at
+  mesh distance). Their parts outside the slab (axial extensions) stay.
 
 `HC < H` gives stacked liftarms a little real clearance so neighbouring layers do not rub.
 
@@ -467,9 +578,13 @@ and Jolt (excellent solver but a heavier, manual-memory API); noted in the READM
   for now) tilts the floor about Z (normal `(sin θ, cos θ, 0)`), placed to touch the model's
   lowest nominal point along its normal. `Simulation.groundY` is the plane's height at θ = 0
   (`groundLevel + 0.04`); the view draws the floor there in both modes. Two refinements found
-  in review: the plane is lowered (never raised) to the lowest free end of a pin or axle, which
-  reaches 0.02 further than a hole cell, so a model standing on a male end also starts in exact
-  contact; and the ground collider must be created **before** the bodies' colliders (measured:
+  in review: the plane is placed **tangent to the lowest collider point of the whole model**
+  (`groundPlane` in `src/physics/shapes.ts`, pure, computed from the collider shapes exactly as
+  Rapier gets them; the edit-mode floor uses the same function), so every model
+  starts in exact contact — a pin standing on its free end reaches 0.02 below a hole cell, and
+  a rod lying on its side is 0.17 *above* `groundLevel + 0.04` (a first version only ever
+  lowered the plane, and such a rod dropped at Play); and the ground collider must be created
+  **before** the bodies' colliders (measured:
   created after them, Rapier's half-space contact drifts toward the plane's origin, and a wheel
   100 units away rolled 0.35 units in 20 s).
   With a ground, the grab spring's force component pushing *into* the floor is capped at
@@ -484,13 +599,25 @@ and Jolt (excellent solver but a heavier, manual-memory API); noted in the READM
     `g·sinθ/(1 + I/(m r²))` for `r ≥ 1.5`. It carries the rim's mass: the annulus between the hub
     barrel and the rim at density 1 (overlap with other cells of the part is ignored). Friction
     0.8 (a tyre; the ground and parts are 0.4, combine rule average).
-  - *Hull*: a circumscribed 32-gon prism built like the other prisms (DEVIATIONS §5) with an
-    end-face bevel of `0.02·r` (parry's 4-vertex face limit needs ≥ 0.0125·r), density 0. It
+  - *Hull*: a circumscribed 32-gon prism, density 0, made of **32 wedges × 2 axial slabs**
+    (`wheelHullPieces`: 64 six-point hulls, every face ≤ 4 vertices, no bevel). One prism gave
+    one contact point against a beam's edge and too few against a loose part (see the
+    requirement below). It
     collides **only with ordinary part colliders** — never the ground, never another wheel. It
     is what a liftarm hits. A polygon cannot roll (it loses energy at every facet), so a wheel
     rolling *along a beam* slows quickly; that is a documented limit, not a goal.
   - Ordinary part colliders collide with the ground, with wheel hulls and with each other, as
     now. Suggested groups: ground 1, round 2, hull 4, part 8.
+  - *Requirement added in review (milestone 7 verification):* a wheel resting on or lying
+    across a **loose** part that itself lies on the floor must not sink into it. Measured with
+    the first hull: up to 0.458 (the whole half-thickness) lying flat across a beam, 0.06
+    upright on a loose beam, 0.165 for a parked cart wheel, against 0.003 on a fixed beam.
+    Target: ≤ 0.05 at rest in all of those, no regression in the wheel tests. Met by the wedge
+    hull (≤ 0.0082 lying, ≤ 0.008 upright, 0.023 parked) except an `r = 4` wheel lying across a
+    loose beam 1 off its hub (0.065, and the beam itself rolls onto its edge and sinks ≈ 0.4
+    into the floor — a known limit of the ordinary prisms' bevel, DEVIATIONS). Costs ×1.15 on
+    the Cart, up to ×2.4 while a wheel rests on a part. Gears use the same construction at
+    their tip radius.
   - *Ground guard*: a 32-gon prism inside the round collider (0.12 smaller in radius, 0.02 in
     half-length), density 0, no friction, colliding **only with the ground** (group 16).
     Measured need: the cylinder-on-half-space contact misses the rim when the disc is nearly
@@ -500,6 +627,75 @@ and Jolt (excellent solver but a heavier, manual-memory API); noted in the READM
     builder: without it a wheel dropped 10 units sinks 0.25 into the floor; the spike's
     fall-through against liftarms did not reproduce in 2 × 816 drops, with or without it).
   - Rapier clamps spin at π/4 per step (377 rad/s): a wheel skids above `377·r` units/s. Fine.
+- **Gears** (§2.7). Reference implementation to port: `spikes/gearsim/gearsim.ts` (a copy of
+  `sim.ts` with every change marked `GEARSIM`) and its `REPORT.md`.
+  - *Colliders.* A gear `disc` primitive becomes the wheel's three colliders at the **tip**
+    radius `r + 0.085`: round (ground, and plain wheels' rounds; friction 0.4 — plastic, not a
+    tyre), hull (ordinary part colliders) and ground guard. Mass: a solid disc of the pitch
+    radius `r`, half-length `HC`, density 1, given explicitly (it stands for the hub cell too).
+    **Gear colliders never collide with another gear's colliders**: at mesh distance the tip
+    discs overlap by design, and the mesh constraint is what keeps two gears apart. Known
+    limit: gears that are not in mesh (perpendicular ones, or one forced far inside another)
+    pass through each other. There are **no tooth colliders**: measured in `spikes/teeth2/`,
+    teeth meeting every part cost ×3.4, a gear lying flat on its teeth ×7–35, and they add
+    nothing a smooth tip disc does not do for a beam resting on a gear (same grip, slip within
+    0.5 %); tooth contacts cannot hold a ratchet either (§10).
+  - *Mesh candidates:* every pair of gears on different bodies, not both fixed. Per pair, f64
+    state: engaged flag, joint handle, unwrapped trackers `θ₁`, `θ₂`, `ψ`, phase reference `φ₀`,
+    its target `φ_T`, and `stopMin`.
+  - *Recomputed before every world step* (with `a` = gear 1's world axis, `c` the hub centres):
+    `par = ∠(a₁, a₂) mod π`; `δ = (c₂ − c₁)·a`; `d⊥ = c₂ − c₁ − a·δ`, `D = |d⊥|`, `n = d⊥/D`,
+    `t = a × n`; `gap = D − r₁ − r₂`.
+  - *Engage* when all hold: `par ≤ 0.035` rad; `|δ| ≤ 0.6`; `−0.25 ≤ gap ≤ +0.125`; both
+    bodies' linear speed ≤ 350 units/s. *Release* when any holds: `par > 0.087`; `|δ| > 0.9`;
+    `gap > +0.25`; `gap < −0.5`; either body faster than 350 units/s (measured: a meshed
+    gearbox reaching Rapier's 400 units/s linear clamp explodes; released, it freewheels).
+  - *On engagement:* `φ = r₁θ₁ + r₂θ₂ − (r₁ + r₂)ψ` (`θ` = each body's twist about `a`, `ψ` =
+    the angle of `n` in `gearPlaneBasis`); `φ_T = round(φ/p)·p`, `φ₀ = φ`;
+    `stopMin = min(0, gap) − 0.005`. Create one generic joint with only `LinX` constrained,
+    contacts on, and a `LinY` limit `[stopMin, 1e6]` (the radial stop). With the §2.7 phase
+    convention every pair built in mesh engages with `φ ≡ 0 (mod p)` — snap 0.000 measured.
+    Merge the two gears' **energy-guard groups** (never split again; measured: without the
+    merge the guard brakes a geared pendulum to a stop).
+  - *Every engaged world step* (step `h`): `φ₀` moves toward `φ_T` by at most `0.96·h` units of
+    arc (the rate-limited snap, only after an off-grid engagement); `e = φ − φ₀`; lead
+    `λ = D₀(1 − κ²)·φ_step/(2κ²)` with `D₀ = r₁ + r₂`, `κ = D₀/r₂`,
+    `φ_step = (ω₁·a − β̇)·h`, `β̇ = (v₂(c₂) − v₁(c₁))·t/D`; anchor 1 `= c₁ + r₁n + λt`,
+    anchor 2 `= c₂ − r₂n + (λ − e)t` (in gear 2's own plane); both frames `X = t, Y = n,
+    Z = −a` in each body's local coordinates, via `setLocalFrame1/2`.
+  - *Removal:* Rapier removes a mesh joint with its body; mark the pair dead and never touch
+    the stale handle. No friction at a mesh; pivot friction loads stay as they are (static,
+    mesh-agnostic). The grab's mechanism mass counts bodies linked through engaged meshes.
+    `jointError()` is unchanged; `meshStates()` reports each engaged pair's phase error in teeth.
+  - Measured in the real simulation: ratio error ≤ 3e-5, phase error ≤ 8e-4 teeth, static
+    balance through 1:5, 1:25 and 1:125 with friction matching the analytic thresholds in 42 of
+    42 cases; a swing-arm selector and a gear sliding along its axle engage and release once
+    per stroke; a geared free-root cart neither accelerates by itself nor steers visibly.
+- **Smaller steps at speed.** The mesh row is only clean while the fastest meshed gear turns
+  ≤ 0.1 rad per world step (≈ 48 rad/s at 1/480 s); above it the mesh brakes (a 7-hole arm
+  dropped through 1:25 lost 80 % of its energy) and above 0.2 rad it kicks and reverses. An
+  arm falling through an ordinary 1:5 train exceeds 0.1 rad/step for half its fall. So each
+  fixed step of 1/480 s runs as `k` world steps of `dt/k` with the solver iterations divided
+  by `k` (jointed `240/k`, free `max(1, round(30/k))`): Rapier's iteration count is its
+  substep count, so joint stiffness, pendulum period, slide stops and the f32 spin gain are
+  unchanged (measured to 3 digits), and contacts get slightly better.
+  - `k ∈ {1, 2, 4, 8}`, chosen once per fixed step from the state alone (deterministic):
+    `ω* = max |ω|` over bodies carrying a gear with an **engaged** mesh, plus the positive part
+    of its rise over the previous fixed step. Step **up** at once to the smallest `k` with
+    `ω*·dt/k ≤ 0.08`; step **down** only when `ω*·dt/k′ ≤ 0.04` for the lower `k′` and no
+    sooner than 0.1 s after the last step up. With no engaged mesh `k = 1` and the simulation
+    is bit-identical to what it was.
+  - A change of `k` rescales `world.timestep`, the solver iterations and every jointed body's
+    additional iterations. Joint friction and the energy guard run **once per fixed step**
+    (hold target `1/fixedDt`), the grab spring, mesh update, body removal and the speed cap
+    per world step; the soft-CCD prediction stays at the fixed-step distance.
+  - *Speed cap:* after each world step, if a gear with an engaged mesh spins faster than
+    300 rad/s, every velocity in its guard group is scaled by the same factor to bring it back
+    to 300 (the energy guard's operation; a single-body clamp whips the neighbours, damping
+    over-brakes). The guard's reference falls with it.
+  - Known costs of `k > 1`, paid only while a meshed gear is fast: 1.0–2.0× per fixed step at
+    `k = 8`; joints that should hold still creep ≈ 4e-3 rad in 10 s under ground contact;
+    impacts rebound less (restitution ≈ 0.03 instead of 0.12).
 - **Free root** (§2.6): no body is fixed. Consequences that must be handled:
   - *Joint-friction load.* The fixed-body ranking has nothing to start from. When the ground is
     on, every body with a horizontal-axis rim whose lowest point is within 0.05 of the ground at
@@ -602,6 +798,32 @@ on (default level unless stated):
   to rest (friction Realistic) and shows no energy gain beyond the guard's band (friction off).
 - *Determinism*: the cart run twice gives identical pose hashes.
 
+- **Gears** (§5.1; numbers from `spikes/gearsim/` unless noted, tolerances to be met with the
+  guard on, friction off unless stated):
+  - *Ratio:* 1:1, 1:3, 1:5, compound 1:25 and a 5-gear idler chain driven from rest to 40 rad/s
+    at the input: ratio error < 1e-4, phase error < 0.005 teeth, joint error < 1e-5.
+  - *Geared pendulum* (1:1 and 3:1): period within 1 % of the reduced model, energy within
+    [−1 %, +1.1 %] of `mgL` over 4 s.
+  - *Static balance* through 1:5 and 1:25 at friction Realistic: holds at 0.97 of the analytic
+    threshold, moves at 1.03.
+  - *Crane drop:* a 7-hole arm released horizontal on the output of 1:5 and 1:25 reaches the
+    bottom with ≥ 95 % of the frictionless energy (it lost 46 % and 80 % at `k = 1`), `k`
+    rises above 1 on the way and returns to 1 at rest; no reversed step of any gear.
+  - *Yank:* the grab target jumped 8 units on a 1:5 arm: the arm never moves away from the
+    target, phase error < 0.05 teeth, no gear above 300 rad/s.
+  - *Engage / release:* a gear on a swing arm, and a gear sliding along its axle, engage and
+    release exactly once per stroke; a pair built in mesh engages with snap 0.
+  - *Removal and speed:* a meshed free gearbox falling out of the world never throws and is
+    removed; nothing explodes at the 400 units/s clamp.
+  - *Locked train* (a loop of meshes and shared axles whose ratios disagree): stays at rest,
+    energy bounded, joint error < 1e-3.
+  - *No gears, no change:* every example without gears reproduces its recorded hashes
+    (`k = 1` path bit-identical).
+  - *Collisions:* an 8-tooth and a 40-tooth gear built in mesh start with no contact between
+    them; a beam dropped onto a gear rests on its tip radius; a gear with a horizontal axis
+    rests on the ground at Play with gap 0.
+  - *Determinism:* the Gear train example run twice gives identical hashes, `k` changes included.
+
 ---------------------------------------------------------------------------------------------
 
 ## 6. Rendering & camera (`src/view`)
@@ -634,6 +856,14 @@ Like printed building instructions: clean flat-ish colour, smooth lit curves, da
   strength where nothing is in front of it and fainter where another part covers it (the same
   idiom as the ghost). No marker when the root is free (§2.6).
 - **Wheels** are drawn like any part (part colour, outlines), with their index mark (§4.2).
+- **Gears** are drawn with every real tooth, in the same style. The tooth band is a *soft
+  patch* (§4.2): the outline pass inks its true contours (each tooth occluding the root behind
+  it, the silhouette) but not its creases, so an edge-on gear shows quiet shaded flutes rather
+  than a barcode of two lines per tooth. Where a tooth pitch is under about 6 device pixels
+  the contours *inside* a soft patch fade out (to nothing at 3 px) so that a small or distant
+  gear keeps its silhouette, faces, holes and index instead of a black fringe. The painted
+  index tooth (and the face groove for `r ≥ 1`) shows rotation: the teeth alone strobe (a
+  40-tooth gear looks frozen at 9.4 rad/s on a 60 Hz display).
 - **Ground** (§2.6, when on): shown the same way in **both** modes, by a **contact shadow** and
   nothing drawn *on* the floor (owner's call: lines or any other surface features compete with
   the reference grid; a first version with unit lines read as a second grid and was otherwise
@@ -672,8 +902,10 @@ Like printed building instructions: clean flat-ish colour, smooth lit curves, da
     popping — snap the texture's frame to its texel grid and change the frame's size in coarse
     steps. The frame covers every part within `SHADOW_H` of the floor up to a maximum extent
     of 128 units across. When the model spreads further, the frame is the 128-unit square
-    holding the most part footprint (ties keep the previous frame, so it never flips between
-    equal groups and follows a moving one); what is outside gets no shadow.
+    holding the most part footprint, with hysteresis: the previous frame (carried along with
+    the parts inside it) is kept unless another square holds at least 25 % more — review found
+    two similar carts 150 apart trading the shadow 16 times in 3 s as their arms swung. What is
+    outside gets no shadow.
   - Seen from below, nothing is drawn (it must not hide the model). Edge-on it degenerates
     naturally; the floor is then a line at its level, as before.
   - In edit mode the `y = −½` reference grid stays as the building plane; the floor may be lower.
@@ -726,12 +958,26 @@ Left toolbar; keyboard shortcut in brackets.
   disc at the new radius. **Shift+click shrinks** by half a unit (1 → bare). Invalid growth is
   shown red with the reason ("wheel would hit part 3", "largest wheel is radius 4", "wheels grow
   from pin holes and axle holes"). Status: "Grow wheel · part 3 · radius 1.5 (24 mm across)".
-  Each click is one undo step. A bare hole lying wholly inside a wheel of its own part (a crank
-  hole) acts on that wheel, not on itself — a second disc there would be hidden inside the first.
+  Each click is one undo step. A bare hole of the wheel's own part, in its layer, that the
+  wheel's disc overlaps (a crank hole, including one bridged at the rim's edge; exactly the
+  cells rule 1 of §2.6 joins through the disc) acts on that wheel, not on itself — a second
+  disc there would be hidden inside the first or poke out of it. With several such wheels, the
+  nearest hub. On a gear the Wheel
+  tool makes it a plain wheel of the same radius (1 for an 8-tooth gear).
+- **Gear** `[T]` (after Wheel): hover a hole cell — or a gear — and click to make it a gear or
+  step it **up one size**: bare → 8 → 16 → 24 → 40 teeth. **Shift+click steps down** (8 → bare).
+  On a plain wheel it makes a gear of the largest size not above the wheel's radius. The ghost
+  is the toothed disc at the new size. Invalid steps are red with the reason (§2.7: "gear teeth
+  would hit part 3", "the teeth would clash with the gear of part 5", "largest gear has 40
+  teeth", "gears grow from pin holes and axle holes", "would cut into the teeth of this part's
+  gear"); when the next size is invalid but a later one is valid the reason says so ("… ·
+  24 teeth would fit"). Status: "Gear · part 3 · 24 teeth (radius 1.5)", and when the result
+  meshes: "… · meshes with part 5 (40 teeth, 3:5)". Each click is one undo step.
 - **Erase** `[E]`: click a cell to remove that sub-part (hovered cell highlighted red). Parts
   split if they fall apart. On a hub that has a rim, or anywhere on its disc outside the part's
   own cells, Erase removes **the outer half-unit of the rim** instead (highlighting that ring);
-  once the rim is gone the next click erases the cell as usual.
+  once the rim is gone the next click erases the cell as usual. On a gear it steps the gear
+  down one size (40 → 24 → 16 → 8 → bare).
 
 ### 7.3 Build interaction
 
@@ -764,10 +1010,13 @@ ray would hit if every part's front faces were culled and only its back faces dr
 call; a first version that took the face *opposite the hovered front face* was logical but did
 not match intuition — the cursor was not over the face being built on).
 
-Precisely, with each part's solid taken as the union of its cell cubes and its rim discs — and,
-for a male standing in another part's hole, that hole's part as well, so that a pin's faces
-buried inside a beam are never picked and the beam's far face is (a pin is still pickable where
-it sticks out) — a *back-face crossing* is a point
+Precisely, with each part's solid taken as the union of its cell cubes and its rim discs — and
+a male and the hole it stands in treated as one solid **both ways**: a pin's faces buried
+inside a beam are never picked and the beam's far face is (a pin is still pickable where it
+sticks out), and equally a hole's face is never picked where the ray is still inside the rod
+that passes through it, so looking straight down an axle the pick is the axle's far end
+(review: it was the beam's back face, buried in the axle, with a red refusal) — a *back-face
+crossing* is a point
 where the ray leaves a part's solid — it passes out of one of the part's cubes or discs into
 space that is not that same part's (whether empty or occupied by another part). The pick is
 the **nearest** such crossing over all parts: (`P`, `C`, `n`) with `C` the cell the ray leaves
@@ -784,11 +1033,15 @@ back face that abuts another part is pickable; whether anything can be built the
 as usual). The picked face's highlight and the ghost are drawn through the part and must be
 legible there (the ghost's silhouette rim, the highlight at full strength), so that moving the
 mouse over a part with Alt held visibly walks the highlight over its back faces. Every hover
-line has a white under-stroke, and a highlight, ghost or band whose colour is close to the part
-under the cursor switches to a contrasting one (orange over a blue part, dark red over red), so
-it reads on every palette colour. The status
+line has a white under-stroke. **Hue keeps its meaning on every part colour**: the accent
+(blue) always means "a click will do this", red always means refused or erase. Where the
+overlay's colour is close to the part under the cursor it keeps its hue and changes its
+*treatment* instead — white fill, and the outline in the semantic colour at double width over
+the white under-stroke — so it still reads. (A first version switched to orange over blue
+parts and dark red over red ones: on the Cart a valid face turned orange and an invalid one
+red 6 px apart, and dark red on red read as a plain dark outline.) The status
 sentence says so ("… · back side (−Z)", the picked face's direction). With nothing under the
-cursor Back side changes nothing (New on grid as usual). Erase, Select and Wheel ignore it.
+cursor Back side changes nothing (New on grid as usual). Erase, Select, Wheel and Gear ignore it.
 
 **Wheels in picking.** Besides the cell cubes, each rim is pickable as its nominal disc (radius
 `r`, one cell thick). A hit on a disc that is not inside one of the part's own cell cubes gives
@@ -810,6 +1063,12 @@ the hover (`P`, `G`, `n`) where `G` is the grid cell under the hit point in the 
   hit on the tread (the hint adds "· back side (±A)"). Passing from a disc into one of the
   part's own cubes (or back) is not a crossing.
 
+**Gears in picking.** A gear is pickable as its tip disc (radius `r + 3/32`) and otherwise
+behaves as a wheel above: Select, grab, Gear, Wheel and Erase act on it; hole and male tools on
+its flat face add a crank hole or crank pin at a virtual cell **in the web** (§2.7 rule 5) and
+are refused elsewhere on the face ("too close to the teeth — crank holes go within N of the
+hub", or "an 8-tooth gear has no room for crank holes"); the teeth are a tread.
+
 New parts take the current palette colour (or the kind default, §6.1).
 
 ### 7.4 Other
@@ -820,7 +1079,10 @@ New parts take the current palette colour (or the kind default, §6.1).
 - **Show kinematics** toggle (edit mode): tints parts by rigid body and draws a small glyph on
   each joint axis (ring = revolute, ring + double arrow = cylindrical, double arrow = prismatic),
   so the user can see what welded and what moves before pressing play. Status bar shows counts:
-  parts, bodies, joints.
+  parts, bodies, joints, and meshes when there are any. Each gear mesh (§2.7) gets a small
+  glyph at its pitch point (two short interlocking ticks). Hovering a gear with Select says
+  "Part 3 · gear 24 teeth ∥ Z · meshes with part 5 (40 teeth)"; the inspector shows a selected
+  gear's tooth count and its meshes with their ratios.
 - **Model settings** (edit mode only; saved in the file; each change is one undo step): a
   **Ground** toggle `[G]` and a **Fix root** toggle, in a small always-visible "Model" block of
   the inspector panel (not the top bar, which is full). Fix root is checked and disabled while
@@ -840,7 +1102,9 @@ New parts take the current palette colour (or the kind default, §6.1).
 way to give a body a velocity in simulate mode (`pushBody(partId, [vx,vy,vz], [wx,wy,wz]?)`; one
 body per call, so a vehicle needs each of its bodies pushed) so e2e can roll a cart without a
 mouse. `groundShadowAt(x, z)`: the contact shadow's strength (0…1, after blur) at a floor point,
-read back from the shadow texture, or null when the ground is off.
+read back from the shadow texture, or null when the ground is off. For gears:
+`simInfo().substeps` (current `k`), `simInfo().meshes` (engaged pairs with phase error in
+teeth), `analyze().meshes` (edit-time count).
 
 ---------------------------------------------------------------------------------------------
 
@@ -868,6 +1132,11 @@ smooth `pin`s for moving joints.
 9. **Cart** — ground on, root free: a chassis on two axles with four wheels, carrying a raised
    arm on a smooth pin that falls and swings at Play, so the cart visibly rolls back and forth
    under it before friction brings it to rest. Wheel radius ≥ 1.5.
+10. **Gear train** — a fixed frame carrying a 40-tooth gear with an off-balance arm, meshing an
+    8-tooth pinion whose axle carries a light pointer, and from that axle a second mesh
+    (8 → 24) to a third pointer; no ground. At Play the arm falls and swings, the pointers turn
+    five times as fast the other way and 5/3 as fast the same way. Friction pins or axle holes
+    as needed so that each gear turns with its pointer.
 
 ---------------------------------------------------------------------------------------------
 
@@ -893,8 +1162,13 @@ e2e/            Playwright smoke + screenshot scripts (screenshots written to e2
 
 ## 10. Explicit non-goals (for now)
 
-Gears (next: toothed rims meshing as constraints — see `spikes/coupling/`), racks, half-unit
-offsets, tyres as separate parts, sloped or uneven ground, wheels that roll well on other parts,
+Bevel, worm and crown gears, racks, gears meshing on a diagonal (40+40 at `(3,4)`: needs a
+per-train phase solve, worked out in `spikes/gearlook/`), collisions between gears that are not
+in mesh, friction in a gear mesh, **ratchets** (measured in `spikes/teeth2/`: a pawl made of
+ordinary parts does click over tooth colliders, but soft contacts let the tooth crush through
+it — an 8-tooth gear holds less than one pawl weight, a 40 about ten; the mechanism that holds
+10⁴ is a one-way constraint row switched by a declared pawl, which needs a design decision),
+half-unit offsets, tyres as separate parts, sloped or uneven ground, wheels that roll well on other parts,
 studs, flexible parts, friction-pin friction, motors, an official
 part catalogue, decomposition into official parts, collisions between directly-jointed bodies
 (may come later as an experimental option), mobile/touch UI.

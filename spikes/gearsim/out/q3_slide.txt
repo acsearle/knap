@@ -1,0 +1,171 @@
+== slide mu 0 k 1 w 5: cylindrical limits [-1,2] F_f 0.0 τf 0.0 | engagements 3 releases 3 | mean ratio while engaged -0.97500 | max phase err 0.0051 teeth | max tilt 9.31e-8 rad | max joint error 2.01e-7
+   0.023 ENG hub z 1.553 delta 0.599 snap -0.252 teeth
+   0.563 rel hub z 1.918 delta 0.909
+   1.021 ENG hub z 1.553 delta 0.599 snap 0.434 teeth
+   1.563 rel hub z 1.918 delta 0.909
+   2.021 ENG hub z 1.553 delta 0.599 snap 0.434 teeth
+   2.563 rel hub z 1.918 delta 0.909
+   t 0.25 hub z 1.000 ωA 4.95 ωB -4.90 eng true ph 1.37e-6
+   t 0.50 hub z 1.009 ωA 4.95 ωB -4.90 eng true ph 2.00e-6
+   t 0.75 hub z 2.000 ωA 5.00 ωB -1.92 eng false ph 1.92e-6
+   t 1.00 hub z 1.991 ωA 5.00 ωB -0.56 eng false ph 1.92e-6
+   t 1.25 hub z 1.000 ωA 4.95 ωB -4.90 eng true ph 1.80e-6
+   t 1.50 hub z 1.009 ωA 4.95 ωB -4.90 eng true ph 2.20e-6
+   t 1.75 hub z 2.000 ωA 5.00 ωB -1.92 eng false ph 1.78e-6
+   t 2.00 hub z 1.991 ωA 5.00 ωB -0.56 eng false ph 1.78e-6
+   t 2.25 hub z 1.000 ωA 4.95 ωB -4.89 eng true ph 1.54e-6
+   t 2.50 hub z 1.009 ωA 4.95 ωB -4.90 eng true ph 1.69e-6
+   t 2.75 hub z 2.000 ωA 5.00 ωB -1.92 eng false ph 1.80e-6
+   t 3.00 hub z 1.991 ωA 5.00 ωB -0.56 eng false ph 1.80e-6
+== slide mu 0 k 2 w 5: cylindrical limits [-1,2] F_f 0.0 τf 0.0 | engagements 3 releases 3 | mean ratio while engaged -0.97533 | max phase err 0.0025 teeth | max tilt 9.31e-8 rad | max joint error 2.02e-7
+   0.023 ENG hub z 1.566 delta 0.588 snap -0.265 teeth
+   0.560 rel hub z 1.906 delta 0.901
+   1.021 ENG hub z 1.566 delta 0.588 snap 0.412 teeth
+   1.560 rel hub z 1.906 delta 0.901
+   2.021 ENG hub z 1.566 delta 0.588 snap 0.410 teeth
+   2.560 rel hub z 1.906 delta 0.901
+   t 0.25 hub z 1.000 ωA 4.95 ωB -4.92 eng true ph 3.96e-7
+   t 0.50 hub z 1.008 ωA 4.95 ωB -4.92 eng true ph 6.35e-7
+   t 0.75 hub z 2.000 ωA 5.00 ωB -1.91 eng false ph 6.06e-7
+   t 1.00 hub z 1.992 ωA 5.00 ωB -0.55 eng false ph 6.06e-7
+   t 1.25 hub z 1.000 ωA 4.95 ωB -4.92 eng true ph 7.51e-7
+   t 1.50 hub z 1.008 ωA 4.95 ωB -4.92 eng true ph 8.78e-7
+   t 1.75 hub z 2.000 ωA 5.00 ωB -1.91 eng false ph 8.03e-7
+   t 2.00 hub z 1.992 ωA 5.00 ωB -0.55 eng false ph 8.03e-7
+   t 2.25 hub z 1.000 ωA 4.94 ωB -4.92 eng true ph 4.82e-7
+   t 2.50 hub z 1.008 ωA 4.95 ωB -4.92 eng true ph 5.37e-7
+   t 2.75 hub z 2.000 ωA 5.00 ωB -1.91 eng false ph 5.87e-7
+   t 3.00 hub z 1.992 ωA 5.00 ωB -0.55 eng false ph 5.87e-7
+== slide mu 0 k 4 w 5: cylindrical limits [-1,2] F_f 0.0 τf 0.0 | engagements 3 releases 3 | mean ratio while engaged -0.97473 | max phase err 0.0013 teeth | max tilt 9.42e-8 rad | max joint error 2.00e-7
+   0.023 ENG hub z 1.572 delta 0.583 snap -0.265 teeth
+   0.560 rel hub z 1.905 delta 0.902
+   1.021 ENG hub z 1.572 delta 0.583 snap 0.418 teeth
+   1.560 rel hub z 1.905 delta 0.902
+   2.021 ENG hub z 1.572 delta 0.583 snap 0.418 teeth
+   2.560 rel hub z 1.905 delta 0.902
+   t 0.25 hub z 1.000 ωA 4.95 ωB -4.93 eng true ph 6.05e-7
+   t 0.50 hub z 1.008 ωA 4.95 ωB -4.93 eng true ph 3.63e-7
+   t 0.75 hub z 2.000 ωA 5.00 ωB -1.92 eng false ph 7.09e-7
+   t 1.00 hub z 1.992 ωA 5.00 ωB -0.55 eng false ph 7.09e-7
+   t 1.25 hub z 1.000 ωA 4.95 ωB -4.93 eng true ph 3.91e-7
+   t 1.50 hub z 1.008 ωA 4.95 ωB -4.93 eng true ph 4.39e-7
+   t 1.75 hub z 2.000 ωA 5.00 ωB -1.92 eng false ph 6.43e-7
+   t 2.00 hub z 1.992 ωA 5.00 ωB -0.55 eng false ph 6.43e-7
+   t 2.25 hub z 1.000 ωA 4.95 ωB -4.93 eng true ph 3.36e-8
+   t 2.50 hub z 1.008 ωA 4.95 ωB -4.93 eng true ph 3.04e-7
+   t 2.75 hub z 2.000 ωA 5.00 ωB -1.92 eng false ph 4.46e-7
+   t 3.00 hub z 1.992 ωA 5.00 ωB -0.55 eng false ph 4.46e-7
+== slide mu 0.05 k 1 w 5: cylindrical limits [-1,2] F_f 262.4 τf 81.4 | engagements 3 releases 3 | mean ratio while engaged -1.05650 | max phase err 0.0051 teeth | max tilt 9.42e-8 rad | max joint error 2.01e-7
+   0.025 ENG hub z 1.517 delta 0.560 snap -0.274 teeth
+   0.565 rel hub z 1.913 delta 0.905
+   1.021 ENG hub z 1.551 delta 0.596 snap -0.348 teeth
+   1.565 rel hub z 1.913 delta 0.905
+   2.021 ENG hub z 1.551 delta 0.596 snap -0.348 teeth
+   2.565 rel hub z 1.913 delta 0.905
+   t 0.25 hub z 1.016 ωA 4.72 ωB -4.68 eng true ph 1.78e-6
+   t 0.50 hub z 1.024 ωA 4.73 ωB -4.68 eng true ph 1.42e-6
+   t 0.75 hub z 1.984 ωA 4.91 ωB -1.33e-12 eng false ph 1.51e-6
+   t 1.00 hub z 1.976 ωA 4.91 ωB 4.82e-12 eng false ph 1.51e-6
+   t 1.25 hub z 1.016 ωA 4.72 ωB -4.68 eng true ph 1.49e-6
+   t 1.50 hub z 1.024 ωA 4.73 ωB -4.68 eng true ph 1.76e-6
+   t 1.75 hub z 1.984 ωA 4.91 ωB 1.14e-11 eng false ph 1.65e-6
+   t 2.00 hub z 1.976 ωA 4.91 ωB -8.07e-12 eng false ph 1.65e-6
+   t 2.25 hub z 1.016 ωA 4.73 ωB -4.68 eng true ph 1.10e-6
+   t 2.50 hub z 1.024 ωA 4.73 ωB -4.68 eng true ph 1.18e-6
+   t 2.75 hub z 1.984 ωA 4.91 ωB 1.17e-11 eng false ph 9.73e-7
+   t 3.00 hub z 1.976 ωA 4.91 ωB -2.63e-9 eng false ph 9.73e-7
+== slide mu 0.05 k 2 w 5: cylindrical limits [-1,2] F_f 262.4 τf 81.4 | engagements 3 releases 3 | mean ratio while engaged -1.05430 | max phase err 0.0025 teeth | max tilt 9.42e-8 rad | max joint error 2.03e-7
+   0.023 ENG hub z 1.572 delta 0.595 snap -0.261 teeth
+   0.565 rel hub z 1.911 delta 0.907
+   1.021 ENG hub z 1.564 delta 0.586 snap -0.359 teeth
+   1.565 rel hub z 1.911 delta 0.907
+   2.021 ENG hub z 1.564 delta 0.586 snap -0.359 teeth
+   2.565 rel hub z 1.911 delta 0.907
+   t 0.25 hub z 1.016 ωA 4.73 ωB -4.70 eng true ph 1.99e-7
+   t 0.50 hub z 1.024 ωA 4.73 ωB -4.70 eng true ph 3.14e-7
+   t 0.75 hub z 1.984 ωA 4.91 ωB 2.66e-12 eng false ph 2.52e-7
+   t 1.00 hub z 1.976 ωA 4.91 ωB -9.37e-12 eng false ph 2.52e-7
+   t 1.25 hub z 1.016 ωA 4.72 ωB -4.70 eng true ph 7.35e-7
+   t 1.50 hub z 1.024 ωA 4.72 ωB -4.70 eng true ph 1.18e-6
+   t 1.75 hub z 1.984 ωA 4.91 ωB 1.83e-11 eng false ph 6.64e-7
+   t 2.00 hub z 1.976 ωA 4.91 ωB 2.70e-12 eng false ph 6.64e-7
+   t 2.25 hub z 1.016 ωA 4.73 ωB -4.70 eng true ph 1.40e-7
+   t 2.50 hub z 1.024 ωA 4.73 ωB -4.70 eng true ph -2.99e-8
+   t 2.75 hub z 1.984 ωA 4.91 ωB -2.83e-11 eng false ph 3.65e-7
+   t 3.00 hub z 1.976 ωA 4.91 ωB 9.09e-12 eng false ph 3.65e-7
+== slide mu 0.05 k 4 w 5: cylindrical limits [-1,2] F_f 262.4 τf 81.4 | engagements 3 releases 3 | mean ratio while engaged -1.05427 | max phase err 0.0013 teeth | max tilt 9.77e-8 rad | max joint error 2.02e-7
+   0.023 ENG hub z 1.579 delta 0.590 snap -0.267 teeth
+   0.565 rel hub z 1.909 delta 0.907
+   1.021 ENG hub z 1.570 delta 0.581 snap -0.358 teeth
+   1.565 rel hub z 1.909 delta 0.907
+   2.021 ENG hub z 1.570 delta 0.581 snap -0.358 teeth
+   2.565 rel hub z 1.909 delta 0.907
+   t 0.25 hub z 1.016 ωA 4.72 ωB -4.71 eng true ph 6.67e-7
+   t 0.50 hub z 1.023 ωA 4.73 ωB -4.71 eng true ph 4.95e-7
+   t 0.75 hub z 1.984 ωA 4.91 ωB 5.51e-12 eng false ph 3.72e-7
+   t 1.00 hub z 1.977 ωA 4.91 ωB -5.42e-12 eng false ph 3.72e-7
+   t 1.25 hub z 1.016 ωA 4.72 ωB -4.71 eng true ph 4.97e-8
+   t 1.50 hub z 1.023 ωA 4.73 ωB -4.71 eng true ph 5.60e-7
+   t 1.75 hub z 1.984 ωA 4.91 ωB -1.90e-13 eng false ph 6.24e-7
+   t 2.00 hub z 1.977 ωA 4.91 ωB -2.25e-9 eng false ph 6.24e-7
+   t 2.25 hub z 1.016 ωA 4.73 ωB -4.71 eng true ph 2.49e-7
+   t 2.50 hub z 1.023 ωA 4.73 ωB -4.71 eng true ph -2.67e-7
+   t 2.75 hub z 1.984 ωA 4.91 ωB 2.16e-11 eng false ph 3.13e-7
+   t 3.00 hub z 1.977 ωA 4.91 ωB -2.54e-11 eng false ph 3.13e-7
+== slide mu 0.2 k 1 w 5: cylindrical limits [-1,2] F_f 1049.7 τf 325.4 | engagements 3 releases 3 | mean ratio while engaged -1.03906 | max phase err 0.0051 teeth | max tilt 9.54e-8 rad | max joint error 1.81e-7
+   0.025 ENG hub z 1.539 delta 0.581 snap -0.259 teeth
+   0.579 rel hub z 1.907 delta 0.903
+   1.021 ENG hub z 1.546 delta 0.587 snap -0.157 teeth
+   1.579 rel hub z 1.907 delta 0.903
+   2.021 ENG hub z 1.546 delta 0.587 snap -0.157 teeth
+   2.579 rel hub z 1.907 delta 0.903
+   t 0.25 hub z 1.062 ωA 4.06 ωB -4.02 eng true ph 6.60e-7
+   t 0.50 hub z 1.070 ωA 4.06 ωB -4.02 eng true ph 1.09e-6
+   t 0.75 hub z 1.938 ωA 4.66 ωB -3.07e-9 eng false ph 1.00e-6
+   t 1.00 hub z 1.930 ωA 4.66 ωB 3.67e-11 eng false ph 1.00e-6
+   t 1.25 hub z 1.062 ωA 4.06 ωB -4.02 eng true ph 5.88e-7
+   t 1.50 hub z 1.070 ωA 4.06 ωB -4.02 eng true ph 1.33e-6
+   t 1.75 hub z 1.938 ωA 4.66 ωB 9.54e-10 eng false ph 1.65e-6
+   t 2.00 hub z 1.930 ωA 4.66 ωB 3.16e-9 eng false ph 1.65e-6
+   t 2.25 hub z 1.062 ωA 4.06 ωB -4.02 eng true ph 1.34e-6
+   t 2.50 hub z 1.070 ωA 4.06 ωB -4.02 eng true ph 8.05e-7
+   t 2.75 hub z 1.938 ωA 4.66 ωB 4.20e-11 eng false ph 9.29e-7
+   t 3.00 hub z 1.930 ωA 4.66 ωB 3.55e-10 eng false ph 9.29e-7
+== slide mu 0.2 k 2 w 5: cylindrical limits [-1,2] F_f 1049.7 τf 325.4 | engagements 3 releases 3 | mean ratio while engaged -1.04106 | max phase err 0.0025 teeth | max tilt 9.19e-8 rad | max joint error 1.79e-7
+   0.025 ENG hub z 1.552 delta 0.572 snap -0.259 teeth
+   0.577 rel hub z 1.902 delta 0.901
+   1.021 ENG hub z 1.557 delta 0.577 snap -0.168 teeth
+   1.577 rel hub z 1.902 delta 0.901
+   2.021 ENG hub z 1.557 delta 0.577 snap -0.168 teeth
+   2.577 rel hub z 1.902 delta 0.901
+   t 0.25 hub z 1.062 ωA 4.06 ωB -4.04 eng true ph 5.43e-7
+   t 0.50 hub z 1.069 ωA 4.06 ωB -4.04 eng true ph 2.55e-7
+   t 0.75 hub z 1.938 ωA 4.66 ωB -2.76e-9 eng false ph 8.84e-7
+   t 1.00 hub z 1.930 ωA 4.66 ωB 2.50e-11 eng false ph 8.84e-7
+   t 1.25 hub z 1.062 ωA 4.06 ωB -4.04 eng true ph 5.61e-7
+   t 1.50 hub z 1.069 ωA 4.06 ωB -4.04 eng true ph 3.10e-7
+   t 1.75 hub z 1.938 ωA 4.66 ωB 7.83e-11 eng false ph 9.31e-7
+   t 2.00 hub z 1.930 ωA 4.66 ωB 9.96e-11 eng false ph 9.31e-7
+   t 2.25 hub z 1.062 ωA 4.06 ωB -4.04 eng true ph 8.06e-7
+   t 2.50 hub z 1.069 ωA 4.06 ωB -4.04 eng true ph 4.79e-7
+   t 2.75 hub z 1.938 ωA 4.66 ωB 4.36e-11 eng false ph 6.13e-8
+   t 3.00 hub z 1.930 ωA 4.66 ωB 6.81e-11 eng false ph 6.13e-8
+== slide mu 0.2 k 4 w 5: cylindrical limits [-1,2] F_f 1049.7 τf 325.4 | engagements 3 releases 3 | mean ratio while engaged -1.04058 | max phase err 0.0013 teeth | max tilt 1.05e-7 rad | max joint error 1.88e-7
+   0.025 ENG hub z 1.557 delta 0.568 snap -0.259 teeth
+   0.577 rel hub z 1.902 delta 0.901
+   1.021 ENG hub z 1.563 delta 0.573 snap -0.174 teeth
+   1.577 rel hub z 1.902 delta 0.901
+   2.021 ENG hub z 1.563 delta 0.573 snap -0.174 teeth
+   2.577 rel hub z 1.902 delta 0.901
+   t 0.25 hub z 1.062 ωA 4.06 ωB -4.05 eng true ph 5.78e-7
+   t 0.50 hub z 1.069 ωA 4.06 ωB -4.05 eng true ph -2.34e-7
+   t 0.75 hub z 1.938 ωA 4.66 ωB 6.87e-11 eng false ph 2.56e-7
+   t 1.00 hub z 1.931 ωA 4.66 ωB 2.33e-12 eng false ph 2.56e-7
+   t 1.25 hub z 1.062 ωA 4.06 ωB -4.05 eng true ph 3.92e-7
+   t 1.50 hub z 1.069 ωA 4.06 ωB -4.05 eng true ph 7.87e-7
+   t 1.75 hub z 1.938 ωA 4.66 ωB -4.28e-10 eng false ph 6.66e-7
+   t 2.00 hub z 1.931 ωA 4.66 ωB 2.00e-11 eng false ph 6.66e-7
+   t 2.25 hub z 1.062 ωA 4.06 ωB -4.05 eng true ph 4.25e-7
+   t 2.50 hub z 1.069 ωA 4.06 ωB -4.05 eng true ph 2.23e-7
+   t 2.75 hub z 1.938 ωA 4.66 ωB 6.12e-11 eng false ph 2.21e-7
+   t 3.00 hub z 1.931 ωA 4.66 ωB -1.91e-10 eng false ph 2.21e-7
