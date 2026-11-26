@@ -6,6 +6,8 @@ import type { Cell, Dir, Model, Part } from '../core';
 import { buildPartMesh, geometryReady, initGeometry, partOrigin, partSignature } from '../geometry';
 import { glyphSegments } from './glyphs';
 import type { JointGlyph, RigidTransform } from './glyphs';
+import { Floor, floorEdgeAlpha } from './floor';
+import type { FloorState } from './floor';
 import { Grid } from './grid';
 import { FatLines, SegmentBuilder, createLineUniforms, rgba } from './lines';
 import { createFillMaterial, createGhostMaterial, createPartMaterial } from './materials';
@@ -32,7 +34,10 @@ import {
 import type { Box3, CameraState, Ray, Vec3, ViewDir } from './math';
 import { DEFAULT_OUTLINE, OutlinePass, createIdMaterial } from './outline';
 import type { OutlineParams } from './outline';
+import { markColor, markWeights } from './markpaint';
 import { vertexPatches } from './patches';
+import { ContactShadow } from './shadow';
+import type { CasterBox, ShadowFrame } from './shadowmath';
 import { MARK, placeMark, rootAnchorIndex } from './rootmarker';
 import { ViewCube } from './viewcube';
 
@@ -99,6 +104,8 @@ export interface HoverFace {
   dir: Dir;
   /** Default: the accent colour. */
   color?: string;
+  /** Colour of the part the highlight is drawn over (overlayColor: a contrasting variant if close). */
+  over?: string;
   /**
    * Seen through the part (Back side, §7.3: the face is on the far side): drawn on top of
    * everything instead of depth-tested, so it reads through the part in front of it.
@@ -110,6 +117,23 @@ export interface HoverCell {
   cell: readonly [number, number, number];
   /** Default red (erase). */
   color?: string;
+  /** Colour of the part under it (see HoverFace.over). */
+  over?: string;
+}
+
+/**
+ * A band of a wheel to highlight (Erase / Shift+Wheel: the half-unit a click removes): radii r0..r1
+ * about the hub's axis, in the hub's layer (one cell thick).
+ */
+export interface HoverRing {
+  hub: readonly [number, number, number];
+  axis: 0 | 1 | 2;
+  r0: number;
+  r1: number;
+  /** Default red. */
+  color?: string;
+  /** Colour of the part under it (see HoverFace.over). */
+  over?: string;
 }
 
 export interface Ghost {
@@ -119,6 +143,8 @@ export interface Ghost {
   valid: boolean;
   /** Built on the far side of a part (Back side): the parts of it behind geometry are drawn stronger. */
   xray?: boolean;
+  /** Colour of the part it is drawn over or through (see HoverFace.over). */
+  over?: string;
 }
 
 export type FitTarget = 'all' | 'selection' | readonly number[] | Box3;
@@ -130,6 +156,10 @@ export interface CameraAnimOptions {
 
 // ------------------------------------------------------------------------------------------
 // Internals
+
+/** Floor draw order: before the grid (−100) when it is below the grid, after it when above. */
+const FLOOR_UNDER_GRID_ORDER = -110;
+const FLOOR_OVER_GRID_ORDER = -90;
 
 /** Hover face fill opacity; seen through the part (Back side) it is drawn on top, a bit lighter. */
 const HOVER_FACE_OPACITY = 0.28;
@@ -158,6 +188,8 @@ interface PartView {
   slot: number;
   colorMesh: THREE.Mesh<THREE.BufferGeometry, THREE.ShaderMaterial>;
   idMesh: THREE.Mesh<THREE.BufferGeometry, THREE.RawShaderMaterial>;
+  /** Draws the part into the contact shadow's texture (shadow.ts). */
+  shadowMesh: THREE.Mesh;
   color: string;
 }
 
@@ -208,6 +240,32 @@ function q4(q: QuatLike): [number, number, number, number] {
   return [o.x, o.y, o.z, o.w];
 }
 
+/**
+ * The colour to draw an overlay (hover face, erase cell or ring, ghost) of colour `color` over a part
+ * of colour `over`: `color` itself unless the two are close (sRGB distance < 0.3, e.g. the blue accent
+ * over a blue wheel, the red erase band over a red part); then a contrasting variant — orange for a
+ * blue overlay, a dark shade of any other. Together with the light under-stroke of the lines
+ * (applyHalo) the overlay stays legible on every palette colour.
+ */
+export function overlayColor(color: string, over?: string): string {
+  if (!over) return color;
+  const a = rgba(color);
+  const b = rgba(over);
+  if (Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]) >= 0.3) return color;
+  if (a[2] > a[0] && a[2] > a[1]) return OVERLAY_ALT_BLUE;
+  const k = 0.45;
+  const hex = (v: number) => Math.round(Math.max(0, Math.min(1, v * k)) * 255).toString(16).padStart(2, '0');
+  return `#${hex(a[0])}${hex(a[1])}${hex(a[2])}`;
+}
+/** The accent's contrasting variant over a blue part. */
+export const OVERLAY_ALT_BLUE = '#f07a00';
+
+/** A light under-stroke for overlay lines: the same segments, white, drawn wider just before them. */
+function applyHalo(sb: SegmentBuilder, halo: FatLines): void {
+  halo.setSegments(new Float32Array(sb.ends), [1, 1, 1, 0.9]);
+  halo.visible = true;
+}
+
 function srgbTriple(hex: string): [number, number, number] {
   const c = rgba(hex);
   return [c[0], c[1], c[2]];
@@ -235,6 +293,12 @@ export class Viewport {
   private readonly outlineParams: OutlineParams;
   private readonly lineUniforms = createLineUniforms();
   private readonly grid = new Grid();
+  private readonly floor = new Floor();
+  private floorState: FloorState | null = null;
+  private readonly shadow = new ContactShadow();
+  /** A part's pose, the model, part visibility or the floor level changed since the last shadow render. */
+  private shadowDirty = true;
+  private readonly floorEdge: FatLines;
   private readonly cube: ViewCube | null;
   private readonly buttons: HTMLElement | null;
 
@@ -253,8 +317,14 @@ export class Viewport {
   // overlays
   private readonly hoverFaceFill: THREE.Mesh;
   private readonly hoverFaceLines: FatLines;
+  /** Light under-strokes of the hover lines (legible over a part of the overlay's own hue or a dark one). */
+  private readonly hoverFaceHalo: FatLines;
+  private readonly hoverCellHalo: FatLines;
+  private readonly hoverRingHalo: FatLines;
   private readonly hoverCellFill: THREE.Mesh;
   private readonly hoverCellLines: FatLines;
+  private readonly hoverRingFill: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
+  private readonly hoverRingLines: FatLines;
   private readonly ghostVisible: THREE.Mesh<THREE.BufferGeometry, THREE.ShaderMaterial>;
   private readonly ghostHidden: THREE.Mesh<THREE.BufferGeometry, THREE.ShaderMaterial>;
   private ghostGeo: { sig: string; entry: GeoEntry } | null = null;
@@ -290,6 +360,8 @@ export class Viewport {
   private rafId: number | null = null;
   private lastFrame = 0;
   private cssW = 1;
+  /** See setFitInsetRight. */
+  private fitInsetRight = 0;
   private cssH = 1;
   private dpr = 1;
   private readonly resizeObserver: ResizeObserver;
@@ -298,6 +370,7 @@ export class Viewport {
   private readonly floatTargets: boolean;
   private disposed = false;
   private readonly cleanups: (() => void)[] = [];
+  private readonly tmpMatrix = new THREE.Matrix4();
   /** Statistics of the last render (for tests / diagnostics). */
   readonly lastRender = { ms: 0, frame: 0 };
 
@@ -340,7 +413,11 @@ export class Viewport {
     container.append(this.canvas);
 
     // scenes
-    this.colorScene.add(this.grid);
+    this.colorScene.add(this.floor, this.grid);
+    this.floorEdge = new FatLines(this.lineUniforms, { depthTest: true, depthBias: 0.0002 });
+    this.floorEdge.renderOrder = -1;
+    this.floorEdge.visible = false;
+    this.overlayScene.add(this.floorEdge);
     const accent = this.opts.accent;
     this.hoverFaceFill = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), createFillMaterial(accent, HOVER_FACE_OPACITY));
     this.hoverFaceLines = new FatLines(this.lineUniforms, { depthTest: true, depthBias: 0.0005 });
@@ -350,7 +427,17 @@ export class Viewport {
     this.ghostHidden = new THREE.Mesh(new THREE.BufferGeometry(), createGhostMaterial(true));
     this.ghostHidden.renderOrder = 1;
     this.ghostVisible.renderOrder = 2;
-    for (const o of [this.hoverFaceFill, this.hoverFaceLines, this.hoverCellFill, this.hoverCellLines, this.ghostVisible, this.ghostHidden]) {
+    const ringMat = createFillMaterial('#e0322b', 0.2);
+    ringMat.side = THREE.DoubleSide;
+    this.hoverRingFill = new THREE.Mesh(new THREE.BufferGeometry(), ringMat);
+    this.hoverRingLines = new FatLines(this.lineUniforms, { depthTest: true, depthBias: 0.0005 });
+    this.hoverRingFill.renderOrder = 3;
+    this.hoverRingLines.renderOrder = 4;
+    this.hoverFaceHalo = new FatLines(this.lineUniforms, { depthTest: true, depthBias: 0.0005 });
+    this.hoverCellHalo = new FatLines(this.lineUniforms, { depthTest: true, depthBias: 0.0005 });
+    this.hoverRingHalo = new FatLines(this.lineUniforms, { depthTest: true, depthBias: 0.0005 });
+    for (const h of [this.hoverFaceHalo, this.hoverCellHalo, this.hoverRingHalo]) h.renderOrder = 3.5;
+    for (const o of [this.hoverFaceFill, this.hoverFaceLines, this.hoverFaceHalo, this.hoverCellFill, this.hoverCellLines, this.hoverCellHalo, this.hoverRingFill, this.hoverRingLines, this.hoverRingHalo, this.ghostVisible, this.ghostHidden]) {
       o.visible = false;
       this.overlayScene.add(o);
     }
@@ -433,6 +520,8 @@ export class Viewport {
             pv.sig = sig;
             pv.colorMesh.geometry = entry.geometry;
             pv.idMesh.geometry = entry.geometry;
+            pv.shadowMesh.geometry = entry.geometry;
+            this.shadowDirty = true;
           }
           pv.origin = partOrigin(part);
         }
@@ -501,6 +590,27 @@ export class Viewport {
     return pv ? this.worldBox(pv) : null;
   }
 
+  /**
+   * Does any visible part's world box overlap the view (its projected corners' screen rectangle
+   * meets the canvas)? False with no visible parts. (A vehicle that rolled away: the app says so.)
+   */
+  modelInView(): boolean {
+    for (const pv of this.views.values()) {
+      if (this.hidden.has(pv.id)) continue;
+      const b = this.worldBox(pv);
+      let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+      for (let i = 0; i < 8; i++) {
+        const q = this.project([i & 1 ? b.max[0] : b.min[0], i & 2 ? b.max[1] : b.min[1], i & 4 ? b.max[2] : b.min[2]]);
+        x0 = Math.min(x0, q.x);
+        x1 = Math.max(x1, q.x);
+        y0 = Math.min(y0, q.y);
+        y1 = Math.max(y1, q.y);
+      }
+      if (x1 >= 0 && x0 <= this.cssW && y1 >= 0 && y0 <= this.cssH) return true;
+    }
+    return false;
+  }
+
   /** World box of all visible parts, or null if there are none. */
   modelBox(): Box3 | null {
     return unionBoxes([...this.views.values()].filter((pv) => !this.hidden.has(pv.id)).map((pv) => this.worldBox(pv)));
@@ -525,6 +635,7 @@ export class Viewport {
     if (!h) {
       this.hoverFaceFill.visible = false;
       this.hoverFaceLines.visible = false;
+      this.hoverFaceHalo.visible = false;
       this.requestRender();
       return;
     }
@@ -534,7 +645,7 @@ export class Viewport {
     const fill = this.hoverFaceFill;
     fill.position.set(...c);
     fill.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), new THREE.Vector3(d[0], d[1], d[2]));
-    const color = h.color ?? this.opts.accent;
+    const color = overlayColor(h.color ?? this.opts.accent, h.over);
     const fm = fill.material as THREE.MeshBasicMaterial;
     fm.color.set(color);
     const xray = !!h.xray;
@@ -543,6 +654,7 @@ export class Viewport {
       fm.side = xray ? THREE.DoubleSide : THREE.FrontSide;
       fm.needsUpdate = true;
       this.hoverFaceLines.material.depthTest = !xray;
+      this.hoverFaceHalo.material.depthTest = !xray;
     }
     fm.opacity = xray ? HOVER_FACE_XRAY_OPACITY : HOVER_FACE_OPACITY;
     fill.visible = true;
@@ -558,6 +670,7 @@ export class Viewport {
     const sb = new SegmentBuilder();
     sb.polyline(pts, rgba(color), true);
     sb.apply(this.hoverFaceLines);
+    applyHalo(sb, this.hoverFaceHalo);
     this.requestRender();
   }
 
@@ -566,10 +679,11 @@ export class Viewport {
     if (!h) {
       this.hoverCellFill.visible = false;
       this.hoverCellLines.visible = false;
+      this.hoverCellHalo.visible = false;
       this.requestRender();
       return;
     }
-    const color = h.color ?? '#e0322b';
+    const color = overlayColor(h.color ?? '#e0322b', h.over);
     this.hoverCellFill.position.set(h.cell[0], h.cell[1], h.cell[2]);
     (this.hoverCellFill.material as THREE.MeshBasicMaterial).color.set(color);
     this.hoverCellFill.visible = true;
@@ -590,7 +704,83 @@ export class Viewport {
           sb.seg(a, b, col);
         }
     sb.apply(this.hoverCellLines);
+    applyHalo(sb, this.hoverCellHalo);
     this.requestRender();
+  }
+
+  /**
+   * Highlight a band of a wheel (Erase on a rim, Shift+Wheel shrink: the outer half-unit a click
+   * removes), or null: a translucent annulus slightly proud of the wheel's faces and tread, outlined
+   * by its four circles.
+   */
+  setHoverRing(h: HoverRing | null): void {
+    if (!h) {
+      this.hoverRingFill.visible = false;
+      this.hoverRingLines.visible = false;
+      this.hoverRingHalo.visible = false;
+      this.requestRender();
+      return;
+    }
+    const color = overlayColor(h.color ?? '#e0322b', h.over);
+    const a = h.axis;
+    const u = (a + 1) % 3;
+    const v = (a + 2) % 3;
+    const n = Math.max(48, Math.ceil(h.r1 * 24));
+    const pad = 0.015;
+    const r0 = Math.max(0.05, h.r0 - pad);
+    const r1 = h.r1 + pad;
+    const half = 0.5 + pad;
+    const pt = (r: number, ang: number, s: number): number[] => {
+      const p = [h.hub[0], h.hub[1], h.hub[2]];
+      p[u] = p[u]! + r * Math.cos(ang);
+      p[v] = p[v]! + r * Math.sin(ang);
+      p[a] = p[a]! + s * half;
+      return p;
+    };
+    const pos: number[] = [];
+    const quad = (p0: number[], p1: number[], p2: number[], p3: number[]) => pos.push(...p0, ...p1, ...p2, ...p0, ...p2, ...p3);
+    for (let i = 0; i < n; i++) {
+      const a0 = (i / n) * Math.PI * 2;
+      const a1 = ((i + 1) / n) * Math.PI * 2;
+      for (const s of [-1, 1]) quad(pt(r0, a0, s), pt(r1, a0, s), pt(r1, a1, s), pt(r0, a1, s)); // flat faces
+      quad(pt(r1, a0, -1), pt(r1, a0, 1), pt(r1, a1, 1), pt(r1, a1, -1)); // tread
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pos), 3));
+    this.hoverRingFill.geometry.dispose();
+    this.hoverRingFill.geometry = g;
+    this.hoverRingFill.material.color.set(color);
+    this.hoverRingFill.visible = true;
+    const sb = new SegmentBuilder();
+    const col = rgba(color);
+    for (const r of [r0, r1])
+      for (const s of [-1, 1]) {
+        const ring: number[][] = [];
+        for (let i = 0; i < n; i++) ring.push(pt(r, (i / n) * Math.PI * 2, s));
+        sb.polyline(ring, col, true);
+      }
+    sb.apply(this.hoverRingLines);
+    applyHalo(sb, this.hoverRingHalo);
+    this.requestRender();
+  }
+
+  /**
+   * The ground floor (§6.1), or null for none: at world height `y`, the same in every mode — a
+   * barely darker tint reaching every edge of the view plus a contact shadow under the parts near
+   * it (shadow.ts), drawn behind the model and its outlines. Seen from below: nothing. Edge-on: a
+   * line at its level.
+   */
+  setFloor(f: FloorState | null): void {
+    const same = f === null ? this.floorState === null : this.floorState !== null && this.floorState.y === f.y;
+    if (same) return;
+    this.floorState = f ? { y: f.y } : null;
+    this.shadowDirty = true;
+    this.requestRender();
+  }
+
+  /** The floor last set with setFloor (null: none). */
+  getFloor(): FloorState | null {
+    return this.floorState ? { ...this.floorState } : null;
   }
 
   /**
@@ -615,7 +805,7 @@ export class Viewport {
       this.ghostVisible.geometry = entry.geometry;
       this.ghostHidden.geometry = entry.geometry;
     }
-    const color = g.valid ? this.opts.accent : '#e0322b';
+    const color = overlayColor(g.valid ? this.opts.accent : '#e0322b', g.over);
     this.ghostHidden.material.uniforms.uOpacity!.value = g.xray ? GHOST_XRAY_HIDDEN_OPACITY : GHOST_HIDDEN_OPACITY;
     this.ghostHidden.material.uniforms.uRim!.value = g.xray ? GHOST_XRAY_HIDDEN_RIM : GHOST_HIDDEN_RIM;
     for (const m of [this.ghostVisible, this.ghostHidden]) {
@@ -745,13 +935,37 @@ export class Viewport {
   }
 
   /** Diagnostics: part views, distinct GPU geometries (identical parts share one), last render. */
-  stats(): { parts: number; geometries: number; renders: number; lastRenderMs: number; supersample: number } {
+  stats(): { parts: number; geometries: number; renders: number; lastRenderMs: number; supersample: number; shadowRenders: number } {
     return {
       parts: this.views.size,
       geometries: this.geoCache.size,
       renders: this.lastRender.frame,
       lastRenderMs: this.lastRender.ms,
       supersample: this.supersample(),
+      shadowRenders: this.shadow.renders,
+    };
+  }
+
+  /**
+   * The contact shadow (DESIGN §6.1, §7.5 groundShadowAt): its strength at a floor point (x, z),
+   * 0…1 after the blur, where 1 = SHADOW_MAX opacity (the strength under a wide surface lying on
+   * the floor); read back from the shadow texture, brought up to date first. null without a floor.
+   */
+  groundShadowAt(x: number, z: number): number | null {
+    if (!this.floorState || this.disposed) return null;
+    this.updateShadow();
+    return this.shadow.sample(this.renderer, x, z);
+  }
+
+  /** Diagnostics: the contact shadow's render count, frame, CPU ms of its last render, GPU bytes. */
+  shadowInfo(): { renders: number; frame: ShadowFrame | null; floorY: number | null; lastMs: number; bytes: number; dirty: boolean } {
+    return {
+      renders: this.shadow.renders,
+      frame: this.floorState ? this.shadow.frame && { ...this.shadow.frame } : null,
+      floorY: this.floorState ? this.floorState.y : null,
+      lastMs: this.shadow.lastMs,
+      bytes: this.shadow.bytes,
+      dirty: this.shadowDirty,
     };
   }
 
@@ -834,9 +1048,11 @@ export class Viewport {
     this.geoCache.clear();
     this.outline.dispose();
     this.grid.dispose();
+    this.floor.dispose();
+    this.shadow.dispose();
     this.cube?.dispose();
-    for (const l of [this.hoverFaceLines, this.hoverCellLines, this.glyphHalo, this.glyphLines, this.rootHalo, this.rootLines]) l.dispose();
-    for (const m of [this.hoverFaceFill, this.hoverCellFill]) {
+    for (const l of [this.hoverFaceLines, this.hoverCellLines, this.hoverRingLines, this.hoverFaceHalo, this.hoverCellHalo, this.hoverRingHalo, this.floorEdge, this.glyphHalo, this.glyphLines, this.rootHalo, this.rootLines]) l.dispose();
+    for (const m of [this.hoverFaceFill, this.hoverCellFill, this.hoverRingFill]) {
       m.geometry.dispose();
       (m.material as THREE.Material).dispose();
     }
@@ -865,6 +1081,8 @@ export class Viewport {
       g.setAttribute('normal', new THREE.BufferAttribute(md.normals, 3));
       const { patch } = vertexPatches(md.positions.length / 3, md.indices);
       g.setAttribute('surfacePatch', new THREE.BufferAttribute(new Float32Array(patch), 1));
+      // Wheels' index mark: painted groove (markpaint.ts); all zero for parts without a rim.
+      g.setAttribute('aMark', new THREE.BufferAttribute(markWeights(part, md.positions, md.normals), 1));
       g.setIndex(new THREE.BufferAttribute(md.indices, 1));
       g.computeBoundingBox();
       g.computeBoundingSphere();
@@ -899,12 +1117,16 @@ export class Viewport {
     }
     this.colorScene.add(colorMesh);
     this.idScene.add(idMesh);
-    return { id: part.id, part, sig, origin: partOrigin(part), geo, slot, colorMesh, idMesh, color: part.color };
+    const shadowMesh = this.shadow.createCaster(geo.geometry);
+    this.shadowDirty = true;
+    return { id: part.id, part, sig, origin: partOrigin(part), geo, slot, colorMesh, idMesh, shadowMesh, color: part.color };
   }
 
   private destroyView(pv: PartView): void {
     this.colorScene.remove(pv.colorMesh);
     this.idScene.remove(pv.idMesh);
+    this.shadow.removeCaster(pv.shadowMesh);
+    this.shadowDirty = true;
     pv.colorMesh.material.dispose();
     pv.idMesh.material.dispose();
     this.releaseGeometry(pv.sig);
@@ -915,6 +1137,7 @@ export class Viewport {
   private applyColor(pv: PartView): void {
     const c = this.colorOverrides?.get(pv.id) ?? pv.color;
     (pv.colorMesh.material.uniforms.uColor!.value as THREE.Color).set(c);
+    (pv.colorMesh.material.uniforms.uMarkColor!.value as THREE.Color).set(markColor(c));
   }
 
   private applySelection(pv: PartView): void {
@@ -928,8 +1151,10 @@ export class Viewport {
 
   private applyVisibility(pv: PartView): void {
     const v = !this.hidden.has(pv.id);
+    if (pv.shadowMesh.visible !== v) this.shadowDirty = true;
     pv.colorMesh.visible = v;
     pv.idMesh.visible = v;
+    pv.shadowMesh.visible = v;
   }
 
   private partMatrix(pv: PartView, out: THREE.Matrix4): THREE.Matrix4 {
@@ -943,7 +1168,15 @@ export class Viewport {
   }
 
   private applyMatrix(pv: PartView): void {
-    this.partMatrix(pv, pv.colorMesh.matrix);
+    const m = this.partMatrix(pv, this.tmpMatrix);
+    // Only a real change of pose re-renders the contact shadow (a paused simulation re-applies
+    // the same poses every frame).
+    if (!m.equals(pv.shadowMesh.matrix)) {
+      pv.shadowMesh.matrix.copy(m);
+      pv.shadowMesh.matrixWorldNeedsUpdate = true;
+      this.shadowDirty = true;
+    }
+    pv.colorMesh.matrix.copy(m);
     pv.idMesh.matrix.copy(pv.colorMesh.matrix);
     pv.colorMesh.matrixWorldNeedsUpdate = true;
     pv.idMesh.matrixWorldNeedsUpdate = true;
@@ -965,8 +1198,26 @@ export class Viewport {
    * (transformed) vertices, not their bounding boxes, so iso views fill the viewport and are
    * centred on the visible silhouette; an explicit Box3 is framed as a box.
    */
+  /**
+   * Keep Fit and Home clear of an overlay along the right edge (the app's side panel): `px` CSS px
+   * of the view's width are treated as covered, so a fitted model is framed in the rest of it.
+   * Ignored when it would leave less than half of the view.
+   */
+  setFitInsetRight(px: number): void {
+    this.fitInsetRight = Number.isFinite(px) && px > 0 ? px : 0;
+  }
+
   private fitFor(what: FitTarget, yaw: number, pitch: number): { target: Vec3; height: number } {
-    const aspect = this.aspect();
+    const inset = this.fitInsetRight > 0 && this.fitInsetRight < this.cssW / 2 ? this.fitInsetRight : 0;
+    const f = this.fitForAspect(what, yaw, pitch, ((this.cssW - inset) / Math.max(1, this.cssH)) || this.aspect());
+    if (!inset) return f;
+    // Centre the framed content in the free part: move the pivot right by half the inset.
+    const { right } = cameraBasis(yaw, pitch);
+    const k = ((inset / 2) * f.height) / Math.max(1, this.cssH);
+    return { target: [f.target[0] + right[0] * k, f.target[1] + right[1] * k, f.target[2] + right[2] * k], height: f.height };
+  }
+
+  private fitForAspect(what: FitTarget, yaw: number, pitch: number, aspect: number): { target: Vec3; height: number } {
     if (what !== 'all' && what !== 'selection' && !Array.isArray(what)) return fitBox(what as Box3, yaw, pitch, aspect);
     let ids: number[];
     if (what === 'all') ids = [...this.views.keys()];
@@ -1152,6 +1403,7 @@ export class Viewport {
       const ext = box ? Math.max(box.max[0] - box.min[0], box.max[2] - box.min[2]) : 0;
       this.grid.update([cx, cz], Math.max(10, ext * 0.6 + 7), Math.sin(this.cam.pitch), dpr);
     }
+    this.updateFloor(dpr);
     r.render(this.colorScene, this.camera);
 
     // 4: lines
@@ -1160,6 +1412,10 @@ export class Viewport {
     // 5: overlays in the scene (hover, ghost, root marker, glyphs on top)
     this.hoverFaceLines.width = 2 * dpr;
     this.hoverCellLines.width = 1.75 * dpr;
+    this.hoverRingLines.width = 2 * dpr;
+    this.hoverFaceHalo.width = 5 * dpr;
+    this.hoverCellHalo.width = 4.75 * dpr;
+    this.hoverRingHalo.width = 5 * dpr;
     this.updateGlyphs(dpr);
     this.updateRootMarker(dpr, ss);
     r.render(this.overlayScene, this.camera);
@@ -1170,6 +1426,48 @@ export class Viewport {
       this.cube.render(r, this.cssW, this.cssH, dpr);
       this.positionButtons();
     }
+  }
+
+  /**
+   * Re-render the contact shadow's texture if a part's pose, the model, part visibility or the floor
+   * level changed since the last time (never for camera changes: the shadow does not depend on
+   * the view). No-op without a floor.
+   */
+  private updateShadow(): void {
+    const f = this.floorState;
+    if (!f || !this.shadowDirty) return;
+    this.shadowDirty = false;
+    const boxes: CasterBox[] = [];
+    for (const pv of this.views.values()) if (!this.hidden.has(pv.id)) boxes.push(this.worldBox(pv));
+    this.shadow.render(this.renderer, f.y, boxes);
+  }
+
+  /** Floor uniforms, the contact shadow and the edge-on floor line (§6.1 Ground); see floor.ts. */
+  private updateFloor(dpr: number): void {
+    const f = this.floorState;
+    this.floor.visible = !!f;
+    // The floor is a plane like the grid: when it lies above the grid (y = −½) it is drawn after the
+    // grid, so the grid's lines show through its translucent tint and shadow rather than over them.
+    this.floor.renderOrder = f && f.y > -0.5 ? FLOOR_OVER_GRID_ORDER : FLOOR_UNDER_GRID_ORDER;
+    if (!f) {
+      this.floorEdge.visible = false;
+      return;
+    }
+    this.updateShadow();
+    const { right, back } = cameraBasis(this.cam.yaw, this.cam.pitch);
+    const fwdY = -back[1];
+    const frame = this.shadow.frame;
+    this.floor.update(this.camera, f, fwdY, frame ? { texture: this.shadow.texture, frame } : null);
+    const alpha = floorEdgeAlpha(fwdY);
+    this.floorEdge.visible = alpha > 0.01;
+    if (!this.floorEdge.visible) return;
+    const t = this.cam.target;
+    const w = this.cam.height * this.aspect() * 2 + 10;
+    const p0 = [t[0] - right[0] * w, f.y, t[2] - right[2] * w];
+    const p1 = [t[0] + right[0] * w, f.y, t[2] + right[2] * w];
+    const col = rgba('#8d9196');
+    this.floorEdge.setSegments(new Float32Array([...p0, ...p1]), [col[0], col[1], col[2], 0.9 * alpha]);
+    this.floorEdge.width = 1.25 * dpr;
   }
 
   private updateGlyphs(dpr: number): void {
@@ -1430,6 +1728,8 @@ export class Viewport {
     on(c, 'webglcontextlost' as keyof HTMLElementEventMap, () => console.warn('knap view: WebGL context lost'));
     on(c, 'webglcontextrestored' as keyof HTMLElementEventMap, () => {
       this.lastFrame = 0;
+      // Render targets lose their contents with the context: the contact shadow must be redrawn.
+      this.shadowDirty = true;
       this.requestRender();
     });
 

@@ -112,7 +112,19 @@ export class SimSession {
     return b !== undefined && !this.sim.graph.bodies[b]?.fixed && this.sim.hasBody(b);
   }
 
-  /** Pick a part under a ray at its current simulated pose. */
+  /**
+   * Give the body holding `partId` a velocity (units/s; DESIGN §7.5 pushBody, so e2e can roll a cart
+   * without a mouse; `angular` in rad/s, omitted = unchanged). False when the part has no dynamic
+   * body or a vector is not finite.
+   */
+  pushBody(partId: number, linear: readonly [number, number, number], angular?: readonly [number, number, number]): boolean {
+    if (this.disposed || !this.isDynamicPart(partId)) return false;
+    const ok = this.sim.setBodyVelocity(this.sim.bodyOf(partId)!, [...linear], angular && [...angular]);
+    this.vp.requestRender();
+    return ok;
+  }
+
+  /** Pick a part under a ray at its current simulated pose (cell cubes and wheel discs). */
   pick(ray: Ray): PickHit | null {
     if (this.disposed) return null;
     return pickCell(this.model, ray, { transform: this.transformOf });

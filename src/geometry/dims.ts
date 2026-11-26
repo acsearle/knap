@@ -38,3 +38,26 @@ export const W_RIDGE = 0.03;
 export const HC = 0.46;
 /** Male collider radius. */
 export const R_COLL_ROD = 0.29;
+
+// ---- wheels (§4.2 rim, §4.3 disc) ----
+
+/** A rim's visual radius is r − RIM_INSET (= ½ − H): the same 0.06 gap to a nominally touching neighbour as a beam. */
+export const RIM_INSET = 0.5 - H;
+/** Axial (= radial) size of the 45° chamfer on both edges of a rim. */
+export const RIM_CHAMFER = 0.04;
+/**
+ * Segments around a rim of radius r (§4.2: ≥ 64 for r ≥ 2). Multiples of 4 (a vertex on each
+ * transverse axis). Raised after review (the r 1.5 tread read as a polygon at 4× the Home zoom):
+ * about 40 per unit of radius, so a segment is ≈ 0.16 units long at every radius.
+ */
+export function rimSegments(r: number): number {
+  return Math.max(SEGMENTS, 4 * Math.ceil((40 * r) / 4));
+}
+/** Index mark (§4.2): radial groove from MARK_R0 to the edge on both flat faces, continued across the tread. */
+export const MARK_R0 = 0.5;
+/** Index mark groove width (tangential). */
+export const MARK_W = 0.12;
+/** Index mark groove depth (into each flat face, and into the tread). */
+export const MARK_D = 0.04;
+/** A rim's collider radius is r − RIM_COLL_INSET (= ½ − HC) (§4.3). */
+export const RIM_COLL_INSET = 0.5 - HC;

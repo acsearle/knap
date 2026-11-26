@@ -131,7 +131,9 @@ canAddCell(m, partId: number | null, cell): { ok: true } | { ok: false; reason: 
      // and world occupancy at that position compatible per 2.3.
 addCell(m, partId, cell): Model             // throws if !canAddCell
 addPart(m, cells, color?): { model: Model; partId: number }   // validates
-removeCell(m, partId, pos): Model           // if the part falls apart, split it into several parts
+canRemoveCell(m, partId, pos): { ok: true } | { ok: false; reason: string }
+removeCell(m, partId, pos): Model           // throws if !canRemoveCell (e.g. a piece's rim would then
+                                            // overlap another part); if the part falls apart, split it into several parts
                                             // (largest keeps the id; root follows the piece that keeps the id)
 removePart(m, partId): Model
 movePart(m, partId, delta: [dx,dy,dz]): Model | null          // null if result invalid
@@ -183,8 +185,9 @@ A reference implementation with tests is in `spikes/wheels/disc.ts`; move it int
 **Rules added to §2.2 and §2.3.**
 1. *Connection.* A rim connects its hub to every cell of the same part that its disc overlaps
    (as well as the ordinary face connections), so a crank hole at `(1,1)` of an `r = 2.5` wheel
-   belongs to the wheel without a bridge of cells. Shrinking or removing a rim can therefore
-   split a part, exactly like erasing a cell.
+   belongs to the wheel without a bridge of cells. Two overlapping discs of the same part
+   connect their hubs likewise. Shrinking or removing a rim can therefore split a part, exactly
+   like erasing a cell.
 2. *Blocking.* A disc must not overlap any cell of **another** part, and must not overlap a disc
    of another part. The one exception is the ordinary mate: a male cell of another part inside a
    hole cell of the wheel's part (its hub or a crank hole). Discs and cells of the *same* part may
@@ -242,6 +245,8 @@ interface KinematicGraph { mates: Mate[]; bodies: Body[]; joints: Joint[];
       mates with (prefer the body containing the root; else the one with most cells; else lowest
       part id). Rationale: a loose smooth pin's own spin is irrelevant, and removing the tiny
       intermediate body makes two liftarms joined by a pin a *direct* revolute pair.
+      Exception: a free pin that is itself the root part is kept as its own (fixed) body while
+      the root is fixed (`rootIsFixed`); with a free root it is absorbed like any other.
    2. **Pairwise reduction.** Group the non-weld mates between each unordered pair of distinct
       bodies (A, B). Let *lines* be the distinct axis lines (direction + position) of those mates.
       - One line: if any mate on it is `revolute` → **revolute** joint. Otherwise (all
@@ -351,8 +356,11 @@ chamfer (≈ 0.04). **Index mark:** so that rotation is visible, each rim carrie
 fixed angle (the hub cell's first transverse axis): a shallow radial groove on both flat faces
 from the hub ring to the edge, continued across the tread. It must be legible at the Home zoom
 of a small model for `r ≥ 1`, from both sides and edge-on; the technique (cut geometry that the
-outline pass picks up, or a painted line) is the implementer's choice. Use ≥ 64 segments for
-`r ≥ 2`.
+outline pass picks up, or a painted line) is the implementer's choice. Use about 40 segments
+per unit of radius (48 at `r = 1`, 160 at `r = 4`) so the tread never reads as a polygon.
+Because the drawn rim is slightly smaller than the nominal disc, a hole that rule 1 of §2.6
+joins to the wheel only through the disc's edge is bridged to the rim by a short web, so the
+part is always drawn as one piece.
 
 Bores are subtracted after all positives are united, so a bore always cuts cleanly through its
 own cell.
@@ -383,7 +391,7 @@ type ColliderPrim =
 ```
 
 - rim → `{ shape: 'disc'; center; axis; radius: r − (½ − HC) = r − 0.04; halfLength: HC; cell }`.
-  The physics layer turns it into two colliders (§5.1 "Wheels").
+  The physics layer turns it into three colliders (§5.1 "Wheels").
 
 `HC < H` gives stacked liftarms a little real clearance so neighbouring layers do not rub.
 
@@ -456,9 +464,19 @@ and Jolt (excellent solver but a heavier, manual-memory API); noted in the READM
   Friction 0.4. It is not a model body: it has no part, is not in the energy guard's groups and
   is never removed. Only a half-space works — measured: a native cylinder on a cuboid floor
   creeps, accelerates by itself and tunnels. `SimOptions.groundSlopeDeg` (default 0, tests only
-  for now) tilts the floor about Z through the point under the model's centre.
+  for now) tilts the floor about Z (normal `(sin θ, cos θ, 0)`), placed to touch the model's
+  lowest nominal point along its normal. `Simulation.groundY` is the plane's height at θ = 0
+  (`groundLevel + 0.04`); the view draws the floor there in both modes. Two refinements found
+  in review: the plane is lowered (never raised) to the lowest free end of a pin or axle, which
+  reaches 0.02 further than a hole cell, so a model standing on a male end also starts in exact
+  contact; and the ground collider must be created **before** the bodies' colliders (measured:
+  created after them, Rapier's half-space contact drifts toward the plane's origin, and a wheel
+  100 units away rolled 0.35 units in 20 s).
+  With a ground, the grab spring's force component pushing *into* the floor is capped at
+  2 × the grabbed mechanism's weight (measured: the full cap pressed pin-mounted wheels more
+  than a unit into the floor); lifting and sideways pulls keep the full cap.
   The "falls below −400" removal rule stays.
-- **Wheels.** A `disc` primitive becomes two colliders on the part's body, separated by
+- **Wheels.** A `disc` primitive becomes three colliders on the part's body, separated by
   collision groups, because no single shape works for both jobs (measured in `spikes/wheels/`):
   - *Round*: a native cylinder (radius and half-length of the primitive). It collides **only
     with the ground and with other wheels' round colliders.** On a half-space it rolls
@@ -473,8 +491,14 @@ and Jolt (excellent solver but a heavier, manual-memory API); noted in the READM
     rolling *along a beam* slows quickly; that is a documented limit, not a goal.
   - Ordinary part colliders collide with the ground, with wheel hulls and with each other, as
     now. Suggested groups: ground 1, round 2, hull 4, part 8.
-  - Bodies that carry a rim get **no soft CCD** (its predictive contacts make the hull fall
-    through liftarms).
+  - *Ground guard*: a 32-gon prism inside the round collider (0.12 smaller in radius, 0.02 in
+    half-length), density 0, no friction, colliding **only with the ground** (group 16).
+    Measured need: the cylinder-on-half-space contact misses the rim when the disc is nearly
+    flat (an `r = 4` wheel wobbling onto its face sank 1.04 units); the guard stops that at
+    0.05–0.17 units and, being inset, is never touched in normal rolling.
+  - Soft CCD stays on for unjointed bodies with a rim, as for any loose body (measured by the
+    builder: without it a wheel dropped 10 units sinks 0.25 into the floor; the spike's
+    fall-through against liftarms did not reproduce in 2 × 816 drops, with or without it).
   - Rapier clamps spin at π/4 per step (377 rad/s): a wheel skids above `377·r` units/s. Fine.
 - **Free root** (§2.6): no body is fixed. Consequences that must be handled:
   - *Joint-friction load.* The fixed-body ranking has nothing to start from. When the ground is
@@ -563,6 +587,10 @@ on (default level unless stated):
   keeps its speed within 2 % for 5 s; with friction Realistic it stops within ± 10 % of
   `v₀²/(2·decel)`, `decel = 4·τ_f / (r · (M + ΣI/r²))` using the corrected load, and then does
   not creep; on a 15° floor with friction off it accelerates within 2 % of the analytic value.
+  (The incline test tilts gravity rather than the floor: a level cart on a tilted floor first
+  tips onto it. "At rest" for a model with no fixed body allows < 1e-3 rad of relative joint
+  rotation over the rest window instead of 1e-4: native cylinders creep on the half-space by
+  about 1e-5 units/s and no joint can hold that.)
 - *Fixed root with ground*: a pendulum hung above the floor swings as before; a link released
   above the floor lands and rests on it.
 - *Wheels against parts* (the weak spot — measure and report honestly, do not tune the test to
@@ -585,7 +613,8 @@ three.js (WebGL2 renderer), TypeScript.
 Like printed building instructions: clean flat-ish colour, smooth lit curves, dark outlines.
 
 - **Orthographic** camera only.
-- Light background (near-white). No shadows, no environment maps, no gloss. Lambert-like shading
+- Light background (near-white). No cast shadows (the one exception is the ground's contact
+  shadow, below), no environment maps, no gloss. Lambert-like shading
   from a key light fixed to the camera (headlight, slightly up-left) + generous ambient/hemisphere
   so no face goes dark. Curved surfaces must read as curved (smooth normals).
 - **Outlines**: uniform dark lines (~1.25 CSS px, DPR-aware, anti-aliased) on silhouettes,
@@ -605,13 +634,52 @@ Like printed building instructions: clean flat-ish colour, smooth lit curves, da
   strength where nothing is in front of it and fainter where another part covers it (the same
   idiom as the ghost). No marker when the root is free (§2.6).
 - **Wheels** are drawn like any part (part colour, outlines), with their index mark (§4.2).
-- **Ground** (§2.6, when on): shown in **both** modes at the ground level as a quiet floor — a
-  slightly darker tint than the background with faint unit lines, unbounded (it must reach the
-  edges of the view at any zoom and pan, without moiré when zoomed out), drawn behind the model's
-  outlines so parts resting on it stay crisp. Seen from below it must not hide the model (lines
-  only, or nothing). In edit mode the `y = −½` reference grid stays as the building plane; the
-  floor may be lower, and the two must be distinguishable (the grid is lines, the floor is a
-  tint). While simulating, the floor's lines are what make a rolling cart's motion readable.
+- **Ground** (§2.6, when on): shown the same way in **both** modes, by a **contact shadow** and
+  nothing drawn *on* the floor (owner's call: lines or any other surface features compete with
+  the reference grid; a first version with unit lines read as a second grid and was otherwise
+  invisible).
+  - *Tint*: a barely darker tint than the background, unbounded (it reaches the edges of the view
+    at any zoom and pan). Not drawn when seen from below.
+  - *Contact shadow*: a soft, neutral dark shadow on the floor under everything close to it, as
+    if lit from straight above by a wide light — an ambient-occlusion blob, not a cast shadow
+    with a direction. It depends only on **height above the floor**: under a point of the model
+    at height `h` (lowest surface over that floor point) its strength is
+    `(1 − h/SHADOW_H)²` for `h < SHADOW_H` (`SHADOW_H = 3` units), blurred in **world units**
+    (so it looks the same at every zoom and frame size) into two lobes that are added: a
+    *contact* lobe (Gaussian `σ = 0.35`, opacity 0.42 of a near-black neutral) that gives a
+    crisp dark footprint, and a broad *ambient* lobe (`σ = 0.9`, opacity 0.42) that reaches
+    about 4 units out, so the shade shows past the part that casts it. (A first version with
+    the contact lobe alone at 0.34 was judged too faint from the default view: the dark
+    footprint sat hidden under its own part.) Full strength is therefore 0.84 opacity, under a
+    wide surface lying on the floor. Tuned by eye on the Cart: wheel contact patches clearly
+    dark with a skirt past each wheel, the chassis 1.5 above the floor a faint broad shade, a
+    beam lying on the floor a soft shade around it. It must read as a shadow in a printed
+    manual, not as dirt. The strength is the owner's to tune.
+  - *Suggested technique* (the usual "contact shadows" recipe): an orthographic camera in the
+    floor plane looking straight up renders the part meshes (nothing else: no outlines, ghost,
+    highlights, markers, glyphs, grid) with a depth-to-strength material into a texture covering
+    the model's footprint; two separable blur passes; the result is drawn on a quad in the floor
+    plane, after the tint and before everything else, never writing depth, normals or part ids
+    (so the outline pass ignores it), and hidden by parts in front of it as any floor would be.
+    Where the floor lies above the `y = −½` grid (the usual case) it is drawn after the grid,
+    so the shadow darkens the grid lines under it instead of being diluted by them.
+  - It follows the **current** pose of every part (edit placement, or simulated transforms; a
+    part hidden with the test hook casts none). It is **view-independent**: orbiting, panning and
+    zooming must not re-render the shadow texture; it is re-rendered only when a part moves, the
+    model changes or the floor level changes (and after a WebGL context restore), and never
+    while idle.
+  - *Stability*: as a cart rolls the shadow must travel with it without swimming, shimmering or
+    popping — snap the texture's frame to its texel grid and change the frame's size in coarse
+    steps. The frame covers every part within `SHADOW_H` of the floor up to a maximum extent
+    of 128 units across. When the model spreads further, the frame is the 128-unit square
+    holding the most part footprint (ties keep the previous frame, so it never flips between
+    equal groups and follows a moving one); what is outside gets no shadow.
+  - Seen from below, nothing is drawn (it must not hide the model). Edge-on it degenerates
+    naturally; the floor is then a line at its level, as before.
+  - In edit mode the `y = −½` reference grid stays as the building plane; the floor may be lower.
+    The grid is lines, the floor is a shadow: they cannot be confused.
+  - Cost: with the ground on, a frame in which nothing moved costs the same as with it off
+    (within noise); a simulated frame adds one small offscreen pass (measure and report).
 
 ### 6.2 Camera & navigation
 
@@ -623,6 +691,7 @@ Like printed building instructions: clean flat-ish colour, smooth lit curves, da
   that orthographic view; clicking a corner snaps to that isometric view; clicking an edge to the
   corresponding 45° view. Hover highlight on the cube. Beside it: **Home** (default isometric +
   fit all) and **Fit** (frame the selection, else everything; also re-centres the orbit pivot).
+  Both centre the model in the part of the view not covered by the side panel.
   Keys: `F` fit, `Home` home.
 - Default view: isometric from (+X, +Y, +Z), fitted.
 
@@ -648,6 +717,8 @@ Left toolbar; keyboard shortcut in brackets.
   brief status message if the result is invalid); `[`/`]` rotate it 90° about the axis most
   aligned with the view direction, pivoting on the part's first cell; inspector panel shows
   id, cell count, colour swatches, **Set as fixed root**, **Duplicate** (offset copy, if cheap).
+  With a free root (§2.6) no part shows the "fixed root" badge, and Set as fixed root also turns
+  Fix root back on (one undo step).
 - **Build** — one tool per kind: Pin hole `[1]`, Axle hole `[2]`, Axle `[3]`, Pin `[4]`,
   Friction pin `[5]`.
 - **Wheel** `[W]` (after Friction pin in the toolbar): hover a hole cell — or the disc of a
@@ -655,7 +726,8 @@ Left toolbar; keyboard shortcut in brackets.
   disc at the new radius. **Shift+click shrinks** by half a unit (1 → bare). Invalid growth is
   shown red with the reason ("wheel would hit part 3", "largest wheel is radius 4", "wheels grow
   from pin holes and axle holes"). Status: "Grow wheel · part 3 · radius 1.5 (24 mm across)".
-  Each click is one undo step.
+  Each click is one undo step. A bare hole lying wholly inside a wheel of its own part (a crank
+  hole) acts on that wheel, not on itself — a second disc there would be hidden inside the first.
 - **Erase** `[E]`: click a cell to remove that sub-part (hovered cell highlighted red). Parts
   split if they fall apart. On a hub that has a rim, or anywhere on its disc outside the part's
   own cells, Erase removes **the outer half-unit of the rim** instead (highlighting that ring);
@@ -687,14 +759,36 @@ choice persists while the same tool is active). The status bar always says what 
 ("Extend part 3 · pin hole ∥ Z", "New part · insert pin", …).
 
 **Back side.** With **Alt/Option** held (or the "Back side" toggle `[B]` on, a toolbar button
-beside New part) the build tools act on the *far side of the hovered part, straight through
-from the hovered face*: for hover (`P`, `C`, `n`) walk from `C` in direction `−n` while the next
-cell also belongs to `P`; with `C'` the last such cell, resolve exactly as if (`P`, `C'`, `−n`)
-had been hovered — same priority order, same `[R]`, Shift and New part behaviour. The ghost
-(already drawn fainter behind geometry) and the face highlight must be legible through the part,
-and the status sentence says so ("… · back side (−Z)"). Which axis "through" means is chosen the
-same way as when building in front: by which face of the cell is hovered. Erase and Select
-ignore Back side.
+beside New part) the build tools pick **the back face under the cursor**: the face the mouse
+ray would hit if every part's front faces were culled and only its back faces drawn (owner's
+call; a first version that took the face *opposite the hovered front face* was logical but did
+not match intuition — the cursor was not over the face being built on).
+
+Precisely, with each part's solid taken as the union of its cell cubes and its rim discs — and,
+for a male standing in another part's hole, that hole's part as well, so that a pin's faces
+buried inside a beam are never picked and the beam's far face is (a pin is still pickable where
+it sticks out) — a *back-face crossing* is a point
+where the ray leaves a part's solid — it passes out of one of the part's cubes or discs into
+space that is not that same part's (whether empty or occupied by another part). The pick is
+the **nearest** such crossing over all parts: (`P`, `C`, `n`) with `C` the cell the ray leaves
+and `n` the outward normal of the face it leaves through (so `n` points away from the viewer).
+For a part with nothing in front of it this is where the ray exits the part it first enters;
+for a concave part it is the *first* exit, not the last. Faces between two cells of the same
+part are never picked. Ties: as for the front pick — the hole's part before the male inside it,
+then lower part id, lower cell index; a ray leaving exactly through an edge or corner reports,
+among the tied faces, the first whose neighbour cell is not the part's own.
+
+The click then resolves exactly as if (`P`, `C`, `n`) had been hovered from behind — same
+priority order, same `[R]`, Shift and New part behaviour, same validity rules and reasons (a
+back face that abuts another part is pickable; whether anything can be built there is decided
+as usual). The picked face's highlight and the ghost are drawn through the part and must be
+legible there (the ghost's silhouette rim, the highlight at full strength), so that moving the
+mouse over a part with Alt held visibly walks the highlight over its back faces. Every hover
+line has a white under-stroke, and a highlight, ghost or band whose colour is close to the part
+under the cursor switches to a contrasting one (orange over a blue part, dark red over red), so
+it reads on every palette colour. The status
+sentence says so ("… · back side (−Z)", the picked face's direction). With nothing under the
+cursor Back side changes nothing (New on grid as usual). Erase, Select and Wheel ignore it.
 
 **Wheels in picking.** Besides the cell cubes, each rim is pickable as its nominal disc (radius
 `r`, one cell thick). A hit on a disc that is not inside one of the part's own cell cubes gives
@@ -705,10 +799,16 @@ the hover (`P`, `G`, `n`) where `G` is the grid cell under the hit point in the 
 - Hole tools on a flat face of the disc (`n` ∥ hub axis): **Extend** — add a hole cell *at `G`*
   to `P` (a crank hole through the wheel; default orientation ∥ hub axis). It is valid whenever
   `canAddCell` allows it (the disc connects it, §2.6).
-- Hits on the tread resolve as the hub cell hovered on its lateral face nearest the hit
-  direction, so the ordinary rules apply.
+- Hits on the tread: Select, grab, Wheel and Erase act on the wheel as above (the hit reports
+  the hub on its lateral face nearest the hit direction). The **build tools refuse** a tread,
+  with the hint "Part 3 · wheel tread — point at the wheel's flat face or at a hole to build on
+  a wheel": resolving it as the hub's lateral face built a cell buried inside the disc, far
+  from the cursor.
 - Male tools on a virtual cell: invalid, "add a hole here first" (a pin goes *into* a crank hole).
-- Back side treats a virtual cell as a one-cell-deep piece of `P`.
+- Back side: a ray leaving the part through a disc's far flat face gives the virtual cell under
+  the exit point with that face's normal; leaving through the tread is refused like a front
+  hit on the tread (the hint adds "· back side (±A)"). Passing from a disc into one of the
+  part's own cubes (or back) is not a crossing.
 
 New parts take the current palette colour (or the kind default, §6.1).
 
@@ -727,6 +827,8 @@ New parts take the current palette colour (or the kind default, §6.1).
   the ground is off, with a tooltip saying why. The status bar's body count says "(none fixed)"
   for a free root. The inspector shows a selected wheel's radius.
 - Status bar: hover info, action hint, last error. Keep the chrome compact and neutral.
+  While simulating, when no part is in view (a vehicle rolled away) the hint says so and names
+  Fit.
 - UI is plain DOM + CSS (no framework). Works at 1280×720 and up; DPR-aware.
 
 ### 7.5 Test hook
@@ -735,8 +837,10 @@ New parts take the current palette colour (or the kind default, §6.1).
 `loadExample(name)`, `analyze()` (summary), `setMode('edit'|'simulate')`, `stepSim(n)`,
 `setView(name)`, `fit()`, `partScreenPos(partId)`, `simTransforms()`. For wheels:
 `getState().ground` / `.fixRoot`, `setGround(on)`, `setFixRoot(on)`, `simInfo().groundY`, and a
-way to give a body a velocity in simulate mode (`pushBody(partId, [vx,vy,vz])`) so e2e can roll
-a cart without a mouse.
+way to give a body a velocity in simulate mode (`pushBody(partId, [vx,vy,vz], [wx,wy,wz]?)`; one
+body per call, so a vehicle needs each of its bodies pushed) so e2e can roll a cart without a
+mouse. `groundShadowAt(x, z)`: the contact shadow's strength (0…1, after blur) at a floor point,
+read back from the shadow texture, or null when the ground is off.
 
 ---------------------------------------------------------------------------------------------
 

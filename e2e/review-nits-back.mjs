@@ -59,7 +59,7 @@ await frames(page, 1);
 const h1 = (await status(page)).hint;
 await page.keyboard.press('b');
 await frames(page, 1);
-check(h0 !== h1 && /back side \(−Z\)/.test(h1), '[B] while hovering re-resolves', { h0, h1 });
+check(h0 !== h1 && /back side \([+−][XYZ]\)/.test(h1), '[B] while hovering re-resolves', { h0, h1 });
 
 // ---- 4. Alt during an orbit drag and Shift+Alt pan drag: no placement
 for (const [label, mods] of [['Alt+drag orbit', ['Alt']], ['Shift+Alt+drag pan', ['Shift', 'Alt']], ['Alt+right-drag pan', ['Alt']]]) {
@@ -171,20 +171,29 @@ while (done < N && tries < N * 12) {
   await hover(page, p);
   const st = await status(page);
   const hint = st.hint;
-  // independent far side
-  const own = new Set(part.cells.map((c) => `${c.x},${c.y},${c.z}`));
-  const n = DIRS[dir];
-  let C = [part.cells[ci].x, part.cells[ci].y, part.cells[ci].z];
-  for (;;) {
-    const q = [C[0] - n[0], C[1] - n[1], C[2] - n[2]];
-    if (!own.has(q.join(','))) break;
-    C = q;
-  }
-  const farDir = dir ^ 1;
-  const beyond = [C[0] - n[0], C[1] - n[1], C[2] - n[2]];
-  const rec = { ex, view, part: part.id, cell: [part.cells[ci].x, part.cells[ci].y, part.cells[ci].z], dir: LABEL[dir], tool, hint, far: C, beyond };
-  if (!hint) { bad.push({ ...rec, why: 'no sentence' }); done++; continue; }
-  if (!hint.includes(`back side (${LABEL[farDir]})`)) bad.push({ ...rec, why: 'direction label' });
+  // Back side = the back face under the cursor (§7.3): the highlighted face must be a face whose
+  // projected quad contains the cursor, and the sentence must name its direction.
+  const h = (await state(page)).buildHighlight;
+  const rec = { ex, view, part: part.id, cell: [part.cells[ci].x, part.cells[ci].y, part.cells[ci].z], dir: LABEL[dir], tool, hint, highlight: h };
+  if (!hint || !h || !h.backSide) { bad.push({ ...rec, why: 'no back-side sentence / highlight' }); done++; continue; }
+  const C = h.pos;
+  const n = DIRS[h.dir];
+  const beyond = [C[0] + n[0], C[1] + n[1], C[2] + n[2]];
+  const quad = await page.evaluate(([pos, d]) => {
+    const a = d >> 1, sg = d & 1 ? -1 : 1, t1 = (a + 1) % 3, t2 = (a + 2) % 3;
+    return [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([u, v]) => {
+      const q = [...pos];
+      q[a] += 0.5 * sg; q[t1] += 0.5 * u; q[t2] += 0.5 * v;
+      return window.__knap.screenPos(q);
+    });
+  }, [C, h.dir]);
+  const area = quad.reduce((acc, q, i) => acc + q.x * quad[(i + 1) % 4].y - quad[(i + 1) % 4].x * q.y, 0);
+  const inside = quad.every((q, i) => {
+    const r = quad[(i + 1) % 4];
+    return Math.sign(area) * ((r.x - q.x) * (p.y - q.y) - (r.y - q.y) * (p.x - q.x)) / (Math.hypot(r.x - q.x, r.y - q.y) || 1) > -1;
+  });
+  if (!inside) bad.push({ ...rec, why: 'the highlighted back face is not under the cursor' });
+  if (!hint.includes(`back side (${LABEL[h.dir]})`)) bad.push({ ...rec, why: 'direction label' });
   const invalid = / — /.test(hint);
   await page.mouse.down();
   await page.mouse.up();
@@ -199,8 +208,8 @@ while (done < N && tries < N * 12) {
   } else {
     if (!added.length) bad.push({ ...rec, why: 'valid sentence but no change' });
     else {
-      const atFar = added.some((c) => (c.x === C[0] && c.y === C[1] && c.z === C[2]) || (c.x === beyond[0] && c.y === beyond[1] && c.z === beyond[2]));
-      if (!atFar) bad.push({ ...rec, why: 'placed not at the far side', added });
+      const atFace = added.some((c) => (c.x === C[0] && c.y === C[1] && c.z === C[2]) || (c.x === beyond[0] && c.y === beyond[1] && c.z === beyond[2]));
+      if (!atFace) bad.push({ ...rec, why: 'placed neither at C (insert / sleeve) nor at C + n of the highlighted back face', added });
       const isNew = added[0].newPart;
       if (/^New part/.test(hint) !== isNew) bad.push({ ...rec, why: 'New part vs extend mismatch', added });
       const mExt = /^Extend part (\d+)/.exec(hint);

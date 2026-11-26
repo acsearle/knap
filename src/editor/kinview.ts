@@ -35,12 +35,14 @@ export function partTints(graph: KinematicGraph): Map<number, string> {
 }
 
 /**
- * One-line status summary (§7.4 counts): "8 parts · 4 bodies (1 fixed) · 4 joints: 4 revolute".
+ * One-line status summary (§7.4 counts): "8 parts · 4 bodies (1 fixed) · 4 joints: 4 revolute";
+ * with a free root (§2.6, no body fixed) "… 4 bodies (none fixed) …".
  * `graph` defaults to analyze(model); the model must be valid.
  */
 export function kinematicsSummary(model: Model, graph: KinematicGraph = analyze(model)): string {
   const n = model.parts.length;
   const parts = `${n} ${n === 1 ? 'part' : 'parts'}`;
   if (n === 0) return parts;
-  return `${parts} · ${describeGraph(graph)}`;
+  const g = describeGraph(graph);
+  return `${parts} · ${graph.bodies.some((b) => b.fixed) ? g : g.replace('(0 fixed)', '(none fixed)')}`;
 }

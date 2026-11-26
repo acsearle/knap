@@ -10,7 +10,7 @@ Mean ratio and phase errors are negligible up to about 50 rad/s. The limits come
 Nothing under `src/`, `tests/`, `e2e/` or `docs/` was touched. I ran no git commands. `npm test` does not pick these files up (they are `.mjs` outside `tests/`).
 
 ### How to run
-From `/Users/antony/Desktop/knap.nosync`:
+From the project root:
 - `node spikes/coupling/q1_joint.mjs`
 - `sh spikes/coupling/run_q2.sh`, then `cd spikes/coupling && python3 summarize_q2.py` (304 runs of 60 s each; about 20 min wall time at 6 in parallel)
 - `node spikes/coupling/q2_energy.mjs 60`

@@ -1,6 +1,6 @@
 ## Spike "wheels": report
 
-All files are under /Users/antony/Desktop/knap.nosync/spikes/wheels/. I edited nothing under src/, tests/, e2e/ or docs/ and ran no git commands. Every measurement uses Rapier 0.21.0 in Node with sim.ts's settings: 1/480 s step, 30 substeps for loose bodies and 240 for jointed ones, 1 PGS iteration, hard CCD off, lengthUnit 1, friction 0.4, restitution 0.1, density 1. Wheels are 1 unit thick. The machine was shared with other jobs throughout, so treat costs as upper bounds.
+All files are under spikes/wheels/. I edited nothing under src/, tests/, e2e/ or docs/ and ran no git commands. Every measurement uses Rapier 0.21.0 in Node with sim.ts's settings: 1/480 s step, 30 substeps for loose bodies and 240 for jointed ones, 1 PGS iteration, hard CCD off, lengthUnit 1, friction 0.4, restitution 0.1, density 1. Wheels are 1 unit thick. The machine was shared with other jobs throughout, so treat costs as upper bounds.
 
 **Short version:**
 - A plain cylinder wheel only works against a half-space ground. Against a cuboid or against liftarm colliders it runs away or falls through.

@@ -21,6 +21,14 @@ async function checkLayout(page, assert, label) {
       view,
       canvas: { w: canvas.clientWidth, h: canvas.clientHeight, bw: canvas.width, bh: canvas.height, dpr: devicePixelRatio },
       inspector: rect('[data-role=inspector]'),
+      modelBlock: rect('[data-role=model-settings]'),
+      sideOverflow: (() => {
+        const e = document.querySelector('[data-role=side-panel]');
+        return e ? e.scrollHeight - e.clientHeight : 0;
+      })(),
+      modelClipped: Array.from(document.querySelectorAll('[data-role=model-settings] label'))
+        .filter((e) => e.scrollWidth > e.clientWidth + 0.5 || e.getBoundingClientRect().right > document.querySelector('[data-role=model-settings]').getBoundingClientRect().right + 0.5)
+        .map((e) => e.textContent),
       buttons: rect('[data-role=view-buttons]'),
       badge: rect('.sim-status'),
       docOverflow: document.documentElement.scrollWidth - innerWidth + (document.documentElement.scrollHeight - innerHeight),
@@ -55,6 +63,14 @@ async function checkLayout(page, assert, label) {
   assert(Math.abs(r.canvas.bw - Math.round(r.canvas.w * r.canvas.dpr)) <= 1, `${label}: drawing buffer is DPR-aware (${r.canvas.bw} for ${r.canvas.w}×${r.canvas.dpr})`);
   const cube = { x: r.view.x + r.view.w - 122, y: r.view.y, r: r.view.x + r.view.w, b: r.view.y + 122 };
   if (r.inspector) assert(r.inspector.y >= cube.b && r.inspector.y >= r.buttons.b, `${label}: inspector below the view cube and its buttons`);
+  // The always-visible Model block (§7.4): below the cube, inside the view, nothing cut off, and
+  // with the inspector below it the panel needs no scrolling.
+  assert(r.modelBlock, `${label}: the Model block is shown`);
+  assert(r.modelBlock.y >= cube.b && r.modelBlock.y >= r.buttons.b, `${label}: Model block below the view cube and its buttons`);
+  assert(r.modelBlock.r <= r.view.x + r.view.w && r.modelBlock.b <= r.view.y + r.view.h, `${label}: Model block inside the view`);
+  if (r.inspector) assert(r.inspector.y >= r.modelBlock.b, `${label}: inspector below the Model block`);
+  assert(r.modelClipped.length === 0, `${label}: no truncated Model-block text (${r.modelClipped.join(', ')})`);
+  assert(r.sideOverflow <= 0, `${label}: the side panel fits without scrolling (${r.sideOverflow} px over)`);
   return r;
 }
 

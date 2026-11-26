@@ -32,11 +32,22 @@
 // fixed step, a group of connected dynamic bodies whose energy has risen more than 1 % of its peak
 // kinetic energy above its lowest value (less the work its joint friction has done since) is
 // slowed by one uniform factor. It counters Rapier's f32 spin-up and never adds energy.
-import type { EventQueue, ImpulseJoint, RigidBody, World } from '@dimforge/rapier3d-compat';
+//
+// Wheels, ground and a free root (DESIGN §2.6, §5.1; DEVIATIONS §5 "Wheels, ground, free root"):
+//  - model.ground adds a fixed body with a half-space collider at groundLevel + (½ − HC) (groundY).
+//    It is not one of `bodies`: no part, never removed, not in the energy guard.
+//  - A rim becomes two colliders (shapes.ts WheelShape): a native cylinder ("round") that meets only
+//    the ground and other round colliders, and a 32-gon prism ("hull") that meets only ordinary part
+//    colliders. Collision groups are set only when the model has a rim or a ground; otherwise every
+//    collider keeps Rapier's default groups, so such a model is simulated exactly as before.
+//  - With a free root (rootIsFixed false) no body is fixed; bodies with a horizontal-axis rim
+//    touching the ground at Play are the sinks of the joint-friction load ranking (loadMasses).
+import type { ColliderDesc, EventQueue, ImpulseJoint, RigidBody, World } from '@dimforge/rapier3d-compat';
 import { analyze } from '../core/kinematics';
 import type { Joint, KinematicGraph } from '../core/kinematics';
+import { groundLevel } from '../core/model';
 import type { Model } from '../core/types';
-import { R_BORE } from '../geometry/dims';
+import { E_FREE, HC, R_BORE, R_COLL_ROD } from '../geometry/dims';
 import { partShapes } from './shapes';
 import {
   add,
@@ -72,6 +83,11 @@ const NOISE = 1e-5;
  * axis, τ_f = F_f·R_BORE about a rotating joint's axis, m_j = the mass the joint carries (loadMasses).
  */
 export const JOINT_FRICTION = { off: 0, low: 0.05, realistic: 0.2 } as const;
+/**
+ * With a ground, the grab spring presses a mechanism into it with at most this many times its
+ * weight (lifting and sideways pulls keep the full cap).
+ */
+export const GRAB_PRESS_LIMIT = 2;
 export type FrictionLevel = keyof typeof JOINT_FRICTION;
 export const DEFAULT_FRICTION_LEVEL: FrictionLevel = 'realistic';
 /**
@@ -106,6 +122,29 @@ const FRICTION_GAIN = 1e9;
 
 /** Rapier's linear speed clamp at lengthUnit 1, units/s (measured; see DEVIATIONS §5). */
 const SPEED_CAP = 400;
+
+/**
+ * Collision groups (DESIGN §5.1 "Wheels"; Rapier InteractionGroups = membership << 16 | filter, a
+ * pair interacts iff each one's membership meets the other's filter). Bits: ground 1, wheel round
+ * collider 2, wheel hull 4, ordinary part collider 8, wheel ground guard 16 (shapes.ts
+ * WheelShape.guard; not in DESIGN, see DEVIATIONS §5). Used only for models with a rim or a ground.
+ */
+const GROUP = {
+  ground: (0x1 << 16) | (0x2 | 0x8 | 0x10),
+  round: (0x2 << 16) | (0x1 | 0x2),
+  hull: (0x4 << 16) | 0x8,
+  part: (0x8 << 16) | (0x1 | 0x4 | 0x8),
+  guard: (0x10 << 16) | 0x1,
+} as const;
+
+/** Friction of a wheel's round collider (a tyre; DESIGN §5.1; combine rule average with the 0.4 of the ground and parts). */
+export const TYRE_FRICTION = 0.8;
+
+/**
+ * A body with a horizontal-axis rim whose lowest point is within this distance of the ground at
+ * Play is a sink of the joint-friction load ranking (DESIGN §5.1 "Free root"), units.
+ */
+export const GROUND_SINK_DIST = 0.05;
 
 /** Rigid transform: x ↦ q·x + p. */
 export interface Transform {
@@ -176,6 +215,12 @@ export interface SimOptions {
    * setJointFriction. Default JOINT_FRICTION.realistic (0.2).
    */
   jointFriction?: number;
+  /**
+   * Tilt of the ground (only with model.ground), degrees, about +Z through the point of the floor
+   * under the mean cell centre: for θ > 0 the floor's normal is (sin θ, cos θ, 0), so it falls
+   * toward +X and things roll toward +X. Default 0. Tests only for now (DESIGN §5.1 "Ground").
+   */
+  groundSlopeDeg?: number;
 }
 
 const DEFAULTS = {
@@ -198,6 +243,7 @@ const DEFAULTS = {
   energyGuard: true,
   energyGuardBand: 0.01,
   jointFriction: JOINT_FRICTION[DEFAULT_FRICTION_LEVEL] as number,
+  groundSlopeDeg: 0,
 };
 
 /** Per-joint diagnostics (current pose). */
@@ -331,6 +377,18 @@ export class Simulation {
   private frictionValue: number;
   /** Friction work (τ_f·|Δθ| + F_f·|Δs|) done in the last step, per energy-guard group root. */
   private readonly frictionWork = new Map<number, number>();
+  /**
+   * y of the ground's physics plane (groundLevel + ½ − HC) at its pivot under the model's mean cell
+   * centre; null without a ground (DESIGN §5.1 "Ground").
+   */
+  readonly groundY: number | null = null;
+  /** Unit normal of the ground plane (tilted by groundSlopeDeg), and the plane's pivot point. */
+  private readonly groundNormal: Vec3 = [0, 1, 0];
+  private readonly groundPoint: Vec3 = [0, 0, 0];
+  /** Dynamic bodies with a horizontal-axis rim touching the ground at Play (joint-friction load sinks). */
+  private readonly groundSinks = new Set<number>();
+  /** Collision groups are in use (the model has a rim or a ground). */
+  private readonly grouped: boolean;
 
   /** Analyse `model` (which must be valid) and build its Rapier world. */
   static async create(model: Model, opts: SimOptions = {}): Promise<Simulation> {
@@ -356,6 +414,50 @@ export class Simulation {
     for (const p of model.parts) for (const c of p.cells) minY = Math.min(minY, c.y);
     this.removalY = Number.isFinite(minY) ? Math.min(o.removeBelowY, minY + o.removeBelowY) : o.removeBelowY;
     this.bodyOfPart = this.graph.bodyOfPart;
+    const level = groundLevel(model);
+    const hasRim = model.parts.some((p) => p.cells.some((c) => c.rim !== undefined));
+    this.grouped = hasRim || level !== null;
+    if (level !== null) {
+      if (!Number.isFinite(o.groundSlopeDeg) || Math.abs(o.groundSlopeDeg) >= 90)
+        throw new Error(`groundSlopeDeg must be in (−90, 90) (got ${o.groundSlopeDeg})`);
+      const th = (o.groundSlopeDeg * Math.PI) / 180;
+      const nrm: Vec3 = [Math.sin(th), Math.cos(th), 0];
+      // The floor touches the model's lowest point along −n (nominal cells: unit cubes; rims: discs
+      // of radius r, one cell thick), lifted by ½ − HC like the level floor; for θ = 0 this is
+      // exactly groundLevel + (½ − HC). groundY is its height under the mean cell centre.
+      let cx = 0;
+      let cz = 0;
+      let n = 0;
+      let low = Infinity;
+      const half = 0.5 * (Math.abs(nrm[0]) + Math.abs(nrm[1]) + Math.abs(nrm[2]));
+      for (const p of model.parts)
+        for (const c of p.cells) {
+          cx += c.x;
+          cz += c.z;
+          n++;
+          const h = c.x * nrm[0] + c.y * nrm[1] + c.z * nrm[2];
+          low = Math.min(low, h - half);
+          if (c.rim !== undefined) low = Math.min(low, h - c.rim * Math.sqrt(Math.max(0, 1 - nrm[c.axis]! ** 2)) - 0.5 * Math.abs(nrm[c.axis]!));
+        }
+      if (th === 0) low = level; // bit-exact level floor
+      let d = low + (0.5 - HC); // plane: n · x = d
+      // That is exact for hole cells (their colliders reach ±HC); a male cell's free end reaches
+      // E_FREE along its axis, so a pin or axle standing on end (or poking out below the lowest beam)
+      // would start E_FREE − HC = 0.02 inside the floor and be popped up (review finding). Lower the
+      // plane to the lowest male collider point along −n; it never rises.
+      for (const p of model.parts)
+        for (const c of p.cells) {
+          if (c.kind !== 'pin' && c.kind !== 'axle' && c.kind !== 'frictionPin') continue;
+          const na = Math.abs(nrm[c.axis]!);
+          const reach = E_FREE * na + R_COLL_ROD * Math.sqrt(Math.max(0, 1 - na * na));
+          d = Math.min(d, c.x * nrm[0] + c.y * nrm[1] + c.z * nrm[2] - reach);
+        }
+      cx /= n;
+      cz /= n;
+      this.groundY = (d - nrm[0] * cx - nrm[2] * cz) / nrm[1];
+      this.groundPoint = [cx, this.groundY, cz];
+      this.groundNormal = nrm;
+    }
 
     const world = new RAPIER.World(xyz(this.gravity));
     this.world = world;
@@ -378,7 +480,13 @@ export class Simulation {
     // linkages through speculative contacts) — see DEVIATIONS §5.
 
     try {
+      // The ground's collider first: Rapier's contact with a half-space created after a body's
+      // collider drifts toward the half-space's origin like a bowl (a wheel at rest 100 units from
+      // the floor's pivot rolled 0.35 units in 20 s; created first: 1.6e-3 — review finding,
+      // spikes/review-wheels/bowl7.test.ts). The sinks need the bodies, so they come after.
+      this.buildGroundCollider();
       this.buildBodies(model);
+      this.buildGround(model);
       this.buildJoints();
       this.applyFriction();
       if (o.energyGuard) {
@@ -417,9 +525,19 @@ export class Simulation {
       if (!b.fixed && jointed.has(b.id)) desc.setAdditionalSolverIterations(extra);
       desc.setTranslation(ref[0], ref[1], ref[2]);
       const rb = this.world.createRigidBody(desc);
+      const addCollider = (cd: ColliderDesc) => {
+        // Contact start events between dynamic bodies merge their energy-guard groups.
+        if (!b.fixed && o.energyGuard) cd.setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS);
+        const col = this.world.createCollider(cd, rb);
+        this.bodyOfCollider.set(col.handle, b.id);
+      };
       for (const p of parts) {
         for (const sh of partShapes(p, o.cylinderSegments)) {
           let cd;
+          if (sh.kind === 'wheel') {
+            this.addWheel(sh, ref, addCollider);
+            continue;
+          }
           if (sh.kind === 'hull') {
             const pts = new Float32Array(sh.points.length * 3);
             sh.points.forEach((q, i) => pts.set(sub(q, ref), i * 3));
@@ -434,10 +552,8 @@ export class Simulation {
             cd.setDensity(o.density);
           }
           cd.setFriction(o.friction).setRestitution(o.restitution);
-          // Contact start events between dynamic bodies merge their energy-guard groups.
-          if (!b.fixed && o.energyGuard) cd.setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS);
-          const col = this.world.createCollider(cd, rb);
-          this.bodyOfCollider.set(col.handle, b.id);
+          if (this.grouped) cd.setCollisionGroups(GROUP.part);
+          addCollider(cd);
         }
       }
       this.bodies.push({ id: b.id, fixed: b.fixed, ref, rb });
@@ -447,9 +563,92 @@ export class Simulation {
     // in the constructor (maxCcdSubsteps = 0): it ran its time-of-impact clamp on jointed pairs
     // even though their contacts are disabled, stalling a sliding axle in its hole for a step
     // whenever it moved faster than its thinnest collider piece (see DEVIATIONS §5).
+    // Bodies with a rim get it too, unlike DESIGN §5.1 "Wheels" (DEVIATIONS §5 "Wheels, ground,
+    // free root": measured, it keeps a dropped wheel's round collider from sinking a step's travel
+    // into the ground, and no wheel passed through liftarms with it in 816 drops).
     for (const sb of this.bodies)
       if (!sb.fixed && !jointed.has(sb.id)) sb.rb!.setSoftCcdPrediction(SPEED_CAP * o.fixedDt * 1.25);
     this.decoupleInertia();
+  }
+
+  /**
+   * The two colliders of a rim (DESIGN §5.1 "Wheels"; shapes.ts WheelShape), positions relative to
+   * the body's reference point `ref`:
+   *  - round: native cylinder (Rapier builds it along local Y; rotated onto the wheel axis), mass
+   *    of the annulus set explicitly (f64 values, like the prisms), tyre friction, group `round`;
+   *  - hull: the bevelled 32-gon prism, density 0, part friction, group `hull`;
+   *  - with a ground, the ground guard (WheelShape.guard): density 0, tyre friction, group `guard`.
+   */
+  private addWheel(sh: Extract<ReturnType<typeof partShapes>[number], { kind: 'wheel' }>, ref: Vec3, add: (cd: ColliderDesc) => void): void {
+    const o = this.opts;
+    const c = sub(sh.center, ref);
+    // Rotation taking local +Y onto the wheel axis: X axis → −90° about Z, Y → identity, Z → +90° about X.
+    const s = Math.SQRT1_2;
+    const rot = sh.axis === 0 ? { x: 0, y: 0, z: -s, w: s } : sh.axis === 2 ? { x: s, y: 0, z: 0, w: s } : { x: 0, y: 0, z: 0, w: 1 };
+    const m = sh.mass;
+    const ia = m.inertia[sh.axis]! * o.density;
+    const it = m.inertia[(sh.axis + 1) % 3]! * o.density;
+    const round = RAPIER.ColliderDesc.cylinder(sh.halfLength, sh.radius)
+      .setTranslation(c[0], c[1], c[2])
+      .setRotation(rot)
+      // Collider-local frame: the cylinder's axis is local Y.
+      .setMassProperties(m.volume * o.density, { x: 0, y: 0, z: 0 }, { x: it, y: ia, z: it }, { x: 0, y: 0, z: 0, w: 1 })
+      .setFriction(TYRE_FRICTION)
+      .setRestitution(o.restitution)
+      .setCollisionGroups(GROUP.round);
+    add(round);
+    const pts = new Float32Array(sh.hull.length * 3);
+    sh.hull.forEach((q, i) => pts.set(sub(q, ref), i * 3));
+    const hull = RAPIER.ColliderDesc.convexHull(pts);
+    if (!hull) throw new Error('convex hull failed for a wheel');
+    hull.setDensity(0).setFriction(o.friction).setRestitution(o.restitution).setCollisionGroups(GROUP.hull);
+    add(hull);
+    if (this.groundY === null) return; // the guard only meets the ground
+    const gp = new Float32Array(sh.guard.length * 3);
+    sh.guard.forEach((q, i) => gp.set(sub(q, ref), i * 3));
+    const guard = RAPIER.ColliderDesc.convexHull(gp);
+    if (!guard) throw new Error('convex hull failed for a wheel guard');
+    // Frictionless (combine rule Min with the ground's 0.4): it only holds the wheel up, so where it
+    // touches during an impact it cannot kick the wheel into rolling.
+    guard.setDensity(0).setFriction(0).setFrictionCombineRule(RAPIER.CoefficientCombineRule.Min).setRestitution(o.restitution).setCollisionGroups(GROUP.guard);
+    add(guard);
+  }
+
+  /**
+   * The ground (DESIGN §5.1 "Ground"): a fixed body with a half-space collider through groundPoint
+   * with normal groundNormal (buildGroundCollider, created before every other body); not one of
+   * `bodies`. buildGround finds the joint-friction sinks: dynamic
+   * bodies with a rim about a horizontal axis whose lowest point (nominal radius r) is within
+   * GROUND_SINK_DIST of the nominal floor (groundLevel, i.e. the physics plane less ½ − HC).
+   */
+  private buildGroundCollider(): void {
+    if (this.groundY === null) return;
+    const n = this.groundNormal;
+    const p0 = this.groundPoint;
+    const rb = this.world.createRigidBody(RAPIER.RigidBodyDesc.fixed());
+    const cd = new RAPIER.ColliderDesc(new RAPIER.HalfSpace(xyz(n)))
+      .setTranslation(p0[0], p0[1], p0[2])
+      .setFriction(this.opts.friction)
+      .setRestitution(this.opts.restitution)
+      .setCollisionGroups(GROUP.ground);
+    this.world.createCollider(cd, rb);
+  }
+
+  private buildGround(model: Model): void {
+    if (this.groundY === null) return;
+    const n = this.groundNormal;
+    const p0 = this.groundPoint;
+    const nominal = sub(p0, scale(n, 0.5 - HC)); // a point of the nominal floor
+    for (const p of model.parts) {
+      const bid = this.bodyOfPart.get(p.id);
+      if (bid === undefined || this.bodies[bid]!.fixed) continue;
+      for (const c of p.cells) {
+        if (c.rim === undefined || c.axis === 1) continue;
+        // Lowest point of the disc along −n: hub height above the plane less r·|n in the disc's plane|.
+        const h = dot(sub([c.x, c.y, c.z], nominal), n) - c.rim * Math.sqrt(Math.max(0, 1 - n[c.axis]! ** 2));
+        if (h <= GROUND_SINK_DIST + 1e-9) this.groundSinks.add(bid);
+      }
+    }
   }
 
   /**
@@ -530,12 +729,15 @@ export class Simulation {
    *  - A joint that passes nothing (it joins two bodies at the same distance, e.g. across a loop)
    *    and every joint of a group of bodies with no path to a fixed body: the lighter body's mass
    *    (a fixed body counts as infinitely heavy; two fixed bodies give Infinity, i.e. no friction).
+   *  - With a ground, bodies with a horizontal-axis rim touching it at Play (groundSinks) count as
+   *    sinks at distance 0 like fixed bodies (DESIGN §5.1 "Free root"): a cart's axles each carry
+   *    their share of the chassis, a wheel's own weight goes straight into the ground.
    */
   private loadMasses(): number[] {
     const mass = (id: number) => (this.bodies[id]!.fixed ? Infinity : this.bodies[id]!.rb!.mass());
     const joints = this.graph.joints;
     const dist = new Map<number, number>();
-    let frontier = this.bodies.filter((b) => b.fixed).map((b) => b.id);
+    let frontier = this.bodies.filter((b) => b.fixed || this.groundSinks.has(b.id)).map((b) => b.id);
     for (const id of frontier) dist.set(id, 0);
     for (let d = 1; frontier.length; d++) {
       const next: number[] = [];
@@ -550,7 +752,7 @@ export class Simulation {
     }
     const passed = joints.map(() => 0);
     const carried = new Map<number, number>();
-    const order = this.bodies.filter((b) => !b.fixed && dist.has(b.id)).sort((a, b) => dist.get(b.id)! - dist.get(a.id)! || a.id - b.id);
+    const order = this.bodies.filter((b) => !b.fixed && dist.get(b.id)! > 0).sort((a, b) => dist.get(b.id)! - dist.get(a.id)! || a.id - b.id);
     for (const b of order) {
       const d = dist.get(b.id)!;
       const load = mass(b.id) + (carried.get(b.id) ?? 0);
@@ -563,7 +765,7 @@ export class Simulation {
         const j = joints[i]!;
         const o = j.bodyA === b.id ? j.bodyB : j.bodyA;
         passed[i] = passed[i]! + load / down.length;
-        if (!this.bodies[o]!.fixed) carried.set(o, (carried.get(o) ?? 0) + load / down.length);
+        if (dist.get(o)! > 0) carried.set(o, (carried.get(o) ?? 0) + load / down.length);
       }
     }
     return joints.map((j, i) => (passed[i]! > 0 ? passed[i]! : Math.min(mass(j.bodyA), mass(j.bodyB))));
@@ -1003,6 +1205,29 @@ export class Simulation {
     return { v: vec(rb.linvel()), w: vec(rb.angvel()) };
   }
 
+  /**
+   * Set a dynamic body's velocity: `linear` is the velocity of its centre of mass (world, units/s),
+   * `angular` its angular velocity (world, rad/s; omitted = unchanged). External work, so the
+   * energy guard's reference for the body's group is reset (as on a grab release). Returns false
+   * (and does nothing) for a fixed, removed or unknown body, or a non-finite vector.
+   */
+  setBodyVelocity(bodyId: number, linear: Vec3, angular?: Vec3): boolean {
+    this.alive();
+    const b = this.bodies[bodyId];
+    if (!b?.rb || b.fixed) return false;
+    const ok = (v: Vec3) => Array.isArray(v) && v.length === 3 && v.every((x) => typeof x === 'number' && Number.isFinite(x));
+    if (!ok(linear) || (angular !== undefined && !ok(angular))) return false;
+    b.rb.setLinvel(xyz(linear), true);
+    if (angular) b.rb.setAngvel(xyz(angular), true);
+    this.resetGroup(b.id);
+    return true;
+  }
+
+  /** Is the body one of the joint-friction load sinks on the ground (DESIGN §5.1 "Free root")? */
+  isGroundSink(bodyId: number): boolean {
+    return this.groundSinks.has(bodyId);
+  }
+
   /** Mass properties as computed by the engine from the colliders. */
   massInfo(bodyId: number): MassInfo | null {
     this.alive();
@@ -1091,7 +1316,8 @@ export class Simulation {
    * m = the grabbed body's mass, M = the mass of the mechanism it is joint-connected to (capped at
    * 10·m for explicit-integration stability). Critically damped for a free point mass M; the −m·g
    * term cancels the body's own weight so a free body settles exactly on the cursor (a linkage
-   * sags by less than g/ω² ≈ 0.31 units at 10 Hz). |F| is capped at M·100·G.
+   * sags by less than g/ω² ≈ 0.31 units at 10 Hz). |F| is capped at M·100·G, and with a ground its
+   * component into the ground at GRAB_PRESS_LIMIT·M·G.
    */
   private applyGrab(): void {
     const g = this.grabState;
@@ -1106,6 +1332,14 @@ export class Simulation {
     const fmax = M * 100 * G;
     const fl = len(f);
     if (fl > fmax) f = scale(f, fmax / fl);
+    if (this.groundY !== null) {
+      // Pressing into the ground is limited to GRAB_PRESS_LIMIT × the mechanism's weight: at the
+      // full cap (100 g) the round wheel colliders of light wheel bodies gave way and sank up to
+      // 1.4 units into the floor (DEVIATIONS §5 "Wheels, ground, free root").
+      const into = -dot(f, this.groundNormal);
+      const cap = GRAB_PRESS_LIMIT * M * G;
+      if (into > cap) f = add(f, scale(this.groundNormal, into - cap));
+    }
     rb.resetForces(false);
     rb.resetTorques(false);
     rb.addForceAtPoint(xyz(f), xyz(x), true);

@@ -132,7 +132,35 @@ export function installTestHook(app: App): void {
         const y = Math.round(p.clientY * 4) / 4;
         if (!p.inView || !onCanvas(x, y)) continue;
         const hit = pickCell(app.model, vp.rayAt(x, y));
-        if (hit && hit.partId === partId && hit.cellIndex === cellIndex && hit.dir === dir) return { x, y };
+        if (hit && hit.partId === partId && hit.cellIndex === cellIndex && hit.dir === dir && !hit.virtual && !hit.tread) return { x, y };
+      }
+      return null;
+    },
+    /**
+     * A client point on the flat face `dir` (∥ the hub axis) of the wheel whose hub is cell
+     * `hubIndex` of part `partId`, over its virtual cell `pos`, where a click picks exactly that
+     * virtual cell and lands on the canvas; or null. Edit mode only.
+     */
+    clientPosOfVirtualCell: (partId: number, hubIndex: number, pos: V3, dir: Dir): { x: number; y: number } | null => {
+      const hub = partById(app.model, partId)?.cells[hubIndex];
+      if (!hub || hub.rim === undefined) return null;
+      const n = DIRS[dir]!;
+      const a = dir >> 1;
+      const t1 = (a + 1) % 3;
+      const t2 = (a + 2) % 3;
+      const offsets: [number, number][] = [[0, 0]];
+      for (const r of [0.3, 0.15]) for (let k = 0; k < 8; k++) offsets.push([r * Math.cos((k * Math.PI) / 4), r * Math.sin((k * Math.PI) / 4)]);
+      for (const [u, v] of offsets) {
+        const w: V3 = [pos[0] + 0.5 * n[0]!, pos[1] + 0.5 * n[1]!, pos[2] + 0.5 * n[2]!];
+        w[t1] = w[t1]! + u;
+        w[t2] = w[t2]! + v;
+        const p = vp.project(w);
+        const x = Math.round(p.clientX * 4) / 4;
+        const y = Math.round(p.clientY * 4) / 4;
+        if (!p.inView || !onCanvas(x, y)) continue;
+        const hit = pickCell(app.model, vp.rayAt(x, y));
+        const g = hit?.virtual;
+        if (hit && hit.partId === partId && hit.cellIndex === hubIndex && hit.dir === dir && g && g[0] === pos[0] && g[1] === pos[1] && g[2] === pos[2]) return { x, y };
       }
       return null;
     },
@@ -159,7 +187,53 @@ export function installTestHook(app: App): void {
     simInfo: () => {
       const s = app.session;
       if (!s) return null;
-      return { time: s.time, jointError: s.sim.jointError(), paused: s.paused, speed: s.sim.speed, jointFriction: s.sim.jointFriction, grabbed: s.grabbedBody, droppedSteps: s.sim.droppedSteps, stepCount: s.sim.stepCount };
+      return {
+        time: s.time,
+        jointError: s.sim.jointError(),
+        paused: s.paused,
+        speed: s.sim.speed,
+        jointFriction: s.sim.jointFriction,
+        grabbed: s.grabbedBody,
+        droppedSteps: s.sim.droppedSteps,
+        stepCount: s.sim.stepCount,
+        /** World y of the simulation's floor (DESIGN §7.5), null without ground. */
+        groundY: s.sim.groundY,
+      };
+    },
+    /** Model setting (§7.4), as if toggled in the Model block: one undo step, edit mode only. */
+    setGround: (on: boolean): void => app.setGround(on),
+    setFixRoot: (on: boolean): void => app.setFixRoot(on),
+    /**
+     * Simulate mode: give the body holding `partId` a velocity [vx, vy, vz] (units/s), e.g. to roll
+     * a cart (§7.5). False when the part has no dynamic body or nothing is simulating.
+     */
+    pushBody: (partId: number, v: V3, angular?: V3): boolean => app.session?.pushBody(partId, v, angular) ?? false,
+    /** The floor the view draws ({ y }), or null. */
+    floor: () => vp.getFloor(),
+    /**
+     * The ground's contact shadow (DESIGN §6.1, §7.5) at the floor point (x, z): strength 0…1 after
+     * the blur, where 1 = SHADOW_MAX opacity (under a wide surface lying on the floor), read back
+     * from the shadow texture (brought up to date first); null when the ground is off.
+     */
+    groundShadowAt: (x: number, z: number): number | null => vp.groundShadowAt(x, z),
+    /** Diagnostics: the contact shadow's render count (it must not grow on camera changes), frame, cost. */
+    shadowInfo: () => vp.shadowInfo(),
+    /** Test only: pose a part in the view as the simulation would (world' = R(q)·world + p); edit mode. */
+    setPartTransform: (partId: number, p: V3, q: [number, number, number, number] = [0, 0, 0, 1]): void => vp.setPartTransform(partId, p, q),
+    /** Test only: drop every view pose set with setPartTransform. */
+    clearTransforms: (): void => vp.clearTransforms(),
+    /** Diagnostics: GPU objects three.js holds ({ geometries, textures }; leak checks). */
+    glMemory: (): { geometries: number; textures: number } => ({ ...vp.renderer.info.memory }),
+    /** Diagnostics: render now and read the drawn colour [r, g, b] (0…255) at a client point. */
+    pixelAt: (clientX: number, clientY: number): [number, number, number] => {
+      vp.renderNow();
+      vp.renderer.setRenderTarget(null);
+      const gl = vp.renderer.getContext();
+      const r = vp.canvas.getBoundingClientRect();
+      const d = vp.size.pixelRatio;
+      const buf = new Uint8Array(4);
+      gl.readPixels(Math.floor((clientX - r.left) * d), Math.floor((r.bottom - clientY) * d), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, buf);
+      return [buf[0]!, buf[1]!, buf[2]!];
     },
     getState: () => ({
       mode: app.mode,
@@ -167,6 +241,8 @@ export function installTestHook(app: App): void {
       newPart: app.tool.newPart,
       /** The Back side toggle [B]; `altHeld`: Alt/Option held (Back side for this hover / click). */
       backSide: app.tool.backSide,
+      /** The build hover's highlighted face { pos, dir, backSide, valid } (Back side e2e), or null. */
+      buildHighlight: app.buildHighlight,
       altHeld: app.altHeld,
       axisPref: app.tool.axisPref,
       color: app.tool.color,
@@ -179,6 +255,10 @@ export function installTestHook(app: App): void {
       friction: app.friction,
       paused: app.session?.paused ?? false,
       fileName: app.fileName,
+      /** Model settings (§7.4). `fixRoot` is the model's own setting; `rootFixed` what takes effect. */
+      ground: app.model.ground === true,
+      fixRoot: app.model.fixRoot !== false,
+      rootFixed: app.model.fixRoot !== false || app.model.ground !== true,
       hint: app.status.hintText,
       message: app.status.message,
       banner: app.banner.text,

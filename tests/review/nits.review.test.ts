@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { AXES, KINDS, addCell, addPart, canAddCell, emptyModel, makeCell, validateModel } from '../../src/core';
 import type { Dir, Kind, Model } from '../../src/core';
-import { DIR_LABELS, farSidePick, initialToolState, resolveBuild, selectTool, withModifiers } from '../../src/editor';
+import { DIR_LABELS, initialToolState, resolveBuild, selectTool, withModifiers } from '../../src/editor';
 import type { CellPick } from '../../src/editor';
 import { rootAnchorIndex } from '../../src/view/rootmarker';
 
@@ -27,8 +27,9 @@ function randomModels(count: number, seed0: number): Model[] {
   return out;
 }
 
+/** Every face of every cell as a back-face pick (what pickBack returns for some ray, §7.3). */
 function* picks(m: Model): Generator<CellPick> {
-  for (const p of m.parts) for (let i = 0; i < p.cells.length; i++) for (let d = 0; d < 6; d++) yield { partId: p.id, cellIndex: i, dir: d as Dir };
+  for (const p of m.parts) for (let i = 0; i < p.cells.length; i++) for (let d = 0; d < 6; d++) yield { partId: p.id, cellIndex: i, dir: d as Dir, back: true };
 }
 
 describe('Back side status text', () => {
@@ -57,9 +58,8 @@ describe('Back side status text', () => {
           const s = selectTool(initialToolState('#3b74c4'), kind);
           const back = resolveBuild(m, pick, null, withModifiers(s, { alt: true }));
           if (back.action === 'none') continue;
-          const far = farSidePick(m, pick)!;
-          expect(back.description).toContain(` · back side (${DIR_LABELS[far.dir]})`);
-          if (!back.valid && !back.description.endsWith(` · back side (${DIR_LABELS[far.dir]}) — ${back.reason}`)) wrong.push(back.description);
+          expect(back.description).toContain(` · back side (${DIR_LABELS[pick.dir]})`);
+          if (!back.valid && !back.description.endsWith(` · back side (${DIR_LABELS[pick.dir]}) — ${back.reason}`)) wrong.push(back.description);
         }
     expect(wrong.slice(0, 3)).toEqual([]);
   });

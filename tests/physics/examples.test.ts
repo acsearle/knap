@@ -37,6 +37,14 @@ function segDist(p: Vec3, a: Vec3, b: Vec3): number {
   return Math.hypot(p[0] - a[0] - t * abx, p[1] - a[1] - t * aby);
 }
 
+/** Cart example: wheel part ids and their hub cells. */
+const WHEEL_HUBS: [number, Vec3][] = [
+  [3, [0, 0, -1]],
+  [5, [0, 0, 3]],
+  [7, [8, 0, -1]],
+  [9, [8, 0, 3]],
+];
+
 const CHECKS: Record<string, (collisionBound?: number) => Check> = {
   pendulum: () => swingCheck(2, 90),
   'triple-pendulum': () => swingCheck(4, 90),
@@ -131,6 +139,42 @@ const CHECKS: Record<string, (collisionBound?: number) => Check> = {
         const v = s.bodyVelocity(s.bodyOf(6)!)!.v;
         expect(Math.hypot(...v)).toBeLessThan(0.5);
         return `lower link–peg min distance ${minDist.toFixed(4)} (contact at 0.75), upper link ≥ ${upperMin.toFixed(2)}, loose beam rests at y ${y.toFixed(4)}`;
+      },
+    };
+  },
+  // Wheel (part 2) on its pin rocks: crank from 45° above horizontal down past crank-down.
+  'crank-wheel': () => swingCheck(2, 90),
+  cart: () => {
+    // The free cart rolls back and forth under the swinging arm (part 10), stays on its wheels
+    // (chassis tilt small, wheels on the floor) and nothing is removed.
+    const arm = swingCheck(10, 60);
+    let lo = Infinity;
+    let hi = -Infinity;
+    let tilt = 0;
+    let minY = Infinity;
+    let maxY = -Infinity;
+    return {
+      sample: (s) => {
+        arm.sample(s);
+        const x = where(s, s.bodyOf(1)!, [4, 0, 1])[0];
+        lo = Math.min(lo, x);
+        hi = Math.max(hi, x);
+        const q = s.partTransform(1)!.q;
+        tilt = Math.max(tilt, 2 * Math.asin(Math.min(1, Math.hypot(q[0], q[1]))));
+        for (const [id, hub] of WHEEL_HUBS) {
+          const y = where(s, s.bodyOf(id)!, hub)[1];
+          minY = Math.min(minY, y);
+          maxY = Math.max(maxY, y);
+        }
+      },
+      finish: (s) => {
+        expect(hi - lo).toBeGreaterThan(1);
+        expect(tilt).toBeLessThan(0.05);
+        expect(s.graph.bodies.every((b) => s.hasBody(b.id))).toBe(true);
+        // Hubs start at y = 0 with the wheels touching the floor: they sink < 0.03 and never hop.
+        expect(minY).toBeGreaterThan(-0.03);
+        expect(maxY).toBeLessThan(0.03);
+        return `${arm.finish(s)}, chassis x range ${(hi - lo).toFixed(2)}, tilt ≤ ${tilt.toExponential(1)} rad, wheel hubs y ${minY.toFixed(4)}…${maxY.toFixed(4)}`;
       },
     };
   },

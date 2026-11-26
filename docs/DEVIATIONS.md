@@ -38,6 +38,50 @@ Where the implementation departs from, or had to interpret, `docs/DESIGN.md`.
 - **Default colours** live in `DEFAULT_COLORS` in core (holes get a placeholder yellow; the UI is
   expected to pass its current palette colour for hole parts).
 
+### Wheels, ground, free root (DESIGN §2.4–§2.6)
+
+- **Discs of one part that overlap connect their hubs.** Rule 1 joins a hub to every cell its disc
+  overlaps; it says nothing about two discs. Two rims of one part can overlap without either disc
+  reaching the other hub's cell (r 1.5 hubs at (0,0) and (2,2)). If only the cells between them
+  joined them, erasing those cells would split the part into two parts whose discs overlap, which
+  rule 2 forbids. So `components` also joins hubs whose discs overlap (they are fused material).
+  With this, every split (removeCell, setRim) yields valid pieces.
+- **`canRemoveCell` (new) and a throwing `removeCell`.** Erasing a hole cell of a wheel's part
+  that holds another part's pin or axle, while a remaining disc of the part covers that position,
+  would leave the pin inside the wheel's material (rule 2 without its mate exception). There is
+  no valid model to return, so `removeCell` throws with the reason; callers check
+  `canRemoveCell` first. Every other removal is allowed, as before. Removing a hub removes its rim.
+- **Version.** `validateModel`/`deserialize` accept version 1 and 2. A version-1 model that has a
+  rim, a `ground` or a `fixRoot` key (even `false`/`true`) is rejected ("must be version 2"), so an
+  older knap never silently ignores wheels. A version-2 model without any of them is valid (the
+  version is "otherwise left alone"). `setGround(m, false)` and `setFixRoot(m, true)` delete the
+  key (absent = default) and keep version 2. No-op calls return the same model object.
+  Three existing assertions used version 2 as *the* unsupported version; they now use version 3
+  (`tests/core/model.test.ts` ×2, `tests/review/core.review.test.ts` ×1), same intent.
+- **Strict values.** `rim`, `ground` and `fixRoot` are validated when present (JSON `null`
+  included) and never dropped; other unknown fields are still dropped. A bad rim value or a rim
+  on a male cell has the new `ValidationCode` `'rim'`; wheel blocking uses `'overlap'`.
+- **Reasons.** `canSetRim`: "wheels grow from pin holes and axle holes", "largest wheel is radius
+  4", "smallest wheel is radius 1", "wheel radius goes in steps of 0.5", "wheel would hit part N
+  at (x, y, z)", "wheels would overlap: the wheel of part N (hub …)". `canAddCell`/moves:
+  "(x, y, z) is inside the wheel of part N". Shrinking or removing a rim is always allowed.
+- **Rim connection in `canAddCell`.** A cell may also attach through a disc: a crank hole inside
+  a wheel of the part, or a new cell carrying a rim whose disc overlaps a cell or disc of the part.
+  Any cell kind joins through a disc (a pin fused into a wheel face), as rule 1 says "every cell".
+- **`makeCell(x, y, z, kind, axis, rim?)`** keeps a given rim and omits the key otherwise;
+  `copyCell` copies a cell with its rim. `addPart` keeps rims (Duplicate); the editor's move,
+  rotate and duplicate pass the rim through (`src/editor/selection.ts`).
+- **WorldIndex** also lists the hubs (`rims: RimEntry[]`) with a spatial hash of 8-cell buckets
+  (used above 32 hubs; a scan below), `rimsNear`, `discsOverlapping` and `holeOfPartAt`; the
+  checks look only at the ≤ 9×9 cells of a disc's layer square and the nearby hubs. Measured:
+  `validateModel` 4 ms, `canAddCell` 0.01 ms, `movePart` of a wheel 0.1 ms on 3060 cells / 60
+  wheels.
+- **Task text vs §2.6.** The task said a crank hole at (1,1) of an r 2.5 wheel "splits off when the
+  rim shrinks to 1.5". By the §2.6 formula, cell (1,1) is overlapped by every disc r ≥ 1
+  (near² = ½ < r²), so it splits off only when the rim is removed. A hole at (2,1) (or (2,0))
+  splits off at r 1.5. The tests follow the formula.
+
+
 ## §3 Kinematic analysis (`src/core/kinematics.ts`)
 
 Interpretations where §3 leaves a choice open (all deterministic, all tested):
@@ -84,6 +128,14 @@ Interpretations where §3 leaves a choice open (all deterministic, all tested):
   a revolute joint (one line) or is welded (prismatic).
 - **Order.** `mates` are sorted by position, `joints` by (bodyA, bodyB), and `bodyOfPart`
   iterates in ascending part id order. Shuffling `parts` or `cells` gives a deep-equal graph.
+
+### Wheels, ground, free root (DESIGN §3.1 step 4)
+
+Only `Body.fixed` changes (`&& rootIsFixed`). The root still steers the
+free-pin absorption preference and the "a free pin that is the root is not absorbed" rule
+(§3 above), so the partition is the same with a free root. Rims change nothing (tested on every
+example with rims grown wherever allowed).
+
 
 ## §4 Geometry (`src/geometry`)
 
@@ -151,6 +203,37 @@ Interpretations where §3 leaves a choice open (all deterministic, all tested):
   an LRU of 1024 entries, and callers must treat the arrays as read-only. `origin` is per call.
 - **Colliders** use the shared `rodExtent` for males, so connected male ends reach ½+EPS (the
   visual extent) rather than exactly ½.
+
+### Wheels, ground, free root (DESIGN §4.2, §4.3)
+
+- **Construction.** The rim is a disc of radius r − 0.03 revolved from the axis with a 45° chamfer
+  of 0.04 on both edges, 48 segments for r < 2 and 64 from r 2. It fills its hub. Every hole cell
+  under a disc (hub included) takes the 3D CSG path instead of the 2D slab path, because the slab
+  path subtracts its bores before the rim is united; all bores are then cut afterwards.
+- **Sealed bores.** A hole whose axis lies in a wheel's plane, inside the disc, can have both bore
+  ends capped by rim material. Like the existing "blind at both ends" rule, such a run gets no bore
+  (it would be a sealed cavity); a bore capped at one end is a blind hole into the rim.
+- **Index mark.** A rectangular groove 0.12 wide and 0.04 deep along +((axis+1) % 3) from radius
+  0.5 to 0.02 past the edge on both flat faces, and 0.04 deep across the tread. Its walls are
+  90° creases, so each wall and floor is its own smooth patch, and the outline pass draws patch
+  boundaries as lines at any zoom (`patches.ts`). In the browser the groove alone was faint on dark
+  parts, so the view also paints it (§6 below).
+  A cutter is left out when other material of the part fills the region it opens onto (the 0.06
+  gap above a face, the band beyond the tread). Otherwise a double-thick stack bridged by
+  sliver-fill webs, or a perpendicular wheel of the same part, made the groove a sealed cavity
+  (found by the wheel fuzz test). The tread groove is also left out when a cell of the part
+  continues past the edge along the mark (`RimMark.tread`, nominal; the geometric test may drop
+  more). A face groove may run 0.02 onto a flush beam face beyond the rim edge.
+  `rimMarks(part)` exposes the mark (hub centre, axis, direction, radii, width, depth) for the
+  view, in case it wants to paint it instead.
+- **Collider `'disc'`** carries two extra fields: `innerRadius` (= HC, the hub cylinder's radius,
+  for the annulus mass of §5.1) and `male: false` (so code that switches on `male` keeps working).
+  The hub cell's own cylinder and web boxes are still emitted, unchanged, and the disc comes
+  after them. Do not count the hub's volume twice in the disc's mass.
+- **Robustness.** A random-wheel fuzz test of 1500 parts with one or two random rims: one part
+  (0.07 %) has the known zero-volume pinch (§4 above). The default run of 200 parts has none.
+  Build time of a lone r 4 wheel is ≈ 8 ms (r 1: ≈ 7 ms) in Node.
+
 
 ## §7 Editor logic (`src/editor`)
 
@@ -241,17 +324,73 @@ had a gap:
   view axis prefer Y, then X, then Z (the isometric view turns about Y). Duplicate only accepts an
   offset where every copied cell is empty, so a copy never mates by accident. Offsets are searched
   nearest first within L∞ ≤ 8.
-- **Back side** (§7.3). `farSidePick(model, pick)` maps the hover to the far side (only the picked
-  part's own cells are walked, so a pin in a hole walks along the pin and the beam along the beam);
-  `resolveBuild` does this itself when `state.backSide` is set and appends " · back side (−Z)"
-  before " — reason". `ToolState.backSide` is the [B] toggle; Alt/Option is applied per event by
+- **Back side** (§7.3, rewritten after the owner's feedback: the back face *under the cursor*, not
+  the face opposite the hovered one). `pickBack(model, ray, opts?)` (picking.ts) is the back-face
+  pick; `buildPick(model, ray, state, hit?)` (tools.ts) returns it for a build tool with
+  `state.backSide` and the front hit otherwise, and the app resolves `resolveBuild(m, buildPick(…),
+  …)`. `resolveBuild` goes by the pick's `back` flag, not by `state.backSide`: a back pick (P, C, n)
+  resolves as that face hovered from behind and appends " · back side (−Z)" before " — reason" (the
+  Shift hint gets the same suffix: it is what Shift + Back side does). `farSidePick` is gone.
+  Implementation: per part, in its own frame, the [tIn, tOut] spans of every cube and rim disc the
+  ray crosses are merged where they touch or overlap (|Δt| ≤ 1e-9), and the end of the first merged
+  span is the part's first exit; the nearest exit over all parts wins. Choices where §7.3 was
+  ambiguous:
+  - *Shared cell ties.* §7.3 says "as for the front pick — the hole's part before the male inside
+    it". The front pick gives the male on an axial face within R_ROD of the axis, so `pickBack` does
+    the same when a male and its hole leave the same shared cube at once: the male iff the exit face
+    is axial and the exit point is strictly within R_ROD of the axis, else the hole's part. With
+    "always the hole" an axle or pin flush with the back of a beam could never be extended out of
+    it with Back side (the beam's back face would always win), which `e2e/app-wheels` does.
+  - A male inside a hole is part of its own part's solid (§7.3 says so), so a ray along a beam
+    through a pin leaves the *pin's* cube first (its side face) — the pin, not the beam's far end, is
+    picked there. Likewise a protruding pin head in front of a wheel's hub hides the hub.
+  - Exit through an edge or corner of a cube: the tied face with the larger |dir| component, then the
+    lower axis, unless its neighbour is the part's own cell (then the next tied face that is not).
+  - Exit through the tread highlights the hub's lateral face as §7.3 says; that face is generally
+    not under the cursor (up to ~40 px away in `e2e/app-back`).
+  Ray-reference tests: `tests/editor/backside.test.ts` (independent crossing/midpoint reference,
+  ~10 000 rays incl. wheels, transforms, examples); real mouse: `e2e/app-back` (≥ 200 random hovers
+  on three models × three views: the highlighted face's projected quad contains the cursor).
+  `ToolState.backSide` is the [B] toggle; Alt/Option is applied per event by
   `withModifiers(s, { shift, alt })` (`altHeld`, never latches, like `shiftHeld`); `withShift` is
   kept as `withModifiers(s, { shift })`. Like New part, the toggle survives tool changes and is
-  ignored (its button disabled) for Select / Erase. The Shift hint of a back-side proposal is the far
-  side's with the same " · back side (−Z)" suffix, i.e. exactly what a Shift + Back side click does
-  (the hint is only ever a valid alternative, so there is no " — reason" to insert before).
+  ignored (its button disabled) for Select / Erase; Wheel ignores it too. Test hook:
+  `getState().buildHighlight` = { pos, dir, backSide, valid } of the shown build proposal.
 - **Autosave.** An unreadable autosave is moved to `knap.autosave.v1.corrupt`, so it is neither
   lost nor retried on every load. An autosaved empty model restores as "nothing".
+
+### Wheels, ground, free root (DESIGN §7.2, §7.3)
+
+- **Picking discs** (`picking.ts`). Each rim is ray-tested as its nominal disc (radius r, the hub's
+  layer). A disc hit counts only when it is *strictly* nearer than every cube hit; the slab
+  parameters are computed with the same expression as the cube test, so a disc face coplanar with
+  a cube face (the hub, a crank hole) gives the identical t and the real cell wins the tie. A
+  flat-face hit returns the hub (`cellIndex`) plus `virtual: G`; a tread hit returns the hub with
+  `tread: true` and `dir` = the hub's lateral face nearest the hit's radial direction. Checked
+  against a marching reference on 400 random rays and against the §7.3 cases in
+  `tests/editor/wheels.test.ts`.
+- **Wheel tool on a pin or axle in a hub.** Picking gives the male when the ray enters a shared
+  cell's mouth near its axis, so clicking the middle of a wheel on an axle would hover the axle.
+  The Wheel tool then acts on the hole around it (another part's hole at that position): "hover a
+  hole cell" is read as "the hole under the cursor, even with a rod in it". A lone male: invalid,
+  "wheels grow from pin holes and axle holes".
+- **Wheel tool modifiers.** Shift = shrink (§7.2), so Shift is not "New part" for this tool; Back
+  side and [R] do not apply to it (its toolbar toggles are disabled like for Select / Erase).
+  Shrinking shows the band a click removes (the same red ring as Erase) instead of a ghost, since a
+  smaller disc would be hidden inside the current one. Growth beyond radius 4 has no ghost (there
+  is no valid disc to draw): the hovered face turns red and the hint gives the reason.
+- **Virtual cells with New part / Shift.** The §7.3 order applies (Insert, Sleeve, New adjacent);
+  only New adjacent is relevant, so a hole tool starts a new part at G + n (on the wheel's face).
+  Male tools on a virtual cell are invalid with or without Shift ("add a hole here first"), as
+  §7.3 says without qualification. Extend into a virtual cell says "… in the wheel".
+- **Erase on a crank hole that holds a pin inside a remaining disc** is refused with core's reason
+  (`canRemoveCell`, see §2–§4 Wheels) instead of throwing; the hint is red and a click reports it.
+- **Duplicate keeps rims** and skips offsets whose discs would hit anything (pre-filtered by the
+  part's disc footprint, then `addPart` decides). **Move / rotate failures** name the wheel conflict
+  (first `validateModel` message of the raw result) when the old cell-only check finds none.
+- **Kinematics overlay with a free root**: every body gets a moving-body tint (none is grey), and
+  the counts say "(none fixed)" (`kinematicsSummary` rewrites core's "(0 fixed)").
+
 
 ## §7 Application (`src/app`, `src/ui`)
 
@@ -330,8 +469,8 @@ had a gap:
   (checked in `e2e/app-back`). While Alt alone (no Ctrl/Meta/AltGraph) is held, the build-hover
   keys `R`, `N`, `B`, `V`, `E` and `1`–`5` act as without it (§7.3 "same [R]"); they are matched
   by physical key (`e.code`), since Option+R types "®" on a Mac. Other Alt combinations are still
-  left to the browser. The hint line adds "Alt: back side" while a part is hovered with a
-  build tool and Back side is off; it still fits at 1280×720 (`e2e/app-ui`).
+  left to the browser. The hint line adds "Alt: back side (the back face under the cursor)" while a
+  part is hovered with a build tool and Back side is off; it still fits at 1280×720 (`e2e/app-ui`).
 - **Clicks belong to the mode of their press.** A press made while simulating and released after
   Stop (Esc) is not an edit-mode click (it used to build a part).
 - **Start-up view.** The viewport is created detached (1×1 px); the app measures it once it is in
@@ -355,6 +494,44 @@ had a gap:
   `requestAnimationFrame` pending, so every simulated frame doubled the pending frames and the
   page rendered exponentially often (SwiftShader froze within seconds). `frame()` now cancels the
   pending request before rendering. Test: `tests/view/frameloop.test.ts`.
+
+### Wheels, ground, free root (DESIGN §7.4, §7.5)
+
+- **Model block.** A small card at the top of a right-hand column under the view cube, above the
+  part inspector (which keeps its own `[data-role=inspector]` and is hidden without a selection).
+  Fix root shows checked and disabled while the ground is off, with a tooltip saying why; clicking it
+  then (or toggling either while simulating) changes nothing. `G` toggles the ground.
+- **Test hook (§7.5) additions**: `getState().rootFixed` (what takes effect), `floor()` (what the
+  view draws: `{ y, lines }`), `clientPosOfVirtualCell(partId, hubIndex, pos, dir)`.
+  `simInfo().groundY` is `Simulation.groundY`; `pushBody(partId, v, angular?)` calls
+  `Simulation.setBodyVelocity` for the part's body (false for a fixed / removed body or a bad
+  vector). A cart is pushed by pushing every one of its bodies with matching wheel spin; pushing
+  only the light chassis moved it 0.8 units, because the push is shared with the heavy wheels.
+- **e2e**: `E2E_DIST=<dir>` builds into / serves that directory instead of `dist/` (concurrent
+  runs on one machine). `app-examples` now expects the §8 examples 8 and 9 (crank-wheel: 3 bodies,
+  1 fixed; cart: 6 bodies, none fixed) — a spec change, not a weakened check — and runs both at
+  friction Realistic to 30 simulated seconds with `stepSim` (motion, index mark, floor, rest; §8
+  below). `app-wheels` builds wheels with the real mouse and keyboard, then drops a wheel on the
+  floor (hub rests at y 0.9942: 1.00 less the round collider's 0.006 resting sink) and rolls a pushed cart (14.3 units in
+  0.5 s at 30 units/s, Δy ≤ 0.002).
+- **Examples menu scrolls.** With nine examples their descriptions made the menu ≈ 740 px tall, so
+  at 1280×720 the last entry (cart) was below the window and could not be clicked. The menu is now
+  440 px wide (≈ 30 % shorter) and capped at the window height with its own scroll.
+- **Known limits of playing with a vehicle** (an owner-style session through the real UI, a cart
+  built from nothing: one 7-hole beam, two axles, four axle-hole hubs grown to r 1.5, Ground on,
+  Fix root off; screenshots `e2e/out/owner-*.png`):
+  - The grab plane is the view plane (§7.1, unchanged). From the default isometric view a drag
+    "along the floor" therefore also pulls toward the camera: a drag of the cursor over 8 units of
+    +X moved the cart 5.5 units in X and 2.1 in Z (the wheels skid sideways). From FRONT the same
+    drag moves it straight (8 units, pure rolling: wheel angle = travel / r to 1°). Before the
+    §5 grab press limit the isometric drag also pressed the wheels ≈ 0.1 into the floor.
+  - Lifting the chassis by one point makes the cart dangle and it lands on its side (correct
+    physics, but a surprise).
+  - The camera does not follow: a cart flung at ≈ 10 units/s rolls out of the fitted view.
+  - All new parts take the current palette colour, so a cart built quickly is one colour.
+  - Under SwiftShader the page runs at ≈ 1 simulated second per 8 s at ¼× ("can't keep up"); a
+    real GPU was not tried.
+
 
 ## §6 Rendering & camera (`src/view`)
 
@@ -437,6 +614,69 @@ had a gap:
 - **Context alpha**: three.js always creates the WebGL context with an alpha channel. Every custom
   blend keeps destination alpha at 1, or the page shows through. The e2e checks the buffer stays
   opaque.
+
+### Wheels, ground, free root (DESIGN §6.1)
+
+- **Index mark is also painted** (`src/view/markpaint.ts`). The cut groove alone (outline lines on
+  its walls) was legible on light parts but faint on dark grey at Home zoom, so the groove's own
+  vertices (its floors and walls, which the crease split keeps separate from the face) get a
+  per-vertex weight and the part shader paints them in a contrasting shade (lighter on dark colours,
+  darker on light ones, by luma). Read on screenshots of r 1 / 1.5 / 2.5 / 4 in white and dark grey,
+  from the front, 45°, edge-on and the back, at DPR 1 and 2 (`e2e/wheels-look.mjs`). A groove the
+  geometry left out (covered by other material) is not painted either.
+- **Floor level.** The view draws the floor at `groundLevel + (½ − HC)` in edit mode too — the
+  physics floor (`sim.groundY`), not the nominal level — so it does not jump by 0.04 at Play. Parts'
+  visual solids start 0.03 above the nominal level, so they appear to touch it (0.01 under).
+- **Floor look** (reworked after owner feedback: the unit lines read as a second grid and the floor
+  was otherwise invisible). The same in edit and simulate mode: a tint (`FLOOR_TINT` = 3 % black,
+  247 → 240 on the background; was 4.5 %) plus the contact shadow; no lines. Technique for the
+  tint: a full-screen shader intersecting each pixel's orthographic view ray with the plane, so it
+  is never clipped by the near / far planes; from above the tint is the whole background; it fades
+  out within ≈ 7° of edge-on, where a line at the floor's level is drawn instead (continuous
+  through FRONT). From below nothing is drawn.
+- **Contact shadow** (§6.1; `src/view/shadowmath.ts` constants and pure frame logic,
+  `src/view/shadow.ts` GPU side, `floor.ts` draws it). The suggested recipe without a camera: one
+  caster mesh per part view (its own geometry, one shared material) is drawn into an RGBA8 texture
+  by a vertex shader that maps world (x, z) straight to the frame and a fragment shader that writes
+  `(1 − h/SHADOW_H)²`; MAX blending keeps the lowest surface over each texel (no depth buffer, both
+  faces). Two separable Gaussian passes (19 taps). The floor's full-screen shader looks the result
+  up (bilinear) at each pixel's floor point and draws a near-black (0.08, 0.085, 0.09) at
+  `SHADOW_MAX` × strength over the tint — so it is in no outline buffer, writes no depth, draws
+  under everything, and parts drawn later cover it.
+  - Constants: `SHADOW_MAX` = **0.42** (was 0.34: next to the outlines and the grid at Home the
+    shade beside the wheels read as faint; 0.42 makes the floor's position obvious while the
+    darkest visible pixel, beside a wheel, stays ≈ 205 on 247 — a shade, not dirt), `SHADOW_H` = 3,
+    `SHADOW_BLUR` σ = 0.35 (kept), texel `SHADOW_TEXEL` = 0.125 units, frame sides 8…128 units
+    (powers of two, `SHADOW_MAX_EXTENT` = 128 → at most 1024² texels, 8 MB for both targets),
+    margin 2.125 units (3σ + 1 unit edge fade).
+  - **Stability by a fixed world texel grid**: the texel is a fixed world size and the frame's
+    origin a multiple of it, so a moving model is always rasterised and looked up on the same
+    world grid. A re-centre or a size change changes only which texels exist: the cart's shadow is
+    bit-identical across them (e2e). Sub-texel motion leaves the resampling error of a 0.125 grid:
+    ≤ 0.016 strength (≈ 0.007 opacity, under 2 grey levels) for the Cart moved 1.75 units in
+    0.044 steps. The frame is kept while it still holds the region and is at most one step too big
+    (hysteresis), else re-centred on it.
+  - Only parts whose box reaches below `SHADOW_H` above the floor size the frame. Beyond 128 units
+    across, the frame is 128 centred on them and what is outside casts nothing; the shadow fades
+    out over the last unit of the frame (never visible otherwise, where the margin keeps it ~0).
+  - Re-rendered only when a part's pose actually changes (matrix compare: a paused simulation
+    re-applies the same poses every frame), a part view is added / removed / re-meshed, visibility
+    changes or the floor level changes — not for colours, selection, overlays or any camera change.
+    `shadowInfo().renders` counts it.
+  - `groundShadowAt(x, z)` returns 0…1 with **1 = `SHADOW_MAX` opacity** (the strength under a wide
+    surface on the floor); it is read back from the blurred texture with the floor shader's rule.
+    Measured, Cart at t = 0: 0.854 under each wheel's contact line (a 1-wide wheel: the blur across
+    its width caps it at ≈ erf(0.47/(σ√2)) ≈ 0.82–0.85), 0.376 under a chassis beam (h = 0.99,
+    model (1 − h/3)²·erf = 0.37), 0.071 between the beams, 0 six units away. A 1-wide beam lying on
+    the floor: 0.84 at its middle line, ≈ ½ at its edge.
+  - Cost (headless Chromium, ANGLE/Metal on an M1 Max, Cart at Home, 1280×720): a frame in which
+    nothing moved 1.21 ms with the ground on vs 1.19 off (DPR 1), 7.52 vs 7.44 (DPR 2) — noise; a
+    frame in which every part moved +0.16 ms (DPR 1; one 128×128 caster pass + two blur passes).
+    No GPU objects leak over 50 example loads with ground toggles (`renderer.info.memory`
+    geometries 19 / textures 11 before and after).
+- **Ghost depth offset.** The ghost materials carry a small polygon offset toward the viewer, so a
+  ghost disc coplanar with the current wheel's faces does not z-fight (it drew as a starburst).
+
 
 ## §5 Physics (`src/physics`)
 
@@ -981,6 +1221,159 @@ had a gap:
   pendulum starts with E0 = 0, because it is released at pivot height. The tests therefore use
   E0 − E_min as 100 %, where E_min is the potential of the chain hanging straight down.
 
+### Wheels, ground, free root (DESIGN §5.1 "Ground", "Wheels", "Free root", §5.3)
+
+All numbers are Node, Rapier 0.21.0, sim.ts defaults (1/480 s, 240/30 substeps), measured on a
+machine shared with other jobs (load average ≈ 30 during the cost runs).
+
+- **Unchanged without them.** Collision groups are set only when the model has a rim or a ground;
+  otherwise every collider keeps Rapier's default groups and nothing else is created, so the seven
+  older examples give the recorded bit-identical hashes (`friction.test.ts`, unchanged
+  assertions). The load-ranking change (sinks) is a no-op without a ground.
+- **Ground.** A fixed Rapier body (not one of the model's bodies: no part, never removed, not in
+  the energy guard, ignored by contact-event grouping) with one half-space collider, friction 0.4,
+  restitution 0.1. `groundY` = groundLevel + (½ − HC) at θ = 0 (bit-exact).
+  `SimOptions.groundSlopeDeg` (θ, |θ| < 90°, validated): normal (sin θ, cos θ, 0), so the floor
+  falls toward +X. "Through the point under the model's centre" was made concrete as: the plane is
+  placed to touch the model's lowest nominal point along −n (cells as unit cubes, rims as discs of
+  radius r and thickness 1), lifted by ½ − HC; `groundY` is its height under the mean cell centre.
+  A plane through a fixed pivot started a tilted wheel inside the floor, and the energy guard then
+  froze it (it read the depenetration as an energy gain). A level vehicle on a tilted floor still
+  starts on its downhill wheels and tips onto the slope; the cart incline test therefore tilts
+  gravity instead (exactly equivalent, and the cart starts on all four wheels). After landing, a
+  cart on a 15° *floor* accelerates within −0.45 % of the analytic value.
+- **Existing colliders on the half-space** (dropped from 10 units, 5 s, `wheels.test.ts`): deepest
+  impact 0.002–0.143 units (tumbling 5-hole liftarm 0.143, tumbling pin 0.138), resting sink
+  0.001–0.011 units, no body moves > 1e-3 units in the last second, none removed. Soft CCD of loose
+  bodies works with the half-space as it is; nothing needed fixing for prisms and boxes.
+- **Wheels** (shapes.ts `WheelShape`, sim.ts `addWheel`): as §5.1. Round = `ColliderDesc.cylinder`
+  (radius r − 0.04, half-length HC) rotated onto the axis, mass set explicitly to the annulus
+  π(R² − HC²)·2·HC with its analytic inertia (in the collider frame, f64 values; the engine's mass
+  and axial inertia match within 1e-4 relative), friction 0.8. Hull = 32-gon prism over the same
+  cylinder, bevel 0.02·r, density 0, friction 0.4. Groups 1/2/4/8 exactly as suggested, plus 16
+  (below).
+- **Deviation: a third, "ground guard" collider per wheel (group bit 16, meets only the ground).**
+  Rapier's cylinder–half-space contact takes the cap's support feature as 4 points when the disc
+  is near flat, so a wheel wobbling down onto its face sank up to **1.04 units** into the floor
+  (r = 4, dropped from 10 units spinning; found by the drop tests) before the hub's barrel prism
+  caught it. The guard is a bevelled 32-gon prism inscribed in the round collider, 0.12 smaller in
+  radius and 0.02 in half-length, density 0, frictionless (combine rule Min). It must never touch a
+  wheel that rolls upright: the round collider's sink grows with speed (0.006 at rest, 0.015 at
+  120 units/s, 0.063 at 330 units/s, ≈ 0.08 at the 400 cap); a 0.03 inset was hit at 150 units/s
+  and its polygon then slowed a cart on a 15° floor by 16 % and made a wheel hop. With 0.12/0.02
+  the rolling and incline numbers are identical to no guard, and the wobble is caught at
+  0.05–0.17 units. Only created with a ground.
+- **Deviation: soft CCD is kept for unjointed bodies with a rim** (§5.1 says none). Without it a
+  wheel dropped 10 units sinks a full step's travel into the ground (0.25 units) on impact, and the
+  guard was then hit too and kicked upright drops into rolling at 1–5 units/s. With it the same
+  drops sink 0.002–0.08. The spike's reason (soft CCD makes the hull fall through liftarms) did
+  not reproduce with this construction (wheel drops 2–10 units, r 1–4, axis X/Y/Z, spinning and
+  tumbling, centred / at ends / at the seam between two beams): with soft CCD 0 of 816 passed
+  through (144 onto a 15-hole beam lying flat, 672 onto a 5 × 30 liftarm floor lying flat or on
+  edge); without it 0 of 816 too. With soft CCD more wheels bounce and roll off the floor's edge
+  (123 vs 53 of 336 on the flat floor). I did not find why the spike's cases failed (its 0.05 fixed
+  bevel and separate per-beam hulls are the obvious differences). Jointed wheels (the cart) have
+  no soft CCD, as every jointed body.
+- **Wheels against parts: the full measurement** (more than `wheels.test.ts` keeps).
+  - Liftarm (5 holes) dropped onto a fixed wheel: r 1.5 / 2.5 / 4 × drop 2 / 5 / 10 units × 14
+    configurations (on edge, flat, across the wheel, on end, centred and off-centre by 1–2,
+    spinning): 126 cases, **0 passed through**; deepest vertex inside the rim 0.042 units; 9 came
+    to rest balanced on the rim, the others were deflected and fell past. The test keeps 14 of them.
+  - Loose wheel dropped onto a fixed 15-hole beam lying flat: r 1 / 1.5 / 2.5 / 4 × 2 / 5 / 10
+    units × 12 (on edge across / along the beam at holes 0, 3, 7, 13, 14, lying flat, spinning,
+    tumbling): 144 cases, **0 passed through** (deepest point inside the beam's box 0.29 units
+    without soft CCD — at the rounded ends, where the box overestimates — 0.16 with it). The test
+    keeps 12.
+  - Not measured: wheels rolling along beams (lossy by construction, §10), wheel hulls against pins
+    and axles specifically, two loose wheels' round colliders against each other beyond resting.
+  - A pendulum link (pinned at (−5, 3), friction off) striking an r = 2 wheel pinned at (0, 0): the
+    link arrives at 12.8 rad/s, rebounds at 1.49 rad/s (restitution 0.1), the wheel is kicked to
+    1.40 rad/s and then held by the link resting on its rim (static friction; the contact normal
+    of a circle passes through the axle). With the pivot at (−5, 4) the link slides off the rim
+    after 1.5 s and leaves the wheel spinning at 2.2 rad/s.
+- **Free root.** With `rootIsFixed` false no body is fixed (kinematics). In sim.ts:
+  - *Load ranking*: bodies with a horizontal-axis rim whose nominal lowest point (hub · n − r·|n
+    in the disc's plane|) is within 0.05 of the nominal floor are sinks at distance 0, in addition to
+    fixed bodies (also with a fixed root). `Simulation.isGroundSink(bodyId)` exposes it. The
+    §5.3 cart's four axle joints carry 4.1777 each = chassis / 4 = (M − Σ m_wheel)/4 exactly; the
+    lighter-body fallback gave 6.169 (×1.48; the spike's ×1.8 was for its lighter wheels).
+  - *decoupleInertia* stays restricted to mechanisms attached to a fixed body (so it does nothing
+    for a free vehicle). Tested: a free cart with a 2-cell friction pin welded in a crank hole of
+    one wheel (products of inertia 0.22 with the axle), friction off, pushed to 40 units/s: in
+    10 s no spin-up (wheel |ω| ≤ 28.3 rad/s against 27.4 for rolling), energy never above its
+    start, chassis tilt ≤ 0.004 rad, but it slows to 27.6 units/s — the eccentric wheel bumps
+    and loses energy in its ground contact.
+  - Energy guard, grab, removal, `jointStates` work unchanged (no code assumed a fixed body
+    exists; `findPlanarMechanisms` and the friction-work owner already handled it).
+  - `setBodyVelocity(bodyId, linear, angular?)`: centre-of-mass velocity (and optionally angular
+    velocity, else unchanged), dynamic live bodies only, finite vectors only; resets the energy
+    guard reference of the body's group. Returns `boolean` (false = refused), which is assignable
+    where the app expects `void`.
+- **Measured against §5.3** (`wheels.test.ts`, `cart.test.ts`):
+  - Rest, 5 s: horizontal axis moved ≤ 2.4e-3 units, sank 4.5e-3–7.4e-3, turned ≤ 2.5e-7 rad;
+    lying flat moved ≤ 7.0e-5, sank ≤ 2.6e-3.
+  - Rolling at 40 units/s over 160 units: speed within −0.09 %…+0.55 % (r 1 and 4 gain up to
+    0.5 % before the energy guard caps it; sideways drift 0.02–0.10 units).
+  - 5° / 15° floor from rest, r 1.5–4: acceleration −0.17 %…+0.02 % of g·sinθ/(1 + I/(m R²)),
+    R = r − 0.04 (the contact radius).
+  - Cart at rest 30 s: drift 4.3e-4 units, sink 9.8e-3, joint error 5.3e-7. Pushed to 40,
+    friction off: 39.99–40.46 units/s over 5 s (+1.1 %). Coasting, Realistic: 3.088 vs 3.086 units
+    from 10 units/s (+0.07 %), 49.53 vs 49.38 from 40 (+0.31 %), then ≤ 4.8e-7 units in 5 s.
+    5° / 15° (gravity tilted), friction off: −0.05 % / −0.11 %. 100 units/s, friction off, 10 s:
+    energy +0.84 % (guard removed 4 % of the kinetic energy). Two runs: identical pose hashes.
+  - Fixed root with ground: the pendulum above the floor is bit-identical to the run without a
+    floor over 3 s; a loose link lands and rests 0.010 into the floor.
+- **Known limit: native-cylinder creep at rest.** A wheel or cart resting on the half-space creeps
+  sideways and yaws by ≈ 1e-5 units/s (solver noise in the friction rows; more with fewer
+  substeps: 1e-2 units in 20 s at 30). A wheel whose tyre grips while the chassis creeps is turned
+  against its axle's stiction, so for a free vehicle the 30 s example sweep cannot use the
+  1e-4 rad "no jointed body turns" bound. `frictionExamples.ts` therefore checks, for a model with
+  no fixed body only, that every joint's *relative* rotation after coming to rest is < 1e-3 rad
+  (measured 3.9e-4 for the cart example) and the vehicle turns < 1e-3 rad and moves < 5e-3 units
+  (measured 0.023°, 1.7e-3 units in 25 s). The old examples are checked exactly as before.
+- **Cost** (ms of stepping per simulated second, best of 3 × 2 s, first 2 s of each run, loaded
+  machine): pendulum 100, four-bar 285, crank wheel 161, cart example 507 (first layout; the
+  final one measured 486 over 30 s); §5.3 cart at rest 396, rolling at 40 units/s 378, and the same
+  model with no rims and no ground (chassis fixed) 278. In the app (headless Chromium, `stepSim`,
+  wall clock around the stepping only) the crank wheel costs ≈ 130 and the cart ≈ 420 ms per
+  simulated second — at ¼× the cart needs ≈ 100 ms of physics per real second.
+- **Deviation: the grab spring presses into the ground with at most 2× the mechanism's weight**
+  (`GRAB_PRESS_LIMIT`; lifting and sideways pulls keep the full M·100 g cap). Found by the
+  integrator's owner-style session: in the default isometric view the grab plane is the view
+  plane, so dragging a cart "along the floor" puts the target below the floor. Pressing the cart
+  example's chassis toward a target 10 or 100 units below the floor for 2 s sank its pin-mounted
+  wheels (light bodies, 5.5 each) **1.05 and 1.47 units** into the floor (they came back to 0.05–0.07
+  units after release, resting on their guards); a cart with wheels welded to axles sank 0.12–0.30.
+  With the limit: 0.07 (cart example) and 0.01 (welded) at either depth, ≤ 0.02 after release
+  (`wheels.test.ts` "grabbing with a ground"). Limits 20 / 10 / 5 gave 0.37 / 0.19 / 0.14.
+- **Known failure envelope** (what is known not to work, or not measured):
+  - Pressing with the full grab force (before the limit above) pushed light wheels 1–1.5 units into
+    the floor; any other sustained force of tens of g's on a light wheel body would do the same —
+    the round collider's half-space contact is soft under large loads; the guard then holds it.
+  - A wheel wobbling down onto its face sinks up to 0.17 units before the guard catches it.
+  - Rolling sinks the round collider more the faster it rolls (≈ 0.08 units at 400 units/s), so
+    the effective rolling radius shrinks slightly with speed.
+  - Wheels rolling along beams: lossy by construction (32-gon hull), not a goal (§10).
+  - Not measured: wheel hulls against pins and axles specifically; two moving wheels' round
+    colliders against each other; wheels against parts under a sustained grab.
+  - Contact creep of ≈ 1e-5 units/s at rest on the half-space (below).
+  - The spike's soft-CCD fall-through did not reproduce, and its cause was not found.
+- **Tests changed because the spec changed** (no expectation of an old example was altered):
+  - `tests/kinematics/examples.test.ts`: the registry lists nine examples (was seven); new
+    structure tests for examples 8 and 9.
+  - `tests/physics/friction.test.ts`: the "bit for bit before joint friction" test loops over the
+    seven examples that the recorded hashes cover; "switched to off" compares the two new examples
+    with their own run created at μ = 0.
+  - `tests/physics/frictionExamples.ts`: free-vehicle creep bound (above) and motion checks for
+    examples 8–9; `tests/physics/examples.test.ts`: checks for examples 8–9.
+  - `src/app` dropped its shim for a physics module without `groundY` / `setBodyVelocity` (and the
+    test hook's `simInfo().groundFromSim`); `e2e/app-wheels` now asserts the drop and the cart
+    instead of logging them as unverified.
+  - `tests/core/wheels.test.ts` (core builder's): "rims change nothing else" grows rims on bare
+    holes only (shrinking the crank wheel's 2.5 rim to 2 splits off its crank hole).
+  - `tests/review/kinematics.review.test.ts`: "exactly one fixed body" becomes "one iff the root
+    is fixed" (§3.1 step 4 as amended; the cart has none).
+
 ## §8 Examples (`src/core/examples.ts`)
 
 - **Pendulum** starts with the link horizontal rather than hanging. A link hanging straight down
@@ -1003,6 +1396,178 @@ had a gap:
   hole of the frame. This is the only way a male can attach to a frame whose holes run along Z
   (§2.2).
 - All examples set `rootPartId` explicitly to the frame (part 1).
+
+### Wheels, ground, free root (DESIGN §8 examples 8–9)
+
+- **8 Crank wheel**: inverted-T upright in layer 0 (base y = −10, post up to the hub at (0, 0)); an
+  r = 2.5 wheel in layer 1 on a smooth pin at (0, 0) with a crank hole at (2, 2) (joined to the
+  hub by the disc only, §2.6 rule 1); a 7-hole link in layer 2 on a smooth pin in the crank hole.
+  The crank starts 45° above horizontal. Realistic: the wheel sweeps 218° in the first 2 s and is
+  at rest from 3.5–4 s at −133.6° (crank-down is −135°). Off: energy ≤ 1.00 % above its running
+  minimum (the guard removes 8.5e3 in 30 s). The upright was first only 5 cells tall (base
+  y = −5): the link, hanging crank-down, then reached y ≈ −9.3 and left the bottom of the view
+  fitted at load (seen in the app screenshots). Only the frame changed (it is fixed and in another
+  layer, so the motion is identical).
+- **9 Cart**: ground on, root free. Two 9-hole beams (z 0 and 2) bridged at both ends, a post at
+  x = 4 rising from the front beam to y = 7, four r = 1.5 wheels on their own axles (friction pin
+  in the chassis + smooth pin in the hub), and a weighted arm in layer 1 (7-hole beam + a 3×3 block
+  of holes at its end) on a smooth 2-cell pin at the post's top, starting horizontal. It swings
+  clear of the ground (reach 6.7 from a pivot 8.5 above the nominal floor), the bridges and the
+  wheels. Realistic (Node, every step): chassis x range 2.32 units in the first 4 s, at rest from
+  ≈ 4 s, tilt ≤ 1.2e-3 rad, joint error < 1e-6, nothing removed; the app e2e (sampled every 0.1 s)
+  sees 2.26 units of range and 13.9 units of back-and-forth travel in the first 2 s, wheels turning
+  up to 52°, hubs ≤ 0.016 into the floor, and every part still to 5.3e-4 units over 25–30 s.
+  The physics builder's layout (post to y = 6, 6-hole arm with a 2×2 block, arm mass 12.4) gave
+  1.54 units of range: in the app screenshots the cart's motion against the floor's lines (since removed) was
+  readable only side by side, so the arm was made longer and heavier (+50 % travel). Earlier, a
+  3-cell pivot pin broke the review test "every pin joins two parts" and a lighter arm gave
+  0.5 units.
+
+## Fixes after the three adversarial reviews (wheels physics, wheels UI, Back side + ground shadow)
+
+Each entry: what changed and why; the tests that pin it. Where an earlier entry above is
+superseded, it says so here.
+
+### §2–§4 Model, kinematics, geometry
+
+- **Rule 1 vs the drawn rim** (`src/geometry/solid.ts` `rimBridges`). Rule 1 joins every cell the
+  *nominal* disc overlaps, but the drawn rim is RIM_INSET (0.04) smaller, so a hole near the edge
+  — (2, 3) of an r 3 wheel, (2, 4) of an r 4 — rendered as a ring floating beside the wheel (2
+  shells). Now each such hole is bridged to its rim by a short web (2-D hull of a 0.36-radius circle
+  at the cell and one inside the rim on the line to the hub, ±H thick; the bore is cut afterwards).
+  The reviewer's sweep of 270 hub/crank solids: 270 single closed shells (was 262). Rule 1 itself
+  is unchanged. Test: `tests/review/wheels-sim.review.test.ts` "FIXED … crank hole … fused".
+- **Rim segments** (`src/geometry/dims.ts` `rimSegments`): about 40 per unit of radius (r 1: 48,
+  r 1.5: 60, r 2.5: 100, r 4: 160; was 48 / 64), so a segment is ≈ 0.16 units at every radius —
+  the r 1.5 tread read as a polygon at 4× the Home zoom.
+- **A free pin that is the root** (`src/core/kinematics.ts`): stays its own (fixed) body only when
+  the root is fixed. With a free root it is absorbed like any other free pin (was: 3 bodies and 2
+  revolutes whose friction load was the pin's 0.527). Test: `tests/core/wheels.test.ts` "a free pin
+  that is the root".
+- **Rim error message**: a non-finite rim reads "(got Infinity)", not "(got null)".
+- **Not changed (spec gap, documented)**: a wheel's mass counts the part's other cells that lie
+  inside the disc a second time (§5.1 says overlap is ignored). A crank hole therefore shifts the
+  centre of mass ≈ 0.1 units *toward* itself (a drilled real wheel shifts ≈ 0.04 away), and a
+  pinned wheel with a crank hole hangs hole-down on its own; an r 2.5 rim in the middle of a 7-hole
+  beam weighs 22.6 instead of ≈ 18.5. Plain wheels are exact (mass +0.05…0.3 %, I within 0.16 %).
+
+### §5 Physics
+
+- **Ground collider created first** (`Simulation` constructor: `buildGroundCollider` before
+  `buildBodies`; the joint-friction sinks still come after the bodies). Rapier's contact with a
+  half-space created *after* a body's collider drifts toward the half-space's origin like a bowl
+  (reviewer's pure-Rapier repro `spikes/review-wheels/bowl7.test.ts`): a loose r 1.5 wheel 100
+  units from the floor's pivot rolled 0.346 units in 20 s; now 1.6e-3 (the reviewer's spike
+  patch; the suite's test asserts < 0.01). Changes trajectories of models with a ground only; the
+  seven recorded hashes have none. Test: "FIXED … 100 units from the floor's pivot stays put".
+- **Floor plane at a male's free end** (constructor): the plane was exact for hole cells (±HC)
+  only; a pin or axle standing on end, or poking out below the lowest beam, reaches E_FREE = 0.48
+  and started 0.02 inside the floor (a lone standing pin gained 11 energy units). The plane is now
+  lowered to the lowest male collider point along −n (E_FREE·|n_a| + R_COLL_ROD·√(1 − n_a²) from
+  its centre); it never rises, so every model whose lowest point is a hole or a rim keeps
+  `groundY = groundLevel + 0.04` exactly. For a model standing on a male end, `sim.groundY` is
+  0.02 below the edit-mode floor the view draws (invisible). Test: "FIXED … the lowest collider
+  starts in exact contact".
+- **Known failure envelope, additions** (with the review's numbers):
+  - *A wheel lying across a beam that lies on the floor sinks into the beam.* The round collider
+    holds the wheel on the half-space while the wheel's 32-gon hull gives way against the beam's
+    edge (parry hull–hull contact; the same with the beam fixed and with soft CCD off; a 5×5 plate
+    of holes rests correctly in the same place). Built in place, r 2.5 across a 15-hole beam 1
+    unit off the hub: 0.37 units deep (of the beam's 0.46 half-width), hub at y 0.22, then at
+    rest (speed 0 at 20 s), never through, nothing removed. Drops onto a loose beam on the floor
+    (180 drops): 33 still embedded > 0.1 at 5 s, worst 0.45. Not fixed: it needs a different wheel
+    hull (convex pieces with ≤ 4-vertex caps, or a native cylinder against parts) and a re-run of
+    every wheel measurement; no special case was added. Test: "KNOWN LIMIT … sinks into the beam,
+    then rests" asserts the envelope.
+  - *A free linkage without wheels lying on the floor creeps*: a free 4-bar of beams on smooth pins
+    moves 0.037 units between 10 and 20 s (friction off: the same), against 4e-5 for a loose beam
+    and 5e-7 for the cart. It survived the two fixes above; it is contact creep of a jointed group
+    on small contact patches (sleeping is off for determinism). Test: "KNOWN LIMIT … creeps
+    slowly" asserts < 0.1 units in 10 s.
+  - *Impacts of ordinary parts* dip deeper than earlier reported: up to 0.70 units for one or two
+    steps (a 15-hole beam on end dropped 10 units, 157–280 units/s at impact; 13 of 189 drops
+    > 0.3). Nothing passes through or is removed; resting sink ≤ 0.012.
+  - The creep figure "≈ 1e-5 units/s at rest" above held only near the floor's pivot before the
+    ground-first fix; "no wheel and no part passed through the other in any configuration" is
+    true of the configurations measured, not of a wheel lying across a beam on the floor.
+- **Spec gap, documented**: joint-friction loads are fixed at Play from the wheels within 0.05 of
+  the floor then (§5.1 "Free root"). Wheels that touch down later carry no share (a cart with
+  r 1.5 front and r 2.5 rear wheels: 6.17 on the front joints, 14.52 on the rear, instead of about
+  a quarter each); the same for a vehicle set down slightly above the floor.
+
+### §6 Rendering
+
+- **Contact shadow: two lobes** (`src/view/shadowmath.ts`, `shadow.ts`, `floor.ts`; supersedes
+  the "Constants" and "groundShadowAt" bullets of "Wheels, ground, free root" above). The owner's
+  reviewer judged the single σ = 0.35 lobe "probably yes, but faintly": from the default isometric
+  view the dark footprint lies under the part that casts it, and a beam lying on the floor showed
+  only a 1-px halo. The same height field (1 − h/SHADOW_H)² is now blurred twice, into two
+  channels of the texture: a *contact* lobe (σ = SHADOW_BLUR = 0.35, opacity SHADOW_CONTACT = 0.42)
+  and a broad *ambient* lobe (σ = SHADOW_AMBIENT_BLUR = 0.9, opacity SHADOW_AMBIENT = 0.42; 16
+  linear-sampled taps per side, each two texels, exactly the per-texel Gaussian to 4 units). The
+  floor draws SHADOW_CONTACT·R + SHADOW_AMBIENT·G; strength 1 = SHADOW_MAX = 0.84 opacity under a
+  wide surface on the floor. The margin grew to 5 units (4-unit reach + 1 edge fade). Tuned by eye
+  on the Cart and the palette beams at Home (`e2e/fix-shadow-look.mjs`, `e2e/out/fix-sh-c-*.png`):
+  the skirt now shows past each wheel and under the chassis; beams lying on the floor get a soft
+  shade below them. Measured (`groundShadowAt`, 1 = 0.84 opacity): 0.634 under each Cart wheel's
+  contact line (narrow footprint: the ambient lobe is partly spent; was 0.854 of 0.42 = 0.36
+  opacity, now 0.53 opacity), 0.29 under a chassis beam, 0.14 between the beams; a beam lying on the
+  floor 0.63 at its middle, 0 by h = 3. e2e `app-shadow` and `app-examples` compare against the
+  two-lobe strip model; the review test's CPU truth (`tests/review/ux2.review.test.ts`) uses both
+  lobes.
+- **The floor over the grid**: when the floor lies above the grid's plane (y = −½, the usual case:
+  the floor is 0.04 above the lowest part's −½), it is drawn after the grid, so the shadow darkens
+  the grid lines under it instead of the lines diluting the shadow (renderOrder −90 vs −110).
+- **Beyond the maximum frame** (`clusterWindow`): with casters spread over more than 128 units,
+  the frame is no longer centred on the whole region (with two groups 130+ apart that covered
+  only the empty gap: neither got a shadow). It is the 128-unit square holding the most caster
+  footprint area (candidates centred on, or aligned with, each caster; the previous frame, then
+  the one nearest it, wins ties, so equal groups never flip and a moving group is followed).
+  What is outside still gets no shadow. Tests: `tests/view/shadow.test.ts`, e2e `app-shadow`.
+- **WebGL context restore** redraws the shadow (`shadowDirty` on `webglcontextrestored`); the
+  render targets lose their contents with the context. e2e `app-shadow` loses and restores the
+  context (it failed without the fix: 0.634 → 0).
+- **Overlay contrast** (`overlayColor`, `applyHalo` in `viewport.ts`): every hover line (face,
+  erase cell, wheel band) now has a white under-stroke 3 px wider, and a face fill, ghost or band
+  whose colour is within 0.3 (sRGB distance) of the part under the cursor switches to a
+  contrasting variant — orange for the blue accent (over a blue wheel), a dark shade of the red.
+  Back-side highlights and ghosts on the Cart's blue wheels and dark chassis were nearly
+  invisible. Test: `tests/view/overlay.test.ts` (every palette colour ≥ 0.3 from its overlay).
+
+### §7 Editor and application
+
+- **Back side: a male inside another part's hole is buried in it** (`pickBack`; supersedes
+  DESIGN §7.3's "including a male cell inside another part's hole" for this case). The pick
+  treats the hole part's cubes and discs as part of the male's solid; an interval that ends in
+  the host is no crossing of the male. So sweeping Alt along a beam with a pin through it no longer
+  lands on the pin's side faces buried in the beam: the beam's far face is picked (the owner's
+  "face under the cursor"). Unchanged: the shared-cell tie (both leave the same cube: the male only
+  through an axial face within R_ROD of the axis), and a pin proud of the beam is still pickable
+  where it sticks out. Tests: `tests/editor/backside.test.ts` (reference updated to the rule; "a
+  pin through a hole" now expects the beam's far end along the beam), `e2e/review-ux2-ref.mjs`
+  (the reviewer's marching reference, same rule).
+- **A wheel's tread refuses the build tools** (front and Back side): DESIGN resolves a tread hit
+  as the hub's lateral face, which built a cell buried inside the disc ≈ r below the cursor and,
+  for Back side, highlighted a face not under the cursor. Now: no ghost, a red hint "Part 3 · wheel
+  tread — point at the wheel's flat face or at a hole to build on a wheel" (with "· back side (±A)"
+  for Back side). Select, Wheel, Erase and grab still act on the tread. Tests:
+  `tests/editor/wheels.test.ts`, `tests/editor/backside.test.ts`.
+- **Wheel tool on a crank hole**: a bare hole wholly inside a wheel of its own part (same layer,
+  disc covers the cell) acts on that wheel's hub — it grew a hidden second disc on the crank hole.
+  Erase still erases the crank hole (it is one of the part's own cells, §7.2). Test:
+  `tests/editor/wheels.test.ts` "a bare crank hole inside its own wheel".
+- **Inspector with a free root**: no "fixed root" badge; the button reads "Set as fixed root" and
+  turns Fix root back on with this part as the root (one undo step).
+- **Fit and Home avoid the side panel**: the right 234 CSS px (the always-visible Model block and
+  the inspector) are treated as covered, and the fitted model is centred in the rest.
+- **Out of view while simulating**: when no part's box meets the view, the hint says "The model is
+  out of view · press F (Fit) to bring it back".
+- **Small text fixes**: [R] with a non-build tool says "Orientation applies to the build tools …"
+  (like N and B); G on an empty model says the floor appears under the first part; Fix root
+  messages shortened; the disabled Fix root tooltip says when the model's own setting is off; the
+  wheel hover info drops the size in mm (the Wheel hint keeps it), so the status bar fits at 1280.
+- **Not changed**: the top bar clips Friction / Help / About at 1024 px wide (DESIGN requires
+  1280 and up).
 
 ## §9 Tooling
 

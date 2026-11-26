@@ -1,32 +1,42 @@
-// Tool state and click resolution for Build / Erase / Select (DESIGN.md §7.2, §7.3). Pure.
+// Tool state and click resolution for Build / Wheel / Erase / Select (DESIGN.md §7.2, §7.3). Pure.
 //
 // See the header of ./index.ts for the contract and the orientation-cycling rule.
 import {
   AXES,
   DIRS,
+  RIM_MIN,
+  RIM_STEP,
   addCell,
   addPart,
   axisLabel,
   axisOfDir,
   canAddCell,
+  canRemoveCell,
+  canSetRim,
   cellsAt,
   defaultColorFor,
+  discCoversCell,
+  discOverlapsCell,
+  hasRim,
   isHole,
   isMale,
+  isValidRim,
   kindLabel,
   makeCell,
   mateType,
-  oppositeDir,
   partById,
   removeCell,
+  setRim,
   shareResult,
 } from '../core';
 import type { Axis, Cell, Dir, Kind, Model, Vec3i } from '../core';
+import { pickBack, pickCell } from './picking';
+import type { PickHit, Ray } from './picking';
 
 // ---------------------------------------------------------------------------------------------
 // Tools and tool state
 
-export type Tool = 'select' | 'erase' | Kind;
+export type Tool = 'select' | 'erase' | 'wheel' | Kind;
 
 /** Keyboard shortcuts (§7.2), lower-case `KeyboardEvent.key` → tool. `Escape` also selects 'select'. */
 export const TOOL_KEYS: Readonly<Record<string, Tool>> = {
@@ -37,11 +47,13 @@ export const TOOL_KEYS: Readonly<Record<string, Tool>> = {
   '3': 'axle',
   '4': 'pin',
   '5': 'frictionPin',
+  w: 'wheel',
   e: 'erase',
 };
 
+/** The five build tools (one per cell kind); not Select, Wheel or Erase. */
 export function isBuildTool(t: Tool): t is Kind {
-  return t !== 'select' && t !== 'erase';
+  return t !== 'select' && t !== 'erase' && t !== 'wheel';
 }
 
 export interface ToolState {
@@ -49,9 +61,9 @@ export interface ToolState {
   /** The "New part" toggle [N]. Shift is applied per event with `withModifiers` / `withShift`. */
   readonly newPart: boolean;
   /**
-   * The "Back side" toggle [B] (§7.3): build tools act on the far side of the hovered part, straight
-   * through from the hovered face (see farSidePick). Alt/Option is applied per event with
-   * `withModifiers`. Ignored by Select and Erase.
+   * The "Back side" toggle [B] (§7.3): build tools pick the back face under the cursor (pickBack,
+   * chosen by `buildPick`). Alt/Option is applied per event with `withModifiers`. Ignored by
+   * Select, Erase and Wheel.
    */
   readonly backSide: boolean;
   /**
@@ -154,6 +166,19 @@ export interface CellPick {
   cellIndex: number;
   /** Face entered (outward normal DIRS[dir], edit-time frame). */
   dir: Dir;
+  /**
+   * Wheels (§7.3): a hit on the flat face of a rim's disc outside the part's own cells. cellIndex
+   * is then the hub and `virtual` the grid cell G under the hit point in the hub's layer (a
+   * *virtual cell* of the wheel); dir is the flat face (∥ the hub axis).
+   */
+  virtual?: Vec3i;
+  /** Wheels (§7.3): a hit on a disc's tread; cellIndex is the hub, dir a lateral face of it. */
+  tread?: boolean;
+  /**
+   * Back side (§7.3): a back-face pick (pickBack): `dir` is the face the ray LEAVES the part
+   * through, and resolveBuild resolves it as that face hovered from behind (Proposal.backSide).
+   */
+  back?: boolean;
 }
 
 /** The minimal grid pick (a GridHit satisfies it). */
@@ -221,8 +246,8 @@ export interface Proposal {
    */
   shiftHint: string;
   /**
-   * Resolved on the far side of the hovered part (Back side, §7.3): `highlight` is then the far
-   * face and `description` ends with " · back side (−Z)" (before " — reason" when invalid).
+   * Resolved from a back-face pick (Back side, §7.3): `highlight` is the back face the ray leaves
+   * through and `description` ends with " · back side (−Z)" (before " — reason" when invalid).
    */
   backSide: boolean;
   /**
@@ -312,6 +337,8 @@ interface Attempt {
   /** Deep insert: positions of the further male cells (behind `pos`), and the parts of their holes. */
   extra?: Vec3i[];
   throughParts?: number[];
+  /** Extend into a virtual cell of a wheel (§7.3): the description says "in the wheel". */
+  inWheel?: boolean;
 }
 
 function attempt(
@@ -353,7 +380,7 @@ function describe(a: Attempt, ctx: Ctx, axis: Axis): string {
   const what = `${kindLabel(ctx.kind)} ∥ ${axisLabel(axis)}`;
   switch (a.action) {
     case 'extend':
-      return `Extend part ${a.partId} · ${what}`;
+      return `Extend part ${a.partId} · ${what}${a.inWheel ? ' in the wheel' : ''}`;
     case 'insert':
       if (a.joins) return `Extend part ${a.partId} · insert ${what} into part ${ctx.hoverPartId}`;
       if (a.extra?.length) {
@@ -428,13 +455,20 @@ function toProposal(a: Attempt, ctx: Ctx, optionsOverride?: readonly Axis[]): Pr
 export function resolveBuild(model: Model, pick: CellPick | null, grid: GridPick | null, state: ToolState): Proposal {
   if (!isBuildTool(state.tool)) return noProposal(model);
   const kind = state.tool;
-  if (pick && state.backSide) {
-    // Back side (§7.3): resolve exactly as if the far face had been hovered.
-    const far = farSidePick(model, pick);
-    if (!far) return noProposal(model);
-    const p = resolveBuild(model, far, null, { ...state, backSide: false });
-    if (p.action === 'none') return p;
-    const suffix = ` · back side (${DIR_LABELS[far.dir]})`;
+  if (pick?.back) {
+    // Back side (§7.3): resolve exactly as if the picked back face had been hovered from behind.
+    const { back: _back, ...front } = pick;
+    const p = resolveBuild(model, front, null, state);
+    const suffix = ` · back side (${DIR_LABELS[pick.dir]})`;
+    if (p.action === 'none') {
+      // a refusal with a reason (a tread exit) still says it came from Back side
+      if (p.description && p.reason) {
+        const tail = ` — ${p.reason}`;
+        p.description = `${p.description.slice(0, p.description.length - tail.length)}${suffix}${tail}`;
+        p.backSide = true;
+      }
+      return p;
+    }
     const tail = p.valid ? '' : ` — ${p.reason}`;
     const head = p.description.slice(0, p.description.length - tail.length);
     p.description = `${head}${suffix}${tail}`;
@@ -448,9 +482,24 @@ export function resolveBuild(model: Model, pick: CellPick | null, grid: GridPick
     const part = partById(model, pick.partId);
     const C = part?.cells[pick.cellIndex];
     if (!part || !C) return noProposal(model);
-    const p = resolveCellHover(model, kind, part.id, C, pick.dir, state);
+    // A wheel's tread (fixer's ruling after review, DEVIATIONS §7): DESIGN resolves it as the hub's
+    // lateral face, which builds a cell buried inside the disc, far from the cursor (and, for Back
+    // side, highlights a face that is not under the cursor). Build tools refuse it with the way to
+    // do it instead; Select, Wheel, Erase and grab still act on the tread.
+    if (pick.tread) {
+      const p = noProposal(model);
+      p.hoverPartId = part.id;
+      p.reason = "point at the wheel's flat face or at a hole to build on a wheel";
+      p.description = `Part ${part.id} · wheel tread — ${p.reason}`;
+      return p;
+    }
+    const G = pick.virtual;
+    if (G && !isVirtualCellOf(part, C, G)) return noProposal(model);
+    const resolveHover = (s: ToolState): Proposal =>
+      G ? resolveVirtualHover(model, kind, part.id, C, G, pick.dir, s) : resolveCellHover(model, kind, part.id, C, pick.dir, s);
+    const p = resolveHover(state);
     if (!state.newPart) {
-      const alt = resolveCellHover(model, kind, part.id, C, pick.dir, { ...state, newPart: true });
+      const alt = resolveHover({ ...state, newPart: true });
       const differs = !p.valid || alt.action !== p.action || alt.joins !== p.joins || alt.extraCells.length !== p.extraCells.length;
       if (alt.valid && differs) p.shiftHint = `Shift: ${alt.description}`;
     }
@@ -471,29 +520,15 @@ export function resolveBuild(model: Model, pick: CellPick | null, grid: GridPick
 export const DIR_LABELS: readonly string[] = ['+X', '−X', '+Y', '−Y', '+Z', '−Z'];
 
 /**
- * Back side (§7.3): the hover on the far side of the hovered part, straight through from the
- * hovered face. From cell C of part P entered through face n, walk in direction −n while the next
- * cell also belongs to P (only P's own cells count, so a pin in a hole walks along the pin, a beam
- * around a pin along the beam); with C' the last such cell the result is (P, C', −n). A 1-cell run
- * gives (P, C, −n). null for a stale pick (part or cell gone).
+ * The cell pick a build hover / click resolves with (§7.3): with a build tool and Back side on
+ * (`state.backSide`, the [B] toggle or Alt held via withModifiers) the back face under the cursor
+ * (pickBack), otherwise the front face (pickCell). Pass `front` when the caller already has
+ * pickCell's result for the same ray, to avoid picking twice. Grid hovers are unaffected: the back
+ * pick is null exactly when nothing is under the cursor.
  */
-export function farSidePick(model: Model, pick: CellPick): CellPick | null {
-  const part = partById(model, pick.partId);
-  const C = part?.cells[pick.cellIndex];
-  if (!part || !C) return null;
-  const index = new Map<string, number>();
-  part.cells.forEach((c, i) => index.set(`${c.x},${c.y},${c.z}`, i));
-  const n = DIRS[pick.dir]!;
-  let cellIndex = pick.cellIndex;
-  let pos: Vec3i = [C.x, C.y, C.z];
-  for (;;) {
-    const q = add3(pos, n, -1);
-    const j = index.get(`${q[0]},${q[1]},${q[2]}`);
-    if (j === undefined) break;
-    cellIndex = j;
-    pos = q;
-  }
-  return { partId: part.id, cellIndex, dir: oppositeDir(pick.dir) };
+export function buildPick(model: Model, ray: Ray, state: ToolState, front?: PickHit | null): PickHit | null {
+  if (isBuildTool(state.tool) && state.backSide) return pickBack(model, ray);
+  return front !== undefined ? front : pickCell(model, ray);
 }
 
 /**
@@ -522,6 +557,33 @@ function deepInsert(m: Model, kind: Kind, C: Cell, n: Vec3i): Attempt | null {
     return null;
   }
   return { action: 'insert', pos: cpos, partId: null, joins: false, order: [C.axis], valid: [C.axis], reasons: new Map(), extra, throughParts };
+}
+
+/**
+ * Is G a virtual cell of the wheel with hub `hub` in `part` (§7.3): the hub carries a rim whose
+ * disc overlaps G, and G is not one of the part's own cells?
+ */
+export function isVirtualCellOf(part: { cells: readonly Cell[] }, hub: Cell, G: Vec3i): boolean {
+  if (!hasRim(hub) || !isHole(hub.kind) || !isValidRim(hub.rim)) return false;
+  if (part.cells.some((c) => c.x === G[0] && c.y === G[1] && c.z === G[2])) return false;
+  return discOverlapsCell([hub.x, hub.y, hub.z], hub.axis, hub.rim, G);
+}
+
+/**
+ * Hover on a virtual cell G of the wheel whose hub is `hub` (part P), through its flat face `dir`
+ * (§7.3): a hole tool extends P with a hole *at G* (a crank hole; ∥ the hub axis first, then the
+ * other axes in [R] order); with New part it starts a new part at G + n; a male tool is invalid
+ * ("add a hole here first": a pin goes into a crank hole).
+ */
+function resolveVirtualHover(m: Model, kind: Kind, P: number, hub: Cell, G: Vec3i, dir: Dir, state: ToolState): Proposal {
+  const ctx: Ctx = { m, kind, state, highlight: { pos: G, dir }, hoverPartId: P };
+  const order = cyclicFrom(hub.axis);
+  if (isMale(kind)) return toProposal({ ...failed('extend', G, P, [hub.axis], 'add a hole here first'), inWheel: true }, ctx);
+  if (state.newPart) {
+    const T = add3(G, DIRS[dir]!);
+    return toProposal(attempt(m, 'newAdjacent', kind, T, null, preferFirst(order, occupantAxis(m, T, kind, null))), ctx);
+  }
+  return toProposal({ ...attempt(m, 'extend', kind, G, P, order), inWheel: true }, ctx);
 }
 
 function resolveCellHover(m: Model, kind: Kind, P: number, C: Cell, dir: Dir, state: ToolState): Proposal {
@@ -644,16 +706,184 @@ export function cycleOrientation(s: ToolState, p: Proposal): ToolState {
 // ---------------------------------------------------------------------------------------------
 // Erase and select
 
+// ---------------------------------------------------------------------------------------------
+// Wheels (§7.2 Wheel tool, Erase on rims)
+
+/** A band of a wheel: radii r0..r1 about the hub's axis, in the hub's layer (erase / shrink highlight). */
+export interface WheelRing {
+  hub: Vec3i;
+  axis: Axis;
+  r0: number;
+  r1: number;
+}
+
+/** "radius 1.5 (24 mm across)" — 1 unit = 8 mm, so the diameter is 16·r mm. */
+export function wheelSize(r: number): string {
+  return `radius ${r} (${Math.round(r * 16 * 100) / 100} mm across)`;
+}
+
+/** The radius after growing (bare → RIM_MIN → … ) or shrinking (… → RIM_MIN → bare = undefined) by half a unit. */
+export function nextRim(r: number | undefined, shrink: boolean): number | undefined {
+  if (!shrink) return r === undefined ? RIM_MIN : r + RIM_STEP;
+  if (r === undefined) return undefined;
+  return r - RIM_STEP < RIM_MIN ? undefined : r - RIM_STEP;
+}
+
+export interface WheelProposal {
+  /** The model this proposal was resolved against; apply() refuses any other. */
+  baseModel: Model;
+  /** Click = grow by half a unit, Shift+click = shrink (§7.2). */
+  mode: 'grow' | 'shrink';
+  valid: boolean;
+  /** Why not (status bar, red ghost). Absent when valid or when nothing is hovered. */
+  reason?: string;
+  /** The wheel's part and its hub cell (absent when nothing usable is hovered). */
+  partId?: number;
+  cellIndex?: number;
+  hub?: Cell;
+  /** Radius now and after the click (undefined = a bare hole cell, the "radius ½" wheel). */
+  from?: number;
+  to?: number;
+  /** Grow: the ghost — the hub cell with its new rim (the disc at the new radius); red when !valid. */
+  ghost: Cell | null;
+  /** Shrink: the band that would be removed (highlight it). */
+  ring: WheelRing | null;
+  /** Hovered face of the hub (or of the virtual cell). */
+  highlight: Highlight | null;
+  /** "Grow wheel · part 3 · radius 1.5 (24 mm across)", "Shrink wheel · part 3 · back to a bare pin hole", "… — reason". '' when nothing is hovered. */
+  description: string;
+  /** Parts the wheel's part becomes (1 normally; ≥ 2 when shrinking splits off cells held only by the disc). */
+  pieces: number;
+  apply(current: Model): Model;
+}
+
+function noWheel(m: Model, mode: 'grow' | 'shrink'): WheelProposal {
+  return {
+    baseModel: m,
+    mode,
+    valid: false,
+    ghost: null,
+    ring: null,
+    highlight: null,
+    description: '',
+    pieces: 0,
+    apply(): Model {
+      throw new Error('no wheel here');
+    },
+  };
+}
+
+/**
+ * The hole cell a Wheel / Erase-on-rim hover acts on: the hub for a disc hit (virtual cell or
+ * tread); the hovered hole cell; for a male cell sitting in a hole of another part (a pin or axle
+ * through a hub, picked through the hole's mouth), that hole. null for a stale pick; `male` when a
+ * lone male cell is hovered.
+ */
+function wheelTarget(m: Model, pick: CellPick): { partId: number; cellIndex: number; cell: Cell } | { male: Cell; partId: number } | null {
+  const part = partById(m, pick.partId);
+  const cell = part?.cells[pick.cellIndex];
+  if (!part || !cell) return null;
+  if (pick.virtual || pick.tread) {
+    if (!hasRim(cell) || !isHole(cell.kind)) return null;
+    if (pick.virtual && !isVirtualCellOf(part, cell, pick.virtual)) return null;
+    return { partId: part.id, cellIndex: pick.cellIndex, cell };
+  }
+  if (isHole(cell.kind)) {
+    // A bare hole wholly inside a wheel of its own part (a crank hole): the user is pointing at that
+    // wheel — growing a hidden second disc on the crank hole is never what is meant (review finding).
+    if (!hasRim(cell)) {
+      const pos: Vec3i = [cell.x, cell.y, cell.z];
+      for (let i = 0; i < part.cells.length; i++) {
+        const h = part.cells[i]!;
+        if (!hasRim(h) || !isHole(h.kind) || !isValidRim(h.rim)) continue;
+        const a = h.axis;
+        if ((a === 0 ? h.x - cell.x : a === 1 ? h.y - cell.y : h.z - cell.z) !== 0) continue;
+        if (discCoversCell([h.x, h.y, h.z], a, h.rim!, pos)) return { partId: part.id, cellIndex: i, cell: h };
+      }
+    }
+    return { partId: part.id, cellIndex: pick.cellIndex, cell };
+  }
+  const hole = cellsAt(m, [cell.x, cell.y, cell.z]).find((e) => e.partId !== part.id && isHole(e.cell.kind));
+  if (hole) return { partId: hole.partId, cellIndex: hole.index, cell: hole.cell };
+  return { male: cell, partId: part.id };
+}
+
+/**
+ * What a Wheel-tool click would do (§7.2): grow the hovered wheel's rim by half a unit
+ * (bare → 1 → 1.5 → … → 4), or with `shrink` (Shift) shrink it by half a unit (1 → bare). The
+ * hover may be a hole cell, the disc of a wheel (virtual cell or tread: that wheel), a bare hole
+ * wholly inside a wheel of its own part (that wheel), or a male cell in another part's hole (that
+ * hole). Each valid click is one setRim.
+ */
+export function resolveWheel(model: Model, pick: CellPick | null, shrink = false): WheelProposal {
+  const mode = shrink ? 'shrink' : 'grow';
+  if (!pick) return noWheel(model, mode);
+  const tg = wheelTarget(model, pick);
+  if (!tg) return noWheel(model, mode);
+  const verb = shrink ? 'Shrink wheel' : 'Grow wheel';
+  if ('male' in tg) {
+    const p = noWheel(model, mode);
+    p.reason = 'wheels grow from pin holes and axle holes';
+    p.partId = tg.partId;
+    p.description = `${verb} · part ${tg.partId} — ${p.reason}`;
+    p.highlight = { pos: [tg.male.x, tg.male.y, tg.male.z], dir: pick.dir };
+    return p;
+  }
+  const { partId, cellIndex, cell } = tg;
+  const pos: Vec3i = [cell.x, cell.y, cell.z];
+  const from = cell.rim;
+  const to = nextRim(from, shrink);
+  const base = noWheel(model, mode);
+  base.partId = partId;
+  base.cellIndex = cellIndex;
+  base.hub = cell;
+  if (from !== undefined) base.from = from;
+  base.highlight = { pos: pick.virtual ?? pos, dir: pick.dir };
+  if (shrink && from === undefined) {
+    base.reason = `this ${kindLabel(cell.kind)} has no wheel`;
+    base.description = `${verb} · part ${partId} — ${base.reason}`;
+    return base;
+  }
+  if (to !== undefined) base.to = to;
+  const ok = canSetRim(model, partId, pos, to);
+  const what = to === undefined ? `back to a bare ${kindLabel(cell.kind)}` : isValidRim(to) ? wheelSize(to) : '';
+  const head = `${verb} · part ${partId}${what ? ` · ${what}` : ''}`;
+  if (!shrink && to !== undefined && isValidRim(to)) base.ghost = makeCell(cell.x, cell.y, cell.z, cell.kind, cell.axis, to);
+  if (!ok.ok) {
+    base.reason = ok.reason;
+    base.description = `${head} — ${ok.reason}`;
+    return base;
+  }
+  const result = setRim(model, partId, pos, to);
+  const pieces = result.parts.length - model.parts.length + 1;
+  if (shrink) base.ring = { hub: pos, axis: cell.axis, r0: to ?? 0.5, r1: from! };
+  base.valid = true;
+  base.pieces = pieces;
+  base.description = pieces > 1 ? `${head} · part ${partId} splits into ${pieces} parts` : head;
+  base.apply = (current: Model): Model => {
+    if (current !== model) throw new Error(STALE_PROPOSAL);
+    return result;
+  };
+  return base;
+}
+
 export interface EraseProposal {
   /** The model this proposal was resolved against; apply() refuses any other. */
   baseModel: Model;
   valid: boolean;
+  /** Why the hovered cell cannot be erased (e.g. a pin of another part would be left inside a wheel). */
+  reason?: string;
   partId?: number;
   cellIndex?: number;
   cell?: Cell;
   /** The hovered cell (tint red) and face. */
   highlight: Highlight | null;
-  /** "Erase pin hole at (1, 0, 0) from part 3", "… · part 3 splits into 2 parts", "Erase part 3 (last cell)". */
+  /**
+   * Erase on a wheel (§7.2): set when the click removes the outer half-unit of a rim instead of a
+   * cell (hub hovered, or the disc outside the part's own cells); highlight this band, not the cell.
+   */
+  ring?: WheelRing;
+  /** "Erase pin hole at (1, 0, 0) from part 3", "… · part 3 splits into 2 parts", "Erase part 3 (last cell)", "Erase the wheel's outer half-unit · part 3 · radius 2.5 → 2". */
   description: string;
   /** Number of parts the erased part becomes (0 = part removed, 1 = shrinks, ≥2 = splits). */
   pieces: number;
@@ -674,13 +904,54 @@ function noErase(m: Model): EraseProposal {
   };
 }
 
-/** What an Erase click would do (§7.2): remove the picked sub-part; the part splits if it falls apart. */
+/**
+ * What an Erase click would do (§7.2): remove the picked sub-part; the part splits if it falls
+ * apart. On a wheel — its hub, or its disc outside the part's own cells (virtual cell / tread) —
+ * it removes the outer half-unit of the rim instead (1 → bare); once the rim is gone the next
+ * click erases the cell as usual. A hole cell holding another part's pin inside a remaining wheel
+ * of its part cannot be erased (invalid, with the reason).
+ */
 export function resolveErase(model: Model, pick: CellPick | null): EraseProposal {
   if (!pick) return noErase(model);
   const part = partById(model, pick.partId);
   const cell = part?.cells[pick.cellIndex];
   if (!part || !cell) return noErase(model);
   const pos: Vec3i = [cell.x, cell.y, cell.z];
+  if (pick.virtual || pick.tread || (hasRim(cell) && isHole(cell.kind))) {
+    if (!hasRim(cell) || (pick.virtual && !isVirtualCellOf(part, cell, pick.virtual))) return noErase(model);
+    const from = cell.rim;
+    const to = nextRim(from, true);
+    const result = setRim(model, part.id, pos, to);
+    const pieces = result.parts.length - model.parts.length + 1;
+    let description = `Erase the wheel’s outer half-unit · part ${part.id} · radius ${from} → ${to === undefined ? `bare ${kindLabel(cell.kind)}` : to}`;
+    if (pieces > 1) description += ` · part ${part.id} splits into ${pieces} parts`;
+    return {
+      baseModel: model,
+      valid: true,
+      partId: part.id,
+      cellIndex: pick.cellIndex,
+      cell,
+      highlight: { pos: pick.virtual ?? pos, dir: pick.dir },
+      ring: { hub: pos, axis: cell.axis, r0: to ?? 0.5, r1: from },
+      description,
+      pieces,
+      apply(current: Model): Model {
+        if (current !== model) throw new Error(STALE_PROPOSAL);
+        return result;
+      },
+    };
+  }
+  const can = canRemoveCell(model, part.id, pos);
+  if (!can.ok) {
+    const p = noErase(model);
+    p.reason = can.reason;
+    p.partId = part.id;
+    p.cellIndex = pick.cellIndex;
+    p.cell = cell;
+    p.highlight = { pos, dir: pick.dir };
+    p.description = `Erase ${kindLabel(cell.kind)} at ${fmt(cell)} from part ${part.id} — ${can.reason}`;
+    return p;
+  }
   const result = removeCell(model, part.id, pos);
   const pieces = part.cells.length === 1 ? 0 : result.parts.length - model.parts.length + 1;
   let description: string;
@@ -726,6 +997,8 @@ export function resolveSelect(model: Model, pick: CellPick | null): SelectPropos
  * Status-bar "hover info" for what is under the cursor, independent of the tool:
  *   "Part 3 · pin hole ∥ Z at (1, 0, 0) · holds pin (part 4)"   (a shared cell, hole side)
  *   "Part 4 · pin ∥ Z at (1, 0, 0) · in pin hole (part 3)"      (a shared cell, male side)
+ *   "Part 3 · wheel radius 2.5 ∥ Z, hub (0, 0, 0) · at (1, 1, 0)"   (a virtual cell; the size in mm is
+ *   in the Wheel tool's hint, so the hover stays short enough for the status bar at 1280 px)
  *   "Grid (2, 0, -1)"                                            (empty space over the grid)
  * '' when nothing is hovered or the pick is stale.
  */
@@ -734,7 +1007,12 @@ export function describeHover(model: Model, pick: CellPick | null, grid: GridPic
     const part = partById(model, pick.partId);
     const c = part?.cells[pick.cellIndex];
     if (!part || !c) return '';
+    if ((pick.virtual || pick.tread) && hasRim(c)) {
+      const wheel = `wheel radius ${c.rim} ∥ ${axisLabel(c.axis)}, hub ${fmt(c)}`;
+      return pick.virtual ? `Part ${part.id} · ${wheel} · at ${fmt(pick.virtual)}` : `Part ${part.id} · ${wheel} · tread`;
+    }
     let s = `Part ${part.id} · ${kindLabel(c.kind)} ∥ ${axisLabel(c.axis)} at ${fmt(c)}`;
+    if (hasRim(c)) s += ` · wheel radius ${c.rim}`;
     const mate = cellsAt(model, [c.x, c.y, c.z]).find((e) => e.partId !== part.id);
     if (mate) s += ` · ${isHole(c.kind) ? 'holds' : 'in'} ${kindLabel(mate.cell.kind)} (part ${mate.partId})`;
     return s;

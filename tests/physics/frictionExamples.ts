@@ -5,7 +5,8 @@ import { expect } from 'vitest';
 import { EXAMPLES } from '../../src/core/examples';
 import { JOINT_FRICTION, Simulation } from '../../src/physics/sim';
 import type { FrictionLevel } from '../../src/physics/sim';
-import type { Vec3 } from '../../src/physics/math';
+import { conj, qmul } from '../../src/physics/math';
+import type { Quat, Vec3 } from '../../src/physics/math';
 import { G, report, toEditFrame, where } from './helpers';
 
 export const SECONDS = 30;
@@ -31,6 +32,12 @@ export interface Sweep {
   /** After restAt: largest rotation of any jointed body (rad) and displacement of any centre of mass (units) up to SECONDS. */
   creepAngle: number;
   creepDist: number;
+  /**
+   * Free vehicles only (no fixed body, e.g. the cart on the ground; NaN otherwise): after restAt,
+   * the largest change of any joint's relative rotation (rad). For them creepAngle is the rotation
+   * of the whole vehicle on the floor, which joint stiction cannot hold (see checkSweep).
+   */
+  jointCreep: number;
   /** Energy removed by the energy guard. */
   guardRemoved: number;
   nan: boolean;
@@ -82,7 +89,55 @@ function extraCheck(name: string, level: FrictionLevel): { sample(s: Simulation)
       },
     };
   }
-  void level;
+  if (name === 'crank-wheel') {
+    // DESIGN §8 example 8: the wheel (part 2) visibly rocks in the first 2 s (sweep ≥ 30°).
+    let lo = Infinity;
+    let hi = -Infinity;
+    return {
+      sample: (s) => {
+        if (s.time > 2 + 1e-9) return;
+        const q = s.partTransform(2)!.q;
+        const a = 2 * Math.atan2(q[2], q[3]);
+        lo = Math.min(lo, a);
+        hi = Math.max(hi, a);
+      },
+      finish: () => {
+        const sweepDeg = ((hi - lo) * 180) / Math.PI;
+        if (level !== 'off') expect(sweepDeg).toBeGreaterThan(30);
+        return `wheel sweeps ${sweepDeg.toFixed(0)}° in the first 2 s`;
+      },
+    };
+  }
+  if (name === 'cart') {
+    // DESIGN §8 example 9: the chassis (part 1) visibly rolls back and forth in the first 2 s
+    // (x range ≥ 1 unit, and it reverses), and it stays on its wheels.
+    let lo = Infinity;
+    let hi = -Infinity;
+    let path = 0;
+    let last = NaN;
+    let tilt = 0;
+    return {
+      sample: (s) => {
+        const t = s.partTransform(1)!;
+        tilt = Math.max(tilt, 2 * Math.asin(Math.min(1, Math.hypot(t.q[0], t.q[1]))));
+        if (s.time > 2 + 1e-9) return;
+        const x = where(s, s.bodyOf(1)!, [4, 0, 1])[0];
+        lo = Math.min(lo, x);
+        hi = Math.max(hi, x);
+        if (!Number.isNaN(last)) path += Math.abs(x - last);
+        last = x;
+      },
+      finish: (s) => {
+        if (level !== 'off') {
+          expect(hi - lo).toBeGreaterThan(1);
+          expect(path).toBeGreaterThan(2 * (hi - lo)); // back and forth, not one way
+        }
+        expect(tilt).toBeLessThan(0.05); // never tips (rad, about a horizontal axis)
+        expect(s.graph.bodies.every((b) => s.hasBody(b.id))).toBe(true);
+        return `chassis x range ${(hi - lo).toFixed(2)} units, path ${path.toFixed(1)} units in the first 2 s, tilt ≤ ${tilt.toExponential(1)} rad`;
+      },
+    };
+  }
   return { sample: () => {}, finish: () => '' };
 }
 
@@ -152,18 +207,30 @@ export async function sweep(name: string, level: FrictionLevel): Promise<Sweep> 
   }
   let creepAngle = 0;
   let creepDist = 0;
+  const free = s.graph.bodies.every((b) => !b.fixed);
+  let jointCreep = free ? 0 : NaN;
   const atRest = history.find((h) => Math.abs(h.t - restAt) < 1e-9);
   if (atRest && restAt < SECONDS - 1e-9) {
     creepAngle = moved(atRest.p, pose(), true)[0];
     creepDist = moved(atRest.p, pose())[1];
+    if (free) {
+      const now = pose();
+      const rel = (p: Pose[], a: number, b: number): Quat => qmul(conj(p[dyn.indexOf(a)]!.q as Quat), p[dyn.indexOf(b)]!.q as Quat);
+      for (const j of s.graph.joints) {
+        const qa = rel(atRest.p, j.bodyA, j.bodyB);
+        const qb = rel(now, j.bodyA, j.bodyB);
+        const d = Math.abs(qa.reduce((acc, x, k) => acc + x * qb[k]!, 0));
+        jointCreep = Math.max(jointCreep, 2 * Math.acos(Math.min(1, d)));
+      }
+    }
   }
   const ms = performance.now() - t0;
   const summary = extra.finish(s);
-  const r: Sweep = { jerr, rise, overFloor, restAt, creepAngle, creepDist, guardRemoved: s.guardRemoved, nan, ms, extra: summary };
+  const r: Sweep = { jerr, rise, overFloor, restAt, creepAngle, creepDist, jointCreep, guardRemoved: s.guardRemoved, nan, ms, extra: summary };
   report(
     `friction ${level} ${name}: ${SECONDS} s, joint error ≤ ${jerr.toExponential(1)}, energy above running min ≤ ${(rise * 100).toFixed(2)} % of KE_max ` +
       `(${overFloor.toFixed(2)} noise floors beyond the 1 % band), at rest from ${restAt >= SECONDS - 1e-9 ? 'never' : restAt.toFixed(1) + ' s'}` +
-      (restAt < SECONDS - 1e-9 ? ` (then moves ≤ ${((creepAngle * 180) / Math.PI).toFixed(4)}°, ${creepDist.toExponential(1)} units)` : '') +
+      (restAt < SECONDS - 1e-9 ? ` (then moves ≤ ${((creepAngle * 180) / Math.PI).toFixed(4)}°, ${creepDist.toExponential(1)} units` + (free ? `, joints ≤ ${jointCreep.toExponential(1)} rad` : '') + ')' : '') +
       `, ` +
       `guard removed ${s.guardRemoved.toPrecision(3)}, ${(ms / SECONDS).toFixed(0)} ms/sim-s${summary ? '; ' + summary : ''}`,
   );
@@ -184,7 +251,16 @@ export function checkSweep(r: Sweep, atRest: boolean): void {
     // within 1e-5 rad plus a step of slip), so no jointed body turns; a loose part may still settle
     // on its contact (≤ 2e-3 units, the same with friction off). Before the stiction hold (review)
     // this allowed 0.1° of turning.
-    expect(r.creepAngle).toBeLessThan(1e-4);
+    if (Number.isNaN(r.jointCreep)) expect(r.creepAngle).toBeLessThan(1e-4);
+    else {
+      // A free vehicle (cart) rests on its tyres, and the native-cylinder contacts with the floor
+      // creep by ≈ 1e-5 units/s (DEVIATIONS §5 "Wheels, ground, free root"); a wheel whose tyre
+      // grips while the chassis creeps is turned against its axle's stiction. So the bounds are the
+      // measured creep with margin: joints ≤ 1e-3 rad (measured 2.7e-4 rad in 24 s), the vehicle
+      // ≤ 1e-3 rad and (below) 5e-3 units, i.e. ≤ 0.04 mm in 24 s at 8 mm per unit.
+      expect(r.jointCreep).toBeLessThan(1e-3);
+      expect(r.creepAngle).toBeLessThan(1e-3);
+    }
     expect(r.creepDist).toBeLessThan(5e-3);
   }
 }

@@ -12,7 +12,8 @@ import {
   runBetween,
 } from '../../src/core/examples';
 import { analyze, type Joint, type KinematicGraph } from '../../src/core/kinematics';
-import { validateModel } from '../../src/core/model';
+import { discOverlapsCell } from '../../src/core/disc';
+import { groundLevel, rootIsFixed, validateModel } from '../../src/core/model';
 import { isHole } from '../../src/core/rules';
 import type { Model } from '../../src/core/types';
 
@@ -35,7 +36,8 @@ function planarDof(g: KinematicGraph): number {
 }
 
 describe('registry', () => {
-  it('has the seven §8 examples with unique names, titles and descriptions', () => {
+  // Was "the seven §8 examples": DESIGN §8 added 8 "Crank wheel" and 9 "Cart" (wheels milestone).
+  it('has the nine §8 examples with unique names, titles and descriptions', () => {
     expect(EXAMPLES.map((e) => e.name)).toEqual([
       'pendulum',
       'triple-pendulum',
@@ -44,6 +46,8 @@ describe('registry', () => {
       'sliding-axle',
       'weld-test',
       'collision',
+      'crank-wheel',
+      'cart',
     ]);
     for (const e of EXAMPLES) {
       expect(e.title.length).toBeGreaterThan(0);
@@ -348,5 +352,54 @@ describe('collision', () => {
       const below = frame.cells.filter((f) => f.x === c.x && f.z === c.z && f.y < c.y);
       expect(below.length).toBeGreaterThan(0);
     }
+  });
+});
+
+describe('crank wheel (§8 example 8)', () => {
+  it('a fixed upright, an r = 2.5 wheel on a smooth pin, a link on a pin in a crank hole of the wheel; no ground', () => {
+    const { m, g } = graphOf('crank-wheel');
+    expect(m.ground).toBeUndefined();
+    expect(rootIsFixed(m)).toBe(true);
+    const wheel = m.parts.find((p) => p.id === 2)!;
+    const hub = wheel.cells.find((c) => c.rim !== undefined)!;
+    expect(hub.rim).toBe(2.5);
+    expect([hub.x, hub.y, hub.z, hub.axis]).toEqual([0, 0, 1, 2]);
+    // The crank hole is not face-adjacent to the hub: the disc joins it (§2.6 rule 1).
+    const crank = wheel.cells.find((c) => c !== hub)!;
+    expect(isHole(crank.kind)).toBe(true);
+    expect(discOverlapsCell([0, 0, 1], 2, 2.5, [crank.x, crank.y, crank.z])).toBe(true);
+    expect(Math.abs(crank.x - hub.x) + Math.abs(crank.y - hub.y)).toBeGreaterThan(1);
+    // Frame (+ hub pin) fixed; wheel; link (+ crank pin); two revolutes about Z, one DOF each.
+    expect(g.bodies.map((b) => b.fixed)).toEqual([true, false, false]);
+    expect(g.bodies[1]!.partIds).toEqual([2]);
+    expect(g.joints).toEqual([rev(0, 1, [0, 0, 1]), rev(1, 2, [2, 2, 1])]);
+  });
+});
+
+describe('cart (§8 example 9)', () => {
+  it('ground on, root free: no fixed body; four r = 1.5 wheels resting on the floor; an arm on a smooth pin', () => {
+    const { m, g } = graphOf('cart');
+    expect(m.version).toBe(2);
+    expect(m.ground).toBe(true);
+    expect(m.fixRoot).toBe(false);
+    expect(rootIsFixed(m)).toBe(false);
+    expect(g.bodies.every((b) => !b.fixed)).toBe(true);
+    const rims = m.parts.flatMap((p) => p.cells.filter((c) => c.rim !== undefined).map((c) => ({ id: p.id, c })));
+    expect(rims.length).toBe(4);
+    for (const { c } of rims) {
+      expect(c.rim).toBeGreaterThanOrEqual(1.5);
+      expect(c.axis).not.toBe(1);
+      expect(c.y - c.rim!).toBe(groundLevel(m)); // every wheel touches the floor
+    }
+    // Chassis (with the welded axles and the pivot pin), four wheels, the arm: five revolutes.
+    expect(g.bodies.length).toBe(6);
+    expect(g.joints.length).toBe(5);
+    expect(g.joints.every((j) => j.type === 'revolute' && j.axis === 2)).toBe(true);
+    // Nothing but the wheels reaches the floor; the swinging arm clears it (reach from the pivot
+    // plus a cell's corner stays above the floor).
+    const level = groundLevel(m)!;
+    const arm = m.parts.find((p) => p.id === 10)!;
+    const reach = Math.max(...arm.cells.map((c) => Math.hypot(c.x - 4, c.y - 6))) + Math.SQRT1_2;
+    expect(6 - reach).toBeGreaterThan(level);
   });
 });

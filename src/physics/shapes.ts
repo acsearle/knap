@@ -29,9 +29,11 @@
 //   through, 0.006 held; 0.01 holds for a 31-hole beam on a 41-hole beam).
 // - Mass properties are those of the un-bevelled prism, computed analytically and set on the
 //   collider, so the bevel changes the contact geometry only.
+// - A wheel's rim (a 'disc' primitive) becomes a WheelShape: a native cylinder for the ground and
+//   other wheels plus a 32-gon prism (bevel 0.02·r) for every other part (DESIGN §5.1 "Wheels").
 // Pure: no Rapier import.
 import type { Axis, Part } from '../core/types';
-import { HC } from '../geometry/dims';
+import { HC, RIM_COLL_INSET } from '../geometry/dims';
 import { partColliders } from '../geometry/colliders';
 import { partOrigin } from '../geometry/topology';
 import type { ColliderPrim } from '../geometry/colliders';
@@ -48,7 +50,59 @@ export interface PieceMass {
 
 export type Shape =
   | { kind: 'hull'; points: Vec3[]; mass: PieceMass } // world coordinates (edit time)
-  | { kind: 'box'; center: Vec3; halfExtents: Vec3 };
+  | { kind: 'box'; center: Vec3; halfExtents: Vec3 }
+  | WheelShape;
+
+/**
+ * A wheel's rim (DESIGN §4.3 'disc', §5.1 "Wheels"), turned by sim.ts into two colliders on the
+ * part's body:
+ *  - round: a native cylinder (`center`, `axis`, `radius`, `halfLength`) carrying `mass` — the
+ *    annulus between the hub barrel (`innerRadius`) and the rim at unit density (the hub's own
+ *    prism already carries the barrel); it meets only the ground and other wheels' round colliders;
+ *  - hull: `hull`, the circumscribed WHEEL_SEGMENTS-gon prism over the same cylinder with an
+ *    end-face bevel of WHEEL_BEVEL·r (r = the nominal rim radius), density 0; it meets only
+ *    ordinary part colliders.
+ * World coordinates (edit time), like the other shapes.
+ */
+export interface WheelShape {
+  kind: 'wheel';
+  center: Vec3;
+  axis: Axis;
+  radius: number;
+  halfLength: number;
+  innerRadius: number;
+  /** Nominal rim radius r (cell.rim). */
+  rim: number;
+  /** Unit-density annulus: volume, centre of mass (= center), inertia about it in world axes. */
+  mass: PieceMass;
+  hull: Vec3[];
+  /**
+   * Ground guard: a WHEEL_SEGMENTS-gon prism inscribed in the round collider, GUARD_INSET_R smaller
+   * in radius and GUARD_INSET_A in half-length (bevel as the hull), density 0, meeting only the
+   * ground. It never touches the floor while the wheel stands, rolls upright or lies flat, and
+   * catches a tilted wheel whose native cylinder Rapier lets sink into the half-space (measured: a
+   * wobbling r = 4 wheel 1.04 units deep; DEVIATIONS §5 "Wheels, ground, free root").
+   */
+  guard: Vec3[];
+}
+
+/** Sides of a wheel's hull prism (DESIGN §5.1 "Wheels": a 32-gon). */
+export const WHEEL_SEGMENTS = 32;
+/**
+ * End-face bevel of a wheel's hull per unit of rim radius (DESIGN §5.1: 0.02·r; Rapier's hull
+ * builder merges facets flatter than ≈ r/80…r/100 back into one face, and parry keeps only 4
+ * vertices of a face — spikes/wheels/REPORT.md §1).
+ */
+export const WHEEL_BEVEL = 0.02;
+/**
+ * Radial and axial inset of a wheel's ground guard from its round collider, units. Radial: above
+ * the round collider's sink while rolling upright, which grows with speed (measured on a half-space:
+ * 0.006 at rest, 0.015 at 120 units/s, 0.063 at 330 units/s, ≈ 0.08 at the 400 units/s cap), so the
+ * guard's polygon never touches a rolling wheel's floor. Axial: small, so a wheel tipping toward
+ * lying flat is caught after sinking ≈ 0.29·GUARD_INSET_R + 0.96·GUARD_INSET_A (17° from flat).
+ */
+export const GUARD_INSET_R = 0.12;
+export const GUARD_INSET_A = 0.02;
 
 /** Axial pull-in of the non-kept cap vertices, units. */
 export const BEVEL = 0.01;
@@ -84,7 +138,14 @@ function polyMoments(P: [number, number][]): { A: number; cu: number; cv: number
  * (v = the third axis), with bevelled end faces: vertices flagged `keep` stay at ±halfLength,
  * the others at ±(halfLength − BEVEL).
  */
-function bevelledPrism(center: Vec3, axis: Axis, u: Axis, halfLength: number, poly: { u: number; v: number; keep: boolean }[]): Shape {
+function bevelledPrism(
+  center: Vec3,
+  axis: Axis,
+  u: Axis,
+  halfLength: number,
+  poly: { u: number; v: number; keep: boolean }[],
+  bevel = BEVEL,
+): Extract<Shape, { kind: 'hull' }> {
   const v = (3 - axis - u) as Axis;
   const points: Vec3[] = [];
   for (const q of poly)
@@ -92,7 +153,7 @@ function bevelledPrism(center: Vec3, axis: Axis, u: Axis, halfLength: number, po
       const p: Vec3 = [center[0], center[1], center[2]];
       p[u] += q.u;
       p[v] += q.v;
-      p[axis] += s * (q.keep ? halfLength : halfLength - BEVEL);
+      p[axis] += s * (q.keep ? halfLength : halfLength - bevel);
       points.push(p);
     }
   const m = polyMoments(poly.map((q) => [q.u, q.v]));
@@ -133,7 +194,16 @@ function checkSegments(segments: number): void {
  * stadium of the two end barrels). Rim vertices kept at full length: for a single cylinder the
  * four nearest ±KEEP_DEG from ±u; for a run the four bounding its straight part (nearest ±90°).
  */
-export function prismShape(center: Vec3, axis: Axis, radius: number, halfLength: number, segments: number, u: Axis, runLength = 0): Shape {
+export function prismShape(
+  center: Vec3,
+  axis: Axis,
+  radius: number,
+  halfLength: number,
+  segments: number,
+  u: Axis,
+  runLength = 0,
+  bevel = BEVEL,
+): Extract<Shape, { kind: 'hull' }> {
   checkSegments(segments);
   if (u === axis) throw new Error('u must be transverse to the axis');
   const R = radius / Math.cos(Math.PI / segments);
@@ -147,7 +217,21 @@ export function prismShape(center: Vec3, axis: Axis, radius: number, halfLength:
     // Run: the +u half of the polygon sits on the last barrel (offset runLength), the −u half on the first.
     poly.push({ u: g.u + (plusU ? runLength : 0), v: g.v, keep: keepSet.has(i) });
   }
-  return bevelledPrism(center, axis, u, halfLength, poly);
+  return bevelledPrism(center, axis, u, halfLength, poly, bevel);
+}
+
+/** The wheel shape of a disc primitive at world centre `center` (see WheelShape). */
+export function wheelShape(center: Vec3, axis: Axis, radius: number, halfLength: number, innerRadius: number, rim: number): WheelShape {
+  const L = 2 * halfLength;
+  const volume = Math.PI * (radius * radius - innerRadius * innerRadius) * L;
+  const r2 = radius * radius + innerRadius * innerRadius;
+  const inertia: Vec3 = [0, 0, 0];
+  for (let k = 0; k < 3; k++) inertia[k] = k === axis ? (volume * r2) / 2 : (volume * (3 * r2 + L * L)) / 12;
+  const u = ((axis + 1) % 3) as Axis;
+  const hull = prismShape(center, axis, radius, halfLength, WHEEL_SEGMENTS, u, 0, WHEEL_BEVEL * rim).points;
+  const inR = (radius - GUARD_INSET_R) * Math.cos(Math.PI / WHEEL_SEGMENTS); // vertices at radius − GUARD_INSET_R
+  const guard = prismShape(center, axis, inR, halfLength - GUARD_INSET_A, WHEEL_SEGMENTS, u, 0, WHEEL_BEVEL * rim).points;
+  return { kind: 'wheel', center: [...center], axis, radius, halfLength, innerRadius, rim, mass: { volume, com: [...center], inertia }, hull, guard };
 }
 
 type Cyl = Extract<ColliderPrim, { shape: 'cylinder' }>;
@@ -206,6 +290,10 @@ export function partShapes(part: Part, segments: number): Shape[] {
   }
 
   for (const p of prims) {
+    if (p.shape === 'disc') {
+      out.push(wheelShape(w(p.center), p.axis, p.radius, p.halfLength, p.innerRadius, p.radius + RIM_COLL_INSET));
+      continue;
+    }
     if (p.shape === 'cylinder') {
       if (!p.male && coveredBarrel.has(p.cell)) continue;
       out.push(prismShape(w(p.center), p.axis, p.radius, p.halfLength, segments, ((p.axis + 1) % 3) as Axis));

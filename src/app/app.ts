@@ -15,7 +15,7 @@
 // included (the viewport is created with keyboard: false), after the open dialog and the open
 // Examples menu have had their say. Space on a keyboard-focused button / checkbox activates that
 // control; buttons and the checkbox clicked with the mouse are blurred so Space stays Play.
-import { effectiveRootId, emptyModel, partById, setPartColor, setRoot } from '../core';
+import { effectiveRootId, emptyModel, groundLevel, partById, rootIsFixed, setFixRoot, setGround, setPartColor, setRoot } from '../core';
 import type { Model } from '../core';
 import { EXAMPLES, buildExample, exampleByName } from '../core/examples';
 import { analyze } from '../core/kinematics';
@@ -27,6 +27,7 @@ import {
   cycleOrientation,
   deleteSelection,
   describeHover,
+  buildPick,
   duplicateSelection,
   initialToolState,
   isBuildTool,
@@ -44,6 +45,7 @@ import {
   resolveBuild,
   resolveErase,
   resolveSelect,
+  resolveWheel,
   restoreAutosave,
   rotateSelection,
   selectTool,
@@ -52,7 +54,8 @@ import {
   suggestFileName,
   withModifiers,
 } from '../editor';
-import type { CameraBasis, OpResult, Proposal, StorageLike, Tool, ToolState } from '../editor';
+import type { CameraBasis, OpResult, Proposal, StorageLike, Tool, ToolState, WheelProposal } from '../editor';
+import { HC } from '../geometry/dims';
 import { DEFAULT_FRICTION_LEVEL, JOINT_FRICTION } from '../physics';
 import type { FrictionLevel } from '../physics';
 import { Viewport, cameraBasis, defaultCamera, jointGlyphsFromGraph } from '../view';
@@ -61,6 +64,7 @@ import { Banner, aboutDialog, helpDialog } from '../ui/dialogs';
 import type { Dialog } from '../ui/dialogs';
 import { h, isActivationTarget, isTypingTarget, segButtonsOf } from '../ui/dom';
 import { Inspector } from '../ui/inspector';
+import { ModelSettings } from '../ui/modelsettings';
 import { PALETTE } from '../ui/palette';
 import { StatusBar } from '../ui/statusbar';
 import { Toolbar } from '../ui/toolbar';
@@ -83,6 +87,10 @@ export const FRICTION_MESSAGES: Readonly<Record<FrictionLevel, string>> = {
   realistic: 'Joint friction: Realistic — like real parts, a swing dies down within seconds',
 };
 const RED = '#e0322b';
+/** Simulating with nothing in view (a vehicle rolled away): how to get it back. */
+const OUT_OF_VIEW_HINT = 'The model is out of view · press F (Fit) to bring it back';
+/** CSS px at the view's right edge that the side panel covers (styles.css .side-panel: 214 + 10 + gap). */
+const SIDE_PANEL_INSET = 234;
 
 export function isFrictionLevel(v: unknown): v is FrictionLevel {
   return typeof v === 'string' && Object.prototype.hasOwnProperty.call(JOINT_FRICTION, v);
@@ -111,6 +119,8 @@ const ALT_BUILD_CODES: Readonly<Record<string, string>> = {
   KeyB: 'b',
   KeyV: 'v',
   KeyE: 'e',
+  KeyW: 'w',
+  KeyG: 'g',
   Digit1: '1',
   Digit2: '2',
   Digit3: '3',
@@ -124,6 +134,7 @@ export class App {
   readonly topbar: TopBar;
   readonly toolbar: Toolbar;
   readonly inspector: Inspector;
+  readonly modelSettings: ModelSettings;
   readonly status: StatusBar;
   readonly banner: Banner;
   readonly help: Dialog;
@@ -149,6 +160,8 @@ export class App {
   private altDown = false;
   /** The build proposal currently shown (for [R]). */
   private proposal: Proposal | null = null;
+  /** The Wheel-tool proposal currently shown. */
+  private wheelProposal: WheelProposal | null = null;
   private graphCache: { model: Model; graph: KinematicGraph } | null = null;
   private autosaveTimer = 0;
   private autosaveFailed = false;
@@ -204,13 +217,23 @@ export class App {
     });
     this.inspector = new Inspector({
       setColor: (c) => this.withSelection((id, m) => ({ ok: true, model: setPartColor(m, id, c), partId: id, message: `Part ${id} recoloured` })),
-      setRoot: () => this.withSelection((id, m) => ({ ok: true, model: setRoot(m, id), partId: id, message: `Part ${id} is now the fixed root` })),
+      // With a free root (ground on, Fix root off) this also turns Fix root on: one undo step.
+      setRoot: () =>
+        this.withSelection((id, m) =>
+          rootIsFixed(m)
+            ? { ok: true, model: setRoot(m, id), partId: id, message: `Part ${id} is now the fixed root` }
+            : { ok: true, model: setFixRoot(setRoot(m, id), true), partId: id, message: `Part ${id} is now the fixed root · Fix root: on` },
+        ),
       duplicate: () => this.withSelection((id, m) => duplicateSelection(m, id)),
       remove: () => this.withSelection((id, m) => deleteSelection(m, id)),
       rotate: (key) => {
         const cam = this.cameraBasisNow();
         this.withSelection((id, m) => rotateSelection(m, id, cam, key));
       },
+    });
+    this.modelSettings = new ModelSettings({
+      setGround: (on) => this.setGround(on),
+      setFixRoot: (on) => this.setFixRoot(on),
     });
     this.status = new StatusBar();
     this.banner = new Banner();
@@ -223,8 +246,14 @@ export class App {
       (name, msg) => this.error(`Could not read ${name}: ${msg}`, true),
     );
 
-    viewEl.append(h('div', { class: 'sim-status' }, this.simBadge, this.topbar.readout, this.topbar.slow), this.banner.el, this.inspector.el);
+    viewEl.append(
+      h('div', { class: 'sim-status' }, this.simBadge, this.topbar.readout, this.topbar.slow),
+      this.banner.el,
+      h('div', { class: 'side-panel', 'data-role': 'side-panel' }, this.modelSettings.el, this.inspector.el),
+    );
     root.replaceChildren(this.topbar.el, this.toolbar.el, viewEl, this.status.el);
+    // Fit / Home frame the model clear of the side panel (Model block, inspector) on the right.
+    vp.setFitInsetRight(SIDE_PANEL_INSET);
     document.body.append(this.help.overlay, this.about.overlay);
 
     // Start-up model: the autosave, else the default example.
@@ -334,7 +363,9 @@ export class App {
     this.vp.setModel(m);
     if (this.selection !== null && !partById(m, this.selection)) this.selection = null;
     this.vp.setSelection(this.selection !== null ? [this.selection] : []);
-    this.vp.setRootMarkerVisible(true);
+    // No "fixed" marker with a free root (§6.1, §2.6).
+    this.vp.setRootMarkerVisible(rootIsFixed(m));
+    this.updateFloor();
     this.updateKinematicsOverlay();
     this.status.setCounts(kinematicsSummary(m, this.graph()));
     this.scheduleAutosave();
@@ -406,7 +437,24 @@ export class App {
       orientationHint: editing ? (this.proposal?.orientationHint ?? '') : '',
     });
     const m = this.history.current;
-    this.inspector.update(this.selection !== null ? partInfo(m, this.selection, effectiveRootId(m)) : null, !editing);
+    this.inspector.update(this.selection !== null ? partInfo(m, this.selection, effectiveRootId(m)) : null, !editing, rootIsFixed(m));
+    this.modelSettings.update({ ground: m.ground === true, fixRoot: m.fixRoot !== false, disabled: !editing });
+  }
+
+  /**
+   * The floor in the view (§6.1 Ground, drawn the same in both modes): while simulating at the
+   * simulation's own floor level (sim.groundY); in edit mode at the same level computed from the
+   * model (groundLevel + (½ − HC), DEVIATIONS §6 "Wheels"), following every edit.
+   */
+  private updateFloor(): void {
+    const s = this.session;
+    if (this.mode === 'simulate' && s) {
+      const y = s.sim.groundY;
+      this.vp.setFloor(y === null ? null : { y });
+      return;
+    }
+    const lvl = groundLevel(this.history.current);
+    this.vp.setFloor(lvl === null ? null : { y: lvl + (0.5 - HC) });
   }
 
   private updateKinematicsOverlay(): void {
@@ -425,7 +473,9 @@ export class App {
     this.vp.setGhost(null);
     this.vp.setHoverFace(null);
     this.vp.setHoverCell(null);
+    this.vp.setHoverRing(null);
     this.proposal = null;
+    this.wheelProposal = null;
   }
 
   /** Re-resolve what the pointer is over (pointer move, model / tool / Shift / camera change). */
@@ -448,6 +498,9 @@ export class App {
     const hit = pickCell(m, ray);
     const grid = hit ? null : pickGrid(ray);
     this.status.setHover(describeHover(m, hit, grid));
+    // The colour of the part under the cursor: overlays drawn over it switch to a contrasting variant
+    // when they are close to it (overlayColor in the view).
+    const over = hit ? m.parts.find((q) => q.id === hit.partId)?.color : undefined;
     const t = this.tool.tool;
     if (t === 'select') {
       this.clearEditOverlays();
@@ -457,28 +510,58 @@ export class App {
       this.vp.setGhost(null);
       this.vp.setHoverFace(null);
       this.proposal = null;
+      this.wheelProposal = null;
       const ep = resolveErase(m, hit);
-      this.vp.setHoverCell(ep.valid && ep.highlight ? { cell: ep.highlight.pos } : null);
-      this.status.setHint(ep.description || 'Click a sub-part to erase it');
+      // On a wheel the click removes the rim's outer half-unit: highlight that band, not the cell.
+      this.vp.setHoverRing(ep.valid && ep.ring ? { ...ep.ring, over } : null);
+      this.vp.setHoverCell(ep.highlight && !ep.ring && (ep.valid || ep.reason) ? { cell: ep.highlight.pos, over } : null);
+      this.status.setHint(ep.description || 'Click a sub-part to erase it', !ep.valid && !!ep.reason);
+    } else if (t === 'wheel') {
+      this.vp.setHoverCell(null);
+      this.proposal = null;
+      const wp = resolveWheel(m, hit, this.shiftDown);
+      this.wheelProposal = wp;
+      this.showWheelProposal(wp, !!hit, over);
     } else {
       this.vp.setHoverCell(null);
-      const p = resolveBuild(m, hit, grid, this.buildState(this.shiftDown, this.altDown));
+      this.vp.setHoverRing(null);
+      this.wheelProposal = null;
+      // Back side (§7.3): the back face under the cursor (pickBack); grid only with nothing there.
+      const st = this.buildState(this.shiftDown, this.altDown);
+      const bp = buildPick(m, ray, st, hit);
+      const p = resolveBuild(m, bp, bp ? null : grid, st);
       this.proposal = p;
       if (p.action === 'none' || !p.cell) {
         this.vp.setGhost(null);
         this.vp.setHoverFace(null);
-        this.status.setHint(this.idleHint());
+        // (a refused hover with a reason, e.g. a wheel's tread, says why; otherwise the idle hint)
+        if (p.description) this.status.setHint(p.description, true);
+        else this.status.setHint(this.idleHint());
       } else {
         const xray = p.backSide;
-        this.vp.setGhost({ cell: p.cell, extra: p.extraCells, valid: p.valid, xray });
-        this.vp.setHoverFace(p.highlight ? { cell: p.highlight.pos, dir: p.highlight.dir, xray, ...(p.valid ? {} : { color: RED }) } : null);
+        this.vp.setGhost({ cell: p.cell, extra: p.extraCells, valid: p.valid, xray, over });
+        this.vp.setHoverFace(p.highlight ? { cell: p.highlight.pos, dir: p.highlight.dir, xray, over, ...(p.valid ? {} : { color: RED }) } : null);
         // On a part, say what Alt would do (unless Back side is already on).
-        const altHint = hit && !p.backSide ? 'Alt: back side' : '';
+        const altHint = hit && !p.backSide ? 'Alt: back side (the back face under the cursor)' : '';
         const aux = [p.orientationHint, p.shiftHint, altHint].filter(Boolean).join('   ');
         this.status.setHint(p.description, !p.valid, aux);
       }
     }
     this.toolbarHintSync();
+  }
+
+  /** Wheel tool hover (§7.2): the ghost disc at the new radius, or the band Shift+click removes. */
+  private showWheelProposal(wp: WheelProposal, onPart: boolean, over?: string): void {
+    this.vp.setGhost(wp.ghost ? { cell: wp.ghost, valid: wp.valid, over } : null);
+    this.vp.setHoverRing(wp.ring ? { ...wp.ring, over } : null);
+    // Without a ghost or a band (an invalid hover), a red face says where.
+    this.vp.setHoverFace(!wp.valid && !wp.ghost && wp.highlight ? { cell: wp.highlight.pos, dir: wp.highlight.dir, color: RED, over } : null);
+    if (!wp.description) {
+      this.status.setHint(this.idleHint(), false, onPart ? '' : 'Shift: shrink');
+      return;
+    }
+    const aux = wp.mode === 'grow' ? 'Shift: shrink' : 'release Shift: grow';
+    this.status.setHint(wp.description, !wp.valid, aux);
   }
 
   private lastOrientationHint = '';
@@ -496,6 +579,8 @@ export class App {
         return 'Click a part to select it';
       case 'erase':
         return 'Click a sub-part to erase it';
+      case 'wheel':
+        return 'Point at a pin hole, an axle hole or a wheel: click grows it by half a unit';
       default:
         return 'Point at a part’s face, or at the grid to start a new part';
     }
@@ -511,7 +596,7 @@ export class App {
     const hit = s.pick(this.vp.rayAt(ev.clientX, ev.clientY));
     if (!hit) {
       this.status.setHover('');
-      this.status.setHint('Drag to orbit · drag a moving part to pull it');
+      this.status.setHint(this.vp.modelInView() ? 'Drag to orbit · drag a moving part to pull it' : OUT_OF_VIEW_HINT);
       return;
     }
     const body = s.sim.bodyOf(hit.partId);
@@ -522,12 +607,22 @@ export class App {
   private setShift(on: boolean): void {
     if (this.shiftDown === on) return;
     this.shiftDown = on;
-    if (this.mode === 'edit' && isBuildTool(this.tool.tool)) this.refreshHover();
+    if (this.mode === 'edit' && (isBuildTool(this.tool.tool) || this.tool.tool === 'wheel')) this.refreshHover();
   }
 
   /** Alt/Option is held (momentary Back side). */
   get altHeld(): boolean {
     return this.altDown;
+  }
+
+  /**
+   * Test hook: the face the current build hover highlights (cell, face), whether it came from a
+   * back-face pick (Back side, §7.3) and is valid; null when no build proposal is shown.
+   */
+  get buildHighlight(): { pos: [number, number, number]; dir: number; backSide: boolean; valid: boolean } | null {
+    const p = this.proposal;
+    if (!p || p.action === 'none' || !p.highlight) return null;
+    return { pos: [...p.highlight.pos], dir: p.highlight.dir, backSide: p.backSide, valid: p.valid };
   }
 
   private setAlt(on: boolean): void {
@@ -564,13 +659,29 @@ export class App {
     }
     if (t === 'erase') {
       const ep = resolveErase(m, hit);
-      if (!ep.valid) return;
+      if (!ep.valid) {
+        if (ep.reason) this.error(`Can’t erase here: ${ep.reason}`);
+        return;
+      }
       this.history.push(ep.apply(m));
       this.info(ep.description.replace(/^Erase/, 'Erased'));
       return;
     }
-    const grid = hit ? null : pickGrid(ray);
-    const p = resolveBuild(m, hit, grid, this.buildState(e.shiftKey, e.altKey));
+    if (t === 'wheel') {
+      const wp = resolveWheel(m, hit, e.shiftKey);
+      if (!wp.description) return;
+      if (!wp.valid) {
+        this.error(`Can’t ${wp.mode} the wheel: ${wp.reason ?? 'not possible'}`);
+        return;
+      }
+      this.history.push(wp.apply(m));
+      this.info(wp.description.replace(/^Grow wheel/, 'Grew wheel').replace(/^Shrink wheel/, 'Shrank wheel'));
+      return;
+    }
+    const st = this.buildState(e.shiftKey, e.altKey);
+    const bp = buildPick(m, ray, st, hit);
+    const grid = bp ? null : pickGrid(ray);
+    const p = resolveBuild(m, bp, grid, st);
     if (p.action === 'none') return;
     if (!p.valid) {
       this.error(`Can’t place here: ${p.reason ?? 'not possible'}`);
@@ -615,13 +726,29 @@ export class App {
       return;
     }
     this.tool = setBackSide(this.tool, !this.tool.backSide);
-    this.info(this.tool.backSide ? 'Back side: on — clicks build on the far side of the part you point at' : 'Back side: off');
+    this.info(this.tool.backSide ? 'Back side: on — builds on the back face under the cursor' : 'Back side: off');
     this.refreshUI();
     this.refreshHover();
   }
 
+  /** While simulating: when the whole model has left the view, say how to find it (once per change). */
+  private outOfViewHint(): void {
+    if (this.mode !== 'simulate') return;
+    const out = !this.vp.modelInView();
+    if (out === this.wasOutOfView) return;
+    this.wasOutOfView = out;
+    if (out) this.status.setHint(OUT_OF_VIEW_HINT);
+    else if (this.lastHover) this.refreshHover();
+    else this.status.setHint('Drag to orbit · drag a moving part to pull it');
+  }
+  private wasOutOfView = false;
+
   cycleOrientation(): void {
     if (!this.editable()) return;
+    if (!isBuildTool(this.tool.tool)) {
+      this.info('Orientation applies to the build tools: pick one (1–5) first, then press R');
+      return;
+    }
     const p = this.proposal;
     if (!p || p.options.length < 2) {
       this.info(p ? 'No other orientation is valid here' : 'Point at a face or the grid first, then press R');
@@ -643,6 +770,43 @@ export class App {
     );
     this.refreshUI();
     this.refreshHover();
+  }
+
+  /** Model setting (§7.4): the ground floor. One undo step; edit mode only. */
+  setGround(on: boolean): void {
+    if (!this.editable()) {
+      this.refreshUI(); // put the checkbox back
+      return;
+    }
+    const m = this.history.current;
+    const m2 = setGround(m, on);
+    if (m2 === m) return;
+    this.history.push(m2);
+    this.info(
+      on
+        ? m2.parts.length
+          ? 'Ground: on — a floor under the model, at its lowest point'
+          : 'Ground: on — the floor appears under the first part you build'
+        : 'Ground: off — nothing under the model',
+    );
+  }
+
+  /** Model setting (§7.4): fix the root part (true, default) or leave every part free (a vehicle). */
+  setFixRoot(on: boolean): void {
+    if (!this.editable()) {
+      this.refreshUI();
+      return;
+    }
+    const m = this.history.current;
+    if (m.ground !== true) {
+      this.refreshUI();
+      this.info('Fix root applies with the ground on: without a floor the root is always fixed (G turns the ground on)');
+      return;
+    }
+    const m2 = setFixRoot(m, on);
+    if (m2 === m) return;
+    this.history.push(m2);
+    this.info(on ? 'Fix root: on — the root part is fixed' : 'Fix root: off — nothing fixed; the model can roll');
   }
 
   setShowKinematics(on: boolean): void {
@@ -785,7 +949,10 @@ export class App {
           this.speed,
           {
             fail: (msg) => this.simFailed(msg),
-            readout: (t, slow) => this.topbar.setSimReadout(t, slow),
+            readout: (t, slow) => {
+              this.topbar.setSimReadout(t, slow);
+              this.outOfViewHint();
+            },
           },
           { ...opts, jointFriction: JOINT_FRICTION[this.friction] },
         );
@@ -802,7 +969,9 @@ export class App {
         s.setJointFriction(JOINT_FRICTION[this.friction]);
         this.session = s;
         this.mode = 'simulate';
+        this.wasOutOfView = false;
         this.vp.setGridVisible(false);
+        this.updateFloor();
         this.banner.hide();
         const joints = s.sim.graph.joints;
         if (joints.length > 0 && joints.every((j) => j.type === 'revolute' && j.axis === 1)) {
@@ -840,6 +1009,7 @@ export class App {
     this.vp.showAllParts();
     this.vp.setGridVisible(true);
     this.mode = 'edit';
+    this.updateFloor();
     this.info('Stopped · back to the model as edited');
     this.refreshUI();
     this.refreshHover();
@@ -1024,6 +1194,7 @@ export class App {
       toolKey !== undefined ||
       lower === 'n' ||
       lower === 'b' ||
+      lower === 'g' ||
       lower === 'r' ||
       lower === 'd' ||
       key === 'Delete' ||
@@ -1045,6 +1216,7 @@ export class App {
       this.selectTool(toolKey);
     } else if (lower === 'n') this.toggleNewPart();
     else if (lower === 'b') this.toggleBackSide();
+    else if (lower === 'g') this.setGround(this.history.current.ground !== true);
     else if (lower === 'r') this.cycleOrientation();
     else if (this.selection === null) {
       if (key === 'Delete' || key === 'Backspace' || key === '[' || key === ']' || lower === 'd') this.info('Select a part first (V, then click it)');

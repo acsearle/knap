@@ -14,7 +14,9 @@
 //   switch (toolState.tool) {
 //     case 'select': resolveSelect(model, hit)        // { partId | null, description }
 //     case 'erase':  resolveErase(model, hit)         // red highlight of hit cell, description
-//     default:       proposal = resolveBuild(model, hit, grid, withModifiers(toolState, { shift: ev.shiftKey, alt: ev.altKey }))
+//     default:       const st = withModifiers(toolState, { shift: ev.shiftKey, alt: ev.altKey })
+//                    const bp = buildPick(model, ray, st, hit)   // = pickBack(model, ray) with Back side, else hit
+//                    proposal = resolveBuild(model, bp, bp ? null : grid, st)
 //                    // draw proposal.cell as a ghost in proposal.ghostColor (red when !valid),
 //                    // tint proposal.highlight face, show proposal.description (+ orientationHint,
 //                    // + shiftHint when non-empty)
@@ -70,6 +72,25 @@
 // opts.filter(part) → boolean: rejected parts are never returned; a male whose hole partner is
 // rejected is picked through its own cube. A ray entering exactly through a cube edge or corner
 // (tied slabs) reports the first tied face whose neighbour cell is empty (edit-time frame).
+// Wheels: each rim is also picked as its nominal disc. A disc hit strictly nearer than every cube
+// gives the hub (cellIndex / cell / pos) plus `virtual: G` (flat face: the grid cell under the hit in
+// the hub's layer, never a cell of the part) or `tread: true` (round surface: dir = the hub's lateral
+// face nearest the hit's radial direction, so it resolves as that hub face). Cubes win ties.
+// pickBack(model, ray, opts?) → PickHit | null — Back side (§7.3): the nearest point where the ray
+// LEAVES a part's solid (the face it would hit with front faces culled and back faces drawn). Each
+// part's solid = the union of ALL its cell cubes (a male inside another part's hole included) and
+// its rim discs; faces between two cells of the same part, or a disc and the part's own cubes, are
+// never crossings. Per part, the [tIn, tOut] spans of every cube / disc crossed are merged where they
+// touch or overlap; the first merged span's end is the part's first exit (for a concave part the
+// FIRST exit, not the last). Result fields as pickCell's but for the exit: dir / normal = the face
+// left through (outward, pointing away from the viewer: the ray goes on into pos + DIRS[dir]),
+// t / point / localPoint = the exit point, back: true. A far flat disc face gives `virtual` = the grid
+// cell under the exit point; the tread gives the hub with `tread: true` and dir = its lateral face
+// nearest the exit point's radial direction. Ties: inside a part a cube before a disc, then the lower
+// cell index; between parts leaving the same shared cell, as for the front pick (the male iff the
+// exit is through an axial face strictly within R_ROD of the axis, else the hole), else lower part id;
+// an exit through an edge / corner reports the first tied face whose neighbour is not the part's own.
+// opts.transform / opts.filter as for pickCell. Null exactly when pickCell is null (nothing crossed).
 // pickGrid(ray) → GridHit | null — plane y = −½; pos = [round(x), 0, round(z)] (halves round up);
 // null if parallel or behind; dir = 2 from above, 3 from below.
 //
@@ -90,11 +111,15 @@
 // considered, else Extend/New adjacent), with `reason` from canAddCell / shareResult or a precise
 // precondition message ("the pin hole at (1, 0, 0) already holds a pin (part 4)").
 //
-// Back side (§7.3): with state.backSide and a cell pick, resolveBuild resolves exactly as if
-// farSidePick(model, pick) had been hovered (walk from C along −n while the next cell belongs to the
-// SAME part P; hover (P, C', −n)) — same priority order, [R], Shift / New part — and then sets
-// proposal.backSide = true and inserts " · back side (−Z)" (the far face's direction) at the end
-// of the description, before " — reason" when invalid. Grid hovers and Select / Erase ignore it.
+// Back side (§7.3): the CALLER picks — buildPick(model, ray, state, hit?) returns pickBack(model, ray)
+// for a build tool with state.backSide (the [B] toggle, or Alt via withModifiers), else the front
+// pick. resolveBuild itself goes by the pick, not by state.backSide: a pick with `back: true` (P, C, n)
+// resolves exactly as if face n of C had been hovered from behind — same priority order, [R], Shift
+// / New part, validity and reasons (T = C + n lies beyond the face, away from the viewer; a back face
+// that abuts another part is still picked and the usual rules decide) — and then sets
+// proposal.backSide = true and inserts " · back side (−Z)" (DIR_LABELS[n]) at the end of the
+// description, before " — reason" when invalid; a Shift hint gets the same suffix. Grid hovers and
+// Select / Erase / Wheel ignore Back side (they take pickCell's hit).
 //
 // Insert joining (DEVIATION, see docs/DEVIATIONS.md §7): without newPart, if the cell behind the
 // hole (C − n, the far side from the viewer) holds a coaxial male of a part other than P, the
@@ -118,9 +143,9 @@
 //   If T already holds exactly one cell of another part of the opposite class (male for a hole
 //   tool or vice versa), its axis is moved to the front (coaxial preference).
 // proposal.options = the valid candidates in that order.
-// Note: with cube picking, T = C + n is crossed by the ray before C, so T never holds another
-// part's cell on a real hover; the coaxial preference above only shows when resolveBuild is
-// called with a synthetic pick. (The Insert-join rule is what handles "the target is occupied".)
+// Note: with front picking, T = C + n is crossed by the ray before C, so T never holds another
+// part's cell on a real front hover; with a back-face pick (Back side) it can — the ray may leave P
+// straight into another part — and then the coaxial preference and canAddCell's reasons apply.
 //
 // ORIENTATION CYCLING RULE. The cycling state is ToolState.axisPref: Axis | null (an axis, not an
 // index). For every hover the ghost's axis is axisPref if axisPref ∈ options, else options[0]
@@ -143,7 +168,7 @@
 // on grid the −Y face of the grid cell), description (status-bar sentence; invalid:
 // "<what> — <reason>"), options, orientationHint ("[R] 2/3" or ''), shiftHint (without newPart:
 // "Shift: <description>" when Shift would do a different valid thing — another action, join, or
-// number of cells — else ''), backSide (resolved on the far side, see above),
+// number of cells — else ''), backSide (resolved from a back-face pick, see above),
 // apply(current) → { model, partId } (throws if invalid or current !== baseModel).
 //
 // resolveErase(model, pick) → { baseModel, valid, partId, cellIndex, cell, highlight, description,

@@ -20,7 +20,7 @@ None of these is fatal. Problem 1 needs an engineering answer before gears ship,
 I touched nothing under `src/`, `tests/`, `e2e/`, `docs/` or `spikes/coupling/`, and ran no git commands. My files are all `.mjs` under `spikes/skeptic/`, which `npm test` does not include. The load average was 15–35 on 10 cores throughout, so all ms figures are inflated; the ratios between them are more reliable.
 
 ### How to run
-From `/Users/antony/Desktop/knap.nosync`, each with `node spikes/skeptic/<script>`:
+From the project root, each with `node spikes/skeptic/<script>`:
 - `s1_pendulum.mjs [secs=120]`
 - `s2_load.mjs [stiff] [thresh] [backdrive]`
 - `s3_backdrive_energy.mjs`

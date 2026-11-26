@@ -6,6 +6,9 @@ pins and friction pins — placed on a cubic grid. knap works out which parts ar
 and which can turn or slide against each other, and simulates the result at real scale under
 gravity. It is a tool, not a game: orthographic, instruction-style drawing, compact neutral UI.
 
+**Try it in a browser:** <https://acsearle.github.io/knap/> — nothing to install. Start with
+Examples → Cart, press Play and drag it about.
+
 > **Disclaimer.** knap is an independent project. It is not affiliated with, endorsed by, or an
 > official product of the LEGO Group. "LEGO" and "Technic" are trademarks of the LEGO Group.
 
@@ -23,7 +26,7 @@ of the view cube to snap the view; Home (`Home`) gives the default isometric vie
 frames the selection or everything.
 
 **Building.** Pick a tool — Select `V`/`Esc`, Pin hole `1`, Axle hole `2`, Axle `3`, Pin `4`,
-Friction pin `5`, Erase `E`. A translucent ghost shows what a click would add and the status bar
+Friction pin `5`, Wheel `W`, Erase `E`. A translucent ghost shows what a click would add and the status bar
 says it in words ("Extend part 3 · pin hole ∥ Z"); red means not possible, with the reason.
 - Click the grid to start a new part (its holes run along Z, so a beam stands upright). Click a
   face of a part to *extend* it; a pin tool on the mouth of an empty hole *inserts* a pin, pushing
@@ -33,10 +36,36 @@ says it in words ("Extend part 3 · pin hole ∥ Z"); red means not possible, wi
 - `R` cycles the ghost through its other valid orientations.
 - Hold `Shift` (or toggle **New part** with `N`) to start a separate part instead of extending the
   clicked one.
-- Hold `Alt`/`Option` (or toggle **Back side** with `B`) to build on the far side of the part you
-  point at, straight through from the face under the cursor — no need to orbit round it. `R`, `N`
-  and the tool keys still work while `Alt` is held.
+- Hold `Alt`/`Option` (or toggle **Back side** with `B`) to build on the **back face under the
+  cursor**: the face the pointer would hit if the front faces of the parts were see-through. Its
+  highlight and the ghost are drawn through the part, and moving the mouse walks the highlight over
+  the part's back faces — no need to orbit round it. For a part with nothing in front of it this is
+  where the line of sight leaves that part (for an L or U shape, where it first leaves it). A pin
+  or axle inside a beam's hole counts as part of the beam here, so the beam's far face is picked
+  through it. `R`, `N` and the tool keys still work while `Alt` is held.
 - Erase removes one sub-part; a part that falls apart is split into separate parts.
+- **Wheels.** A wheel is not a separate kind of part: it is a pin hole or an axle hole (its *hub*)
+  with a solid disc grown round it, one cell thick, and it belongs to the hub's part like any other
+  cell. An axle-hole hub on an axle turns with the axle; a pin-hole hub on a smooth pin turns on it.
+  With the Wheel tool (`W`), click a pin hole or an axle hole to grow it into a wheel,
+  half a unit of radius per click (radius 1 to 4, i.e. 16–64 mm across; the ghost shows the new
+  disc, red with the reason if it would hit another part); `Shift`+click shrinks it again. Click a
+  wheel's face, tread or a crank hole inside it to grow that wheel. Erase on a wheel removes its outer half-unit (the band is
+  highlighted) and, once the rim is gone, the hole itself. A hole tool on a wheel's face adds a
+  *crank hole* to it, which a pin can then go into; a pin or axle tool there says "add a hole
+  here first". The build tools do nothing on a wheel's tread (the status bar says to point at its
+  flat face or a hole). Each wheel carries an index mark (a painted groove) so its rotation is visible.
+- **Model settings** (the *Model* block at the top of the right-hand panel, edit mode only, saved
+  in the file, undoable): **Ground** (`G`) puts a floor under the model at its lowest point (it
+  follows the model as you edit; drawn the same way in edit and simulate mode, as a barely darker
+  tint and a soft contact shadow under whatever is close to it — nothing is drawn on it, so it
+  cannot be confused with the building grid);
+  **Fix root** off (only with the ground on) leaves every part free, for vehicles — the status bar
+  then says "(none fixed)" and the fixed-root marker disappears. Without the ground the root part
+  is always fixed (a model with nothing fixed would just fall away).
+- **A vehicle**, for example: a 7-hole beam, an axle through the hole at each end (insert with the
+  Axle tool, extend it, `Alt`-click for the far end), an axle hole slid onto each axle end, each
+  grown to radius 1.5 with the Wheel tool; Ground on, Fix root off, Play, and drag the beam.
 - To close a loop (a four-bar), build the two links so that their end holes are stacked, then
   push one pin into the front hole: it goes on through the hole behind and pins them together.
 - Select a part to recolour it (the inspector's swatches; the top-bar palette is the colour for
@@ -49,8 +78,11 @@ says it in words ("Extend part 3 · pin hole ∥ Z"); red means not possible, wi
 
 **Files.** New, Open… (`⌘/Ctrl+O`, a `.knap.json` file), Save (`⌘/Ctrl+S`, downloads
 `.knap.json`). The model is autosaved in the browser and restored on the next visit; without an
-autosave knap starts with the four-bar example. The Examples menu has a pendulum, a triple
-pendulum, a four-bar and a parallelogram linkage, a sliding axle, a weld test and a collision test.
+autosave knap starts with the four-bar example. A model that uses wheels, the ground or a free root
+is saved as file version 2; version 1 files open unchanged. The Examples menu has a pendulum, a triple
+pendulum, a four-bar and a parallelogram linkage, a sliding axle, a weld test, a collision test, a
+crank wheel (a wheel on a fixed upright turned by a link hanging from a crank hole) and a cart
+(a free vehicle on the ground that rolls back and forth under a swinging arm).
 
 **Show kinematics** (`K`) tints each rigid body in its own colour and draws a glyph on every joint
 axis (ring = revolute, ring + double arrow = cylindrical, double arrow = prismatic), so you can see
@@ -88,8 +120,12 @@ cannot turn the mechanism (drag it instead).
   The root part (the lowest id unless you set one) is fixed in space.
 - **Physics.** One rigid body per analysed body, one joint per joint; bodies that share a joint do
   not collide with each other (a pin overlaps its hole), all other bodies collide. Gravity is real
-  (9.81 m/s²), so a 4 cm pendulum swings with a ~0.4 s period. There is no ground; bodies that
-  fall 400 units below the model are removed.
+  (9.81 m/s²), so a 4 cm pendulum swings with a ~0.4 s period. There is no ground unless the
+  model's Ground setting is on; bodies that fall 400 units below the model are removed.
+- **Wheels and ground.** A wheel's disc blocks other parts like any cell (it may not overlap another
+  part or another part's wheel; a pin or axle of another part may go through its hub or a crank
+  hole), but adds no joints. In the physics a wheel is a true cylinder against the ground (and
+  against other wheels), so it rolls; against beams, pins and axles it is a 32-sided prism.
 
 ## Engines
 
@@ -149,8 +185,35 @@ From `docs/DEVIATIONS.md` §5 (physics):
   machine). With the per-frame budget of 8 ms that is about 8 jointed bodies at 1× and about 30 at
   the default ¼×; larger mechanisms run slower than the chosen speed and show "can't keep up".
 
+Wheels, ground and vehicles (`docs/DEVIATIONS.md` §5, §7):
+- Wheels roll properly only on the ground (and against other wheels). Against beams and other
+  parts a wheel is a 32-sided polygon, so a wheel rolling along a beam bumps and slows quickly.
+- No gears yet (toothed rims that mesh), no tyres as separate parts, no sloped or uneven ground,
+  no motors: a vehicle moves only by gravity or by dragging it.
+- Wheels sink slightly into the floor (≈ 0.006 units at rest, up to ≈ 0.08 when rolling very fast,
+  up to ≈ 0.17 when a wheel wobbles down onto its face); a resting cart creeps by ≈ 1e-5 units/s.
+- A wheel lying across a beam that lies on the floor sinks into the beam's edge (≈ 0.37 of the
+  beam's 0.46 half-thickness), then rests there; it does not pass through. A free linkage without
+  wheels lying on the floor creeps a few hundredths of a unit per 10 s.
+- Falling parts can dip up to ≈ 0.7 units into the floor for a step or two on a hard impact;
+  nothing falls through.
+- Dragging presses into the floor with at most twice the model's weight (more pushed light wheels
+  through it). The drag plane faces the camera, so from the default isometric view a drag "along
+  the floor" also pulls the vehicle toward you; drag from the FRONT view to roll it straight.
+- The camera does not follow a vehicle; a fast one rolls out of view (the status bar then says so:
+  press `F` to bring it back).
+- A free vehicle costs ≈ 0.4–0.5 s of physics per simulated second (the cart example), so at 1×
+  it runs slower than real time; at the default ¼× it needs ≈ 0.1 s of physics per second.
+
 Editor and app:
 - Picking is against cell cubes, so a part hidden behind another can only be reached by orbiting.
+  A wheel is picked as its nominal disc (radius r, one cell thick), not its exact mesh.
+- The floor is unbounded: seen from above, in the orthographic view, its tint fills the whole
+  background. The contact shadow is a soft blob under everything less than 3 units above the floor
+  (darkest where a part touches it, with a broader soft skirt around), the same from every
+  viewpoint; it covers at most 128 units across — for a model spread wider than that it covers the
+  128-unit square holding most of the parts, and parts outside it cast none. Seen from below the
+  floor is not drawn; edge-on it is a line.
 - A part's solid is rebuilt (CSG) on the main thread whenever its cells change, so each click on
   a large part waits for that rebuild: ≈ 0.16 s for a 16×16 plate of pin holes, 0.5 s when holes
   run along two axes, 0.7–2.3 s at 32×32 (1024 cells; Node, dev machine). Many small parts stay
@@ -181,8 +244,9 @@ npm run e2e -- app-build app-sim     # run some e2e scripts (E2E_NO_BUILD=1 reus
 ```
 
 The app e2e scripts (`e2e/app-*.e2e.mjs`) drive the real UI with Playwright mouse and keyboard
-events: building a pendulum from scratch, every example in edit and simulate mode, undo/redo of
-every edit, files and autosave, grabbing in simulate mode, layout. They use the debug hook
+events: building a pendulum from scratch, every example in edit and simulate mode (the crank wheel
+and the cart run to rest), building and growing wheels, undo/redo of every edit, files and
+autosave, grabbing in simulate mode, layout. They use the debug hook
 `window.__knap` (see `src/app/testhook.ts`) only to read state and find screen positions.
 Headless Chromium renders with SwiftShader (software WebGL), so frames are slow there (≈ 3–6 fps
 at 1280×720); the scripts pause the simulation and use `stepSim` where they need determinism.
@@ -205,6 +269,7 @@ docs/          DESIGN.md (specification), DEVIATIONS.md (decisions)
 
 ## License
 
-The project's own licence is not chosen yet (TBD by the owner). The build writes the licences of
+knap's own code is under the BSD Zero Clause License (0BSD, see `LICENSE`): do anything you like
+with it, no attribution required, no warranty. The build writes the licences of
 the bundled third-party code (three.js — MIT; Rapier and manifold-3d — Apache-2.0) to
 `dist/THIRD_PARTY_LICENSES.txt`; ship that file with `dist/`.

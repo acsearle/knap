@@ -15,6 +15,8 @@ export const ICONS = {
   pin: s('<path d="M4.5 7h11l1.5 1.5v3L15.5 13h-11L3 11.5v-3z"/>'),
   // friction pin: rod with ridges
   frictionPin: s('<path d="M4.5 7h11l1.5 1.5v3L15.5 13h-11L3 11.5v-3z"/><path d="M6.5 10h7" stroke-width="2.2"/>'),
+  // a wheel: rim, hub hole and its index mark
+  wheel: s('<circle cx="10" cy="10" r="7.5"/><circle cx="10" cy="10" r="2.1"/><path d="M12.4 10h4.4" stroke-width="1.8"/>'),
   erase: s('<path d="M11.8 3.8 16.6 8.6 9.2 16H5.6L3.4 13.8z"/><path d="M7.6 8 12.4 12.8M9.2 16H17"/>'),
   newPart: s('<rect x="2.5" y="6.5" width="8" height="8" rx="1.5"/><path d="M14.5 3.5v6M11.5 6.5h6"/>'),
   // a face seen from the front, the face behind it dashed, an arrow straight through

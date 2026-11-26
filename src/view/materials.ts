@@ -3,6 +3,7 @@
 // generous camera-relative hemisphere ambient, so no face goes dark and curved surfaces read as
 // curved. No shadows, no environment, no gloss. Lighting is computed in linear space.
 import * as THREE from 'three';
+import { markColor } from './markpaint';
 
 /** Lighting constants (view space: +x right, +y up, +z toward the viewer). */
 export const LIGHT = {
@@ -13,14 +14,18 @@ export const LIGHT = {
 };
 
 const PART_VERT = /* glsl */ `
+attribute float aMark;
 varying vec3 vNormal;
+varying float vMark;
 void main() {
   vNormal = normalize(normalMatrix * normal);
+  vMark = aMark;
   gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
 }`;
 
 const PART_FRAG = /* glsl */ `
 uniform vec3 uColor;
+uniform vec3 uMarkColor;
 uniform vec3 uTint;
 uniform float uTintAmount;
 uniform vec3 uKey;
@@ -29,12 +34,14 @@ uniform float uAmbTop;
 uniform float uAmbBottom;
 uniform float uOpacity;
 varying vec3 vNormal;
+varying float vMark;
 void main() {
   vec3 n = normalize(vNormal);
   if (!gl_FrontFacing) n = -n;
   float amb = mix(uAmbBottom, uAmbTop, n.y * 0.5 + 0.5);
   float diff = max(dot(n, uKey), 0.0);
-  vec3 base = mix(uColor, uTint, uTintAmount);
+  // the wheels' index mark (markpaint.ts): painted in a contrasting shade
+  vec3 base = mix(mix(uColor, uMarkColor, vMark), uTint, uTintAmount);
   vec3 c = base * (amb + uKeyStrength * diff);
   gl_FragColor = vec4(c, uOpacity);
   #include <colorspace_fragment>
@@ -46,6 +53,7 @@ export function createPartMaterial(color: string): THREE.ShaderMaterial {
     fragmentShader: PART_FRAG,
     uniforms: {
       uColor: { value: new THREE.Color(color) },
+      uMarkColor: { value: new THREE.Color(markColor(color)) },
       uTint: { value: new THREE.Color('#2f8cff') },
       uTintAmount: { value: 0 },
       uKey: { value: LIGHT.key },
@@ -95,6 +103,11 @@ export function createGhostMaterial(hidden: boolean): THREE.ShaderMaterial {
     depthTest: true,
     depthFunc: hidden ? THREE.GreaterDepth : THREE.LessEqualDepth,
     side: THREE.FrontSide,
+    // Pulled slightly toward the viewer: a ghost coplanar with existing geometry (a wheel's ghost
+    // disc over the current wheel's faces) is then consistently the visible variant, not z-fighting.
+    polygonOffset: true,
+    polygonOffsetFactor: -1,
+    polygonOffsetUnits: -4,
   });
 }
 

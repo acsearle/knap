@@ -1,4 +1,4 @@
-// Left toolbar (§7.2): Select, the five build tools, Erase, plus the "New part" toggle [N], the
+// Left toolbar (§7.2): Select, the five build tools, Wheel, Erase, plus the "New part" toggle [N], the
 // "Back side" toggle [B] (§7.3) and the orientation cycler [R]. Shortcuts are shown on the buttons.
 import type { Tool } from '../editor';
 import { button, h, icon } from './dom';
@@ -25,6 +25,8 @@ interface ToolDef {
   label: string;
   key: string;
   icon: string;
+  /** Extra tooltip text after "Label (key)". */
+  tip?: string;
 }
 
 /** Toolbar order, labels and shortcuts: the one list of tools in the UI (keys: editor TOOL_KEYS). */
@@ -35,6 +37,7 @@ export const TOOL_DEFS: readonly ToolDef[] = [
   { tool: 'axle', label: 'Axle', key: '3', icon: ICONS.axle },
   { tool: 'pin', label: 'Pin', key: '4', icon: ICONS.pin },
   { tool: 'frictionPin', label: 'Friction pin', key: '5', icon: ICONS.frictionPin },
+  { tool: 'wheel', label: 'Wheel', key: 'W', icon: ICONS.wheel, tip: 'click a pin hole, axle hole or wheel to grow it by half a unit; Shift+click shrinks it' },
   { tool: 'erase', label: 'Erase', key: 'E', icon: ICONS.erase },
 ];
 
@@ -50,14 +53,14 @@ export class Toolbar {
     for (const d of TOOL_DEFS) {
       const b = button([icon(d.icon), h('span', { class: 'key' }, d.key)], {
         class: 'tool',
-        title: `${d.label} (${d.key}${d.tool === 'select' ? ' / Esc' : ''})`,
+        title: `${d.label} (${d.key}${d.tool === 'select' ? ' / Esc' : ''})${d.tip ? ` — ${d.tip}` : ''}`,
         'aria-label': d.label,
         'data-tool': d.tool,
         onclick: () => on.selectTool(d.tool),
       });
       this.buttons.set(d.tool, b);
       this.el.append(b);
-      if (d.tool === 'select' || d.tool === 'frictionPin') this.el.append(h('span', { class: 'sep' }));
+      if (d.tool === 'select' || d.tool === 'wheel') this.el.append(h('span', { class: 'sep' }));
     }
     this.el.append(h('span', { class: 'sep' }));
     this.newPartBtn = button([icon(ICONS.newPart), h('span', { class: 'key' }, 'N')], {
@@ -70,7 +73,7 @@ export class Toolbar {
     });
     this.backSideBtn = button([icon(ICONS.backSide), h('span', { class: 'key' }, 'B')], {
       class: 'tool small',
-      title: 'Back side (B) — build on the far side of the part you point at, straight through from the face under the cursor. Hold Alt / Option for one click.',
+      title: 'Back side (B) — build on the back face under the cursor: the face the pointer would hit if you could see through the front of the parts. Hold Alt / Option for one click.',
       'aria-label': 'Back side',
       'aria-pressed': 'false',
       'data-action': 'back-side',
@@ -93,7 +96,7 @@ export class Toolbar {
       b.setAttribute('aria-pressed', String(on));
       b.disabled = s.disabled;
     }
-    const build = s.tool !== 'select' && s.tool !== 'erase';
+    const build = s.tool !== 'select' && s.tool !== 'erase' && s.tool !== 'wheel';
     this.newPartBtn.disabled = s.disabled || !build;
     this.newPartBtn.classList.toggle('on', s.newPart && build);
     this.newPartBtn.setAttribute('aria-pressed', String(s.newPart));

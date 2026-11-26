@@ -21,6 +21,8 @@
  *   Run all:          npm run e2e
  *   Run some:         npm run e2e -- smoke example     (matches e2e/<name>.e2e.mjs)
  *   Skip the build:   E2E_NO_BUILD=1 npm run e2e        (reuse existing dist/)
+ *   Own build dir:    E2E_DIST=e2e/out/me-dist npm run e2e   (build into / serve that directory instead
+ *                     of dist/, so concurrent runs on one machine do not overwrite each other's build)
  *   Watch it:         E2E_HEADED=1 npm run e2e
  *
  * USING THE HELPERS DIRECTLY (e.g. a one-off script run with `node e2e/foo.mjs`):
@@ -42,10 +44,12 @@ import { build, preview } from 'vite';
 
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 export const OUT_DIR = join(ROOT, 'e2e', 'out');
+/** The build that is served: dist/, or $E2E_DIST (relative to the project root). */
+export const DIST_DIR = process.env.E2E_DIST ? resolve(ROOT, process.env.E2E_DIST) : join(ROOT, 'dist');
 
-/** Production build of the app into dist/ (quiet). */
+/** Production build of the app into DIST_DIR (quiet). */
 export async function buildApp() {
-  await build({ root: ROOT, logLevel: 'warn' });
+  await build({ root: ROOT, logLevel: 'warn', build: { outDir: DIST_DIR, emptyOutDir: true } });
 }
 
 /** Find a free TCP port on 127.0.0.1. */
@@ -62,12 +66,13 @@ export function freePort() {
   });
 }
 
-/** Serve dist/ with vite preview on a free port. Returns { url, close }. */
+/** Serve DIST_DIR with vite preview on a free port. Returns { url, close }. */
 export async function startServer() {
   const port = await freePort();
   const server = await preview({
     root: ROOT,
     logLevel: 'warn',
+    build: { outDir: DIST_DIR },
     preview: { host: '127.0.0.1', port, strictPort: true, open: false },
   });
   const url = `http://127.0.0.1:${port}/`;

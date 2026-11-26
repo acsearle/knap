@@ -52,6 +52,17 @@
 //   setGhost({cell: Cell, extra?: Cell[], valid, xray?} | null)   translucent real geometry of a one-cell
 //                                   sub-part (with extra: of that multi-cell new part); accent
 //                                   when valid, red when not; parts of it behind geometry are fainter
+//   setHoverRing({hub, axis, r0, r1, color?='#e0322b'} | null)   a band of a wheel (Erase on a rim,
+//                                   Shift+Wheel): translucent annulus over its faces and tread
+//   setFloor({ y } | null)          ground floor (§6.1), the same in every mode: unbounded plane at
+//                                   y, a barely darker tint + a contact shadow under the parts near
+//                                   it (shadow.ts / shadowmath.ts) seen from above, nothing from
+//                                   below, a line edge-on; behind parts, outlines and the grid;
+//                                   full-screen shader (floor.ts), so never clipped. getFloor().
+//                                   groundShadowAt(x, z): the shadow's strength there (0…1, 1 =
+//                                   SHADOW_MAX), read back; shadowInfo(): its render count, frame.
+//                                   The shadow texture re-renders only when a pose, the model,
+//                                   visibility or the floor level changed — never for the camera.
 //   setGridVisible(bool)            faint grid on y = −½ (cell boundaries) + coloured axis lines
 //                                   (x=0 blue, z=0 red); hide while simulating
 //   setRootMarkerVisible(bool)      small ground-hatch "fixed" mark hung below an anchor cell of
@@ -154,12 +165,27 @@ export type {
   Ghost,
   HoverCell,
   HoverFace,
+  HoverRing,
   QuatLike,
   Vec3Like,
   ViewportOptions,
   ViewportPointerEvent,
 } from './viewport';
 export { jointGlyphsFromGraph } from './glyphs';
+export { FLOOR_EDGE_Y, FLOOR_TINT, SHADOW_COLOR, floorEdgeAlpha } from './floor';
+export {
+  SHADOW_BLUR,
+  SHADOW_H,
+  SHADOW_MAX,
+  SHADOW_MAX_EXTENT,
+  SHADOW_TEXEL,
+  SHADOW_TEX_MAX,
+  fitFrame,
+  gaussianKernel,
+  shadowStrength,
+} from './shadowmath';
+export type { ShadowFrame } from './shadowmath';
+export type { FloorState } from './floor';
 export type { JointGlyph } from './glyphs';
 export {
   VIEW_DIRS,

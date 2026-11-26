@@ -4,7 +4,7 @@
 // Layout conventions: mechanisms move in the XY plane (holes along Z, gravity −Y); every link
 // sits in its own Z layer where it could otherwise sweep through a neighbour, and every pin is
 // exactly as long as the stack of layers it joins.
-import { addPart, emptyModel, makeCell, setRoot } from './model';
+import { addPart, emptyModel, makeCell, setFixRoot, setGround, setRoot } from './model';
 import type { Axis, Cell, HoleKind, Kind, MaleKind, Model } from './types';
 
 export type P3 = readonly [number, number, number];
@@ -243,6 +243,60 @@ function collision(): Model {
   return b.root(frame).build();
 }
 
+/**
+ * 8. Crank wheel: an inverted-T upright (base y = −10, post up to the hub at (0, 0)) in layer 0; an
+ * r = 2.5 wheel in layer 1 on a smooth pin at (0, 0) with a crank hole at (2, 2) (joined to the hub
+ * by the disc, §2.6 rule 1); a 7-hole link in layer 2 hanging from a smooth pin in the crank hole.
+ * The crank starts 45° above horizontal, so the link's weight turns the wheel, which rocks about
+ * crank-down for several seconds. No ground. The upright is tall enough that the link, hanging
+ * crank-down (lowest end y ≈ −9.3), stays above the base, inside the view fitted at load.
+ */
+function crankWheel(): Model {
+  const b = new ModelBuilder();
+  const frame = b.add([...beam([-2, -10, 0], [2, -10, 0]), ...beam([0, -9, 0], [0, 0, 0])], C.frame);
+  b.add([makeCell(0, 0, 1, 'pinHole', 2, 2.5), makeCell(2, 2, 1, 'pinHole', 2)], C.yellow); // wheel + crank hole
+  b.add(beam([2, 2, 2], [2, -4, 2]), C.red); // link
+  b.add(pin([0, 0, 0], [0, 0, 1])); // axle of the wheel
+  b.add(pin([2, 2, 1], [2, 2, 2])); // crank pin
+  return b.root(frame).build();
+}
+
+/**
+ * 9. Cart: ground on, root free. Chassis = two 9-hole beams (z = 0 and z = 2, holes along Z)
+ * bridged by pin holes at both ends (x = 0 and 8, z = 1), with a post rising from the middle of the
+ * front beam (x = 4, z = 0, up to y = 7). Four wheels (r = 1.5, single pin holes at z = −1 and
+ * z = 3, x = 0 and 8), each on its own axle: a friction pin welded in the chassis plus a smooth pin
+ * in the hub. A weighted arm in layer 1 (a 7-hole beam with six holes around its end, a 3×3 block)
+ * hangs on a smooth pin from the top of the post, starting horizontal: it falls and swings, clear
+ * of the ground, the bridges and the wheels, and the cart rolls back and forth under it until
+ * joint friction brings both to rest. (Arm and post sized so the chassis travels ≈ 2.3 units in
+ * the first seconds, enough to read against the wheels' marks and the contact shadow; the first,
+ * shorter arm gave 1.5.)
+ */
+function cartExample(): Model {
+  const b = new ModelBuilder();
+  const chassis = b.add(
+    [
+      ...beam([0, 0, 0], [8, 0, 0]),
+      ...beam([4, 1, 0], [4, 7, 0]),
+      cell([0, 0, 1], 'pinHole', 2),
+      cell([8, 0, 1], 'pinHole', 2),
+      ...beam([0, 0, 2], [8, 0, 2]),
+    ],
+    C.frame,
+  );
+  for (const x of [0, 8])
+    for (const [zc, zw] of [[0, -1], [2, 3]] as const) {
+      b.add([makeCell(x, 0, zc, 'frictionPin', 2), makeCell(x, 0, zw, 'pin', 2)]); // axle
+      b.add([makeCell(x, 0, zw, 'pinHole', 2, 1.5)], C.blue); // wheel
+    }
+  const arm = [...beam([4, 7, 1], [10, 7, 1])];
+  for (const x of [8, 9, 10]) for (const y of [6, 8]) arm.push(cell([x, y, 1], 'pinHole', 2));
+  b.add(arm, C.red);
+  b.add(pin([4, 7, 0], [4, 7, 1])); // pivot
+  return setFixRoot(setGround(b.root(chassis).build(), true), false);
+}
+
 export interface Example {
   /** Stable identifier (used by loadExample and tests). */
   name: string;
@@ -293,6 +347,18 @@ export const EXAMPLES: readonly Example[] = [
     title: 'Collision',
     description: 'A double pendulum whose lower link strikes a peg on the fixed frame, and a loose beam that falls onto the frame.',
     build: collision,
+  },
+  {
+    name: 'crank-wheel',
+    title: 'Crank wheel',
+    description: 'A wheel of radius 2.5 on a smooth pin in a fixed upright, with a link hanging from a crank hole: the link turns the wheel, which rocks to rest crank-down.',
+    build: crankWheel,
+  },
+  {
+    name: 'cart',
+    title: 'Cart',
+    description: 'A free cart on the ground (nothing fixed): four wheels of radius 1.5 under a chassis with a weighted arm on a smooth pin. The arm falls and swings, and the cart rolls back and forth under it.',
+    build: cartExample,
   },
 ];
 

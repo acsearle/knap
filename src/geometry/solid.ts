@@ -5,7 +5,7 @@
 import Module from 'manifold-3d';
 import type { CrossSection, Manifold, ManifoldToplevel } from 'manifold-3d';
 import manifoldWasmUrl from 'manifold-3d/manifold.wasm?url';
-import { DIRS, axisOfDir, cellKey, isHole, isMale } from '../core';
+import { DIRS, axisOfDir, cellKey, cellPos, discOverlapsCell, isHole, isMale } from '../core';
 import type { Axis, Cell, Dir, Part } from '../core';
 import {
   CHAMFER,
@@ -16,7 +16,10 @@ import {
   R_BORE,
   R_RIDGE,
   R_ROD,
+  RIM_CHAMFER,
+  RIM_INSET,
   SEGMENTS,
+  rimSegments,
   W_BORE,
   W_RIDGE,
   W_ROD,
@@ -24,14 +27,16 @@ import {
 import {
   PartGrid,
   analyzeCells,
+  isHub,
   localCenter,
   minusDir,
   partOrigin,
   partSignature,
   plusDir,
+  rimMarks,
   rodExtent,
 } from './topology';
-import type { CellTopo, Vec3 } from './topology';
+import type { CellTopo, RimMark, Vec3 } from './topology';
 
 export interface MeshData {
   /** xyz per vertex, part-local frame (world = local + origin). */
@@ -143,12 +148,12 @@ function extrudeCS(s: Scope, cs: CrossSection, height: number): Manifold {
 }
 
 /** Revolve a profile (x = radius, y = height) a full turn about Z without leaking. */
-function revolveProfile(s: Scope, prof: [number, number][]): Manifold {
+function revolveProfile(s: Scope, prof: [number, number][], segments = SEGMENTS): Manifold {
   const w = getWasm();
   const cs = s.t(new w.CrossSection([prof]));
   const p = toPolygonsVec(cs);
   try {
-    return s.t((w as unknown as RawBindings)._Revolve(p, SEGMENTS, 360));
+    return s.t((w as unknown as RawBindings)._Revolve(p, segments, 360));
   } finally {
     p.delete();
   }
@@ -454,6 +459,131 @@ function maleRod(s: Scope, run: CellTopo[], ctr: Vec3): Manifold {
   return place(s, rod, c.axis, ctr);
 }
 
+// ---- wheels (§4.2) ------------------------------------------------------------------------
+
+/**
+ * Rim positive (Z frame, centred on the hub): a disc of radius r − RIM_INSET over [−H, +H] with a
+ * 45° chamfer of RIM_CHAMFER on both edges, revolved from the axis (it fills the hub; the hub's
+ * and crank holes' bores are subtracted afterwards with all other bores).
+ */
+function zrim(s: Scope, r: number): Manifold {
+  const R = r - RIM_INSET;
+  const c = RIM_CHAMFER;
+  return revolveProfile(
+    s,
+    [
+      [0, -H],
+      [R - c, -H],
+      [R, -H + c],
+      [R, H - c],
+      [R - c, H],
+      [0, H],
+    ],
+    rimSegments(r),
+  );
+}
+
+/**
+ * Webs joining a rim to each hole cell of the part in its layer that rule 1 joins to it (the nominal
+ * disc overlaps the cell) but whose barrel the drawn rim (radius r − RIM_INSET) does not reach: the
+ * 2-D hull of a circle at the cell's centre and one inside the rim on the line to the hub, ±H thick.
+ * The cell's bore is subtracted afterwards like every bore.
+ */
+function rimBridges(s: Scope, part: Part, w: Cell, origin: Vec3): Manifold[] {
+  const h = w.axis;
+  const r = w.rim!;
+  const R = r - RIM_INSET;
+  const out: Manifold[] = [];
+  const hub: [number, number, number] = [w.x, w.y, w.z];
+  for (const c of part.cells) {
+    if (c === w || !isHole(c.kind) || c[axKey(h)] !== w[axKey(h)]) continue;
+    if (!discOverlapsCell(hub, h, r, [c.x, c.y, c.z])) continue;
+    const [du, dv] = to2D(h, [c.x - w.x, c.y - w.y, c.z - w.z]);
+    const d = Math.hypot(du, dv);
+    if (d - H < R - 0.05) continue; // the rim reaches the barrel
+    const CS = getWasm().CrossSection;
+    const BR = 0.36;
+    const k = Math.max(0, R - 0.4) / d;
+    const a = s.t(s.t(CS.circle(BR, SEGMENTS)).translate([du, dv]));
+    const b = s.t(s.t(CS.circle(BR, SEGMENTS)).translate([du * k, dv * k]));
+    const hull = s.t(CS.hull([a, b]));
+    out.push(place(s, s.t(extrudeCS(s, hull, 2 * H).translate([0, 0, -H])), h, localCenter(w, origin)));
+  }
+  return out;
+}
+
+/** The mark direction in the Z frame of orient(h) (a unit vector along ±x or ±y). */
+function markDir2D(mk: RimMark): [number, number] {
+  const [u, v] = to2D(mk.axis, mk.dir);
+  return [u + 0, v + 0];
+}
+
+/** Overlap volume (cubic studs) above which a mark probe counts as covered by other material. */
+const MARK_PROBE_VOL = 1e-6;
+
+/**
+ * Cutters of the index mark (Z frame, centred on the hub): a rectangular groove MARK_W wide and
+ * MARK_D deep in both flat faces from MARK_R0 to just past the edge, and across the tread (unless
+ * RimMark.tread says a cell of the part continues past the edge there). Rectangular so that its
+ * walls are creases (separate smooth patches), which the outline pass always draws (§6.1).
+ * Each cutter comes with a probe: the region just outside the surface it opens onto (the 0.06
+ * gap above a face, the band just beyond the tread). If other material of the part fills the
+ * probe, buildSolid leaves that cutter out (it would make a sealed cavity or a slot).
+ */
+function zmarkCutters(s: Scope, mk: RimMark): { cut: Manifold; probe: Manifold }[] {
+  const [mx, my] = markDir2D(mk);
+  const hw = mk.width / 2;
+  const over = 0.02;
+  const box = (r0: number, r1: number, z0: number, z1: number): Manifold => {
+    // radial [r0, r1] along (mx, my), tangential ±hw
+    const a: Vec3 = [mx * r0, my * r0, z0];
+    const b: Vec3 = [mx * r1, my * r1, z1];
+    const lo: Vec3 = [Math.min(a[0], b[0]), Math.min(a[1], b[1]), z0];
+    const hi: Vec3 = [Math.max(a[0], b[0]), Math.max(a[1], b[1]), z1];
+    if (mx === 0) {
+      lo[0] = -hw;
+      hi[0] = hw;
+    } else {
+      lo[1] = -hw;
+      hi[1] = hw;
+    }
+    return zbox(s, lo, hi);
+  };
+  const gap = 2 * (0.5 - H);
+  const out = [
+    { cut: box(mk.r0, mk.r1 + over, H - mk.depth, H + over), probe: box(mk.r0, mk.r1 + over, H, H + gap) },
+    { cut: box(mk.r0, mk.r1 + over, -H - over, -H + mk.depth), probe: box(mk.r0, mk.r1 + over, -H - gap, -H) },
+  ];
+  if (mk.tread) out.push({ cut: box(mk.r1 - mk.depth, mk.r1 + over, -H - over, H + over), probe: box(mk.r1, mk.r1 + gap, -H, H) });
+  return out;
+}
+
+/**
+ * Is the end cap of hole cell t's bore on side d (a disc of radius R_BORE at the bore's end,
+ * ½ + 2·EPS from the centre) entirely inside the material of a rim of the part? Only a hole whose
+ * axis lies in a wheel's plane, in the wheel's layer, can be capped that way; a bore capped at both
+ * ends would be a sealed cavity (see buildSolid).
+ */
+function capInRim(t: CellTopo, d: Dir, hubs: readonly Cell[]): boolean {
+  const c = t.cell;
+  const a = c.axis;
+  const sgn = DIRS[d]![a]!;
+  for (const w of hubs) {
+    const h = w.axis;
+    if (h === a || c[axKey(h)] !== w[axKey(h)]) continue;
+    const other = (3 - a - h) as Axis;
+    const u0 = c[axKey(a)] - w[axKey(a)] + sgn * (0.5 + 2 * EPS);
+    const v0 = Math.abs(c[axKey(other)] - w[axKey(other)]) + R_BORE;
+    const R = w.rim! - RIM_INSET - RIM_CHAMFER;
+    if (u0 * u0 + v0 * v0 < R * R) return true;
+  }
+  return false;
+}
+
+function axKey(a: Axis): 'x' | 'y' | 'z' {
+  return a === 0 ? 'x' : a === 1 ? 'y' : 'z';
+}
+
 /**
  * Build the part's solid inside scope s (the result is owned by s).
  *
@@ -464,7 +594,7 @@ function maleRod(s: Scope, run: CellTopo[], ctr: Vec3): Manifold {
  * Everything else goes through the general 3D CSG. `fast = false` forces the 3D path everywhere
  * (tests check that the two agree).
  */
-function buildSolid(s: Scope, part: Part, fast = true): Manifold | null {
+function buildSolid(s: Scope, part: Part, fast = true, marks = true): Manifold | null {
   if (part.cells.length === 0) return null;
   const M = getWasm().Manifold;
   const origin = partOrigin(part);
@@ -475,10 +605,21 @@ function buildSolid(s: Scope, part: Part, fast = true): Manifold | null {
   const slabs = new Map<string, Slab>();
   const sameKind = (a: CellTopo, b: Cell): boolean => b.kind === a.cell.kind;
   const sameHoleAxis = (a: CellTopo, b: Cell): boolean => isHole(b.kind) && b.axis === a.cell.axis;
+  // Wheels (§4.2): hole cells under a rim's disc (the hub included) take the 3D path, so that
+  // their bores are cut after the rim is united (the 2D path subtracts bores before that).
+  const hubs = part.cells.filter(isHub);
+  const underRim = new Set<CellTopo>();
+  if (hubs.length) {
+    for (const t of topo) {
+      if (!isHole(t.cell.kind)) continue;
+      const p = cellPos(t.cell);
+      if (hubs.some((w) => discOverlapsCell(cellPos(w), w.axis, w.rim, p))) underRim.add(t);
+    }
+  }
   const prism = new Set<CellTopo>();
   if (fast) {
     for (const run of axialRuns(topo, (t) => isHole(t.cell.kind), sameHoleAxis)) {
-      if (!isPrismRun(run, grid)) continue;
+      if (!isPrismRun(run, grid) || run.some((t) => underRim.has(t))) continue;
       for (const t of run) prism.add(t);
       const h = run[0]!.cell.axis;
       const z0 = localCenter(run[0]!.cell, origin)[h];
@@ -498,7 +639,11 @@ function buildSolid(s: Scope, part: Part, fast = true): Manifold | null {
   const sealed = new Set<CellTopo>();
   for (const run of holeRuns) {
     const h = run[0]!.cell.axis;
-    if (blindAt(run[0]!, minusDir(h)) && blindAt(run[run.length - 1]!, plusDir(h))) for (const t of run) sealed.add(t);
+    const first = run[0]!;
+    const last = run[run.length - 1]!;
+    const closed0 = blindAt(first, minusDir(h)) || capInRim(first, minusDir(h), hubs);
+    const closed1 = blindAt(last, plusDir(h)) || capInRim(last, plusDir(h), hubs);
+    if (closed0 && closed1) for (const t of run) sealed.add(t);
   }
   for (const t of topo) {
     const ctr = localCenter(t.cell, origin);
@@ -510,7 +655,34 @@ function buildSolid(s: Scope, part: Part, fast = true): Manifold | null {
     positives.push(maleRod(s, run, localCenter(run[0]!.cell, origin)));
   for (const run of holeRuns) positives.push(barrelRun(s, run, localCenter(run[0]!.cell, origin)));
   for (const slab of slabs.values()) positives.push(slabSolid(s, slab));
-  const pos = positives.length === 1 ? positives[0]! : s.t(M.union(positives));
+  let pos: Manifold;
+  if (hubs.length === 0) {
+    pos = positives.length === 1 ? positives[0]! : s.t(M.union(positives));
+  } else {
+    const rimSolids = hubs.map((w) => place(s, zrim(s, w.rim), w.axis, localCenter(w, origin)));
+    // Rule 1 (§2.6) joins every cell the *nominal* disc overlaps; the drawn rim is RIM_INSET smaller,
+    // so a hole near the rim's edge (e.g. (2, 3) of an r 3 wheel) would float beside it as a separate
+    // shell. Bridge each such cell to its rim with a short web (review finding; DEVIATIONS §4).
+    for (const w of hubs) rimSolids.push(...rimBridges(s, part, w, origin));
+    const base = positives.length === 0 ? null : positives.length === 1 ? positives[0]! : s.t(M.union(positives));
+    pos = s.t(M.union(base ? [base, ...rimSolids] : rimSolids));
+    if (marks) {
+      rimMarks(part, grid).forEach((mk, i) => {
+        // Everything of the part except this rim: a groove (or its opening) covered by such
+        // material would be a sealed cavity or a slot through it, so that piece of the mark is
+        // left out (see zmarkCutters).
+        const rest = [...(base ? [base] : []), ...rimSolids.filter((_, j) => j !== i)];
+        const others = rest.length === 0 ? null : rest.length === 1 ? rest[0]! : s.t(M.union(rest));
+        for (const { cut, probe } of zmarkCutters(s, mk)) {
+          if (others) {
+            const hit = s.t(others.intersect(place(s, probe, mk.axis, mk.center)));
+            if (hit.volume() > MARK_PROBE_VOL) continue;
+          }
+          bores.push(place(s, cut, mk.axis, mk.center));
+        }
+      });
+    }
+  }
   let solid = pos;
   if (bores.length > 0) {
     const cut = bores.length === 1 ? bores[0]! : s.t(M.union(bores));
@@ -538,9 +710,9 @@ export interface SolidStats {
 }
 
 /** Diagnostics of the raw CSG result (tests). */
-export function partSolidStats(part: Part, opts: { fast?: boolean } = {}): SolidStats {
+export function partSolidStats(part: Part, opts: { fast?: boolean; marks?: boolean } = {}): SolidStats {
   return withScope((s) => {
-    const m = buildSolid(s, part, opts.fast ?? true);
+    const m = buildSolid(s, part, opts.fast ?? true, opts.marks ?? true);
     if (!m) return { volume: 0, genus: 0, status: 'NoError', numTri: 0, numVert: 0 };
     return { volume: m.volume(), genus: m.genus(), status: m.status(), numTri: m.numTri(), numVert: m.numVert() };
   });

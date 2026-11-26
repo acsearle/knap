@@ -166,7 +166,7 @@ describe('validateModel: every failure mode', () => {
 
   it('structure: model not an object, version, parts not array', () => {
     expect(codes(null as unknown as Model)).toEqual(['structure']);
-    expect(validateModel({ ...emptyModel(), version: 2 } as unknown as Model)[0]!.message).toMatch(/version/);
+    expect(validateModel({ ...emptyModel(), version: 3 } as unknown as Model)[0]!.message).toMatch(/version/);
     expect(validateModel({ ...emptyModel(), parts: {} } as unknown as Model)[0]!.message).toMatch(/parts: expected an array/);
   });
   it('structure: rootPartId and nextPartId types', () => {
@@ -618,7 +618,7 @@ describe('serialize / deserialize', () => {
     rejects('42', /expected a JSON object/);
     rejects('null', /expected a JSON object/);
     rejects('{"parts":[]}', /unsupported version undefined/);
-    rejects('{"version":2,"parts":[]}', /unsupported version 2 \(expected 1\)/);
+    rejects('{"version":3,"parts":[]}', /unsupported version 3 \(expected 1 or 2\)/);
     rejects('{"version":1}', /parts: expected an array/);
     rejects('{"version":1,"parts":[{"id":1,"color":"#000000","cells":[{"x":0,"y":0,"z":0,"kind":"gear","axis":0}]}]}', /parts\[0\]\.cells\[0\]: kind must be one of/);
     rejects('{"version":1,"parts":[{"id":1,"color":"#000000","cells":[{"x":0,"y":0,"z":0,"kind":"pin","axis":"x"}]}]}', /axis must be 0, 1 or 2/);

@@ -233,8 +233,10 @@ describe('joint friction diagnostics and edge cases', () => {
 });
 
 describe('friction off is the frictionless simulation', () => {
+  // The recording covers the seven examples that existed then; examples added later (crank wheel,
+  // cart) are covered by the next test against their own μ = 0 run.
   it('every example at μ = 0 reproduces the trajectory of the code before joint friction, bit for bit', { timeout: 120000 }, async () => {
-    for (const ex of EXAMPLES) {
+    for (const ex of EXAMPLES.filter((e) => e.name in FRICTIONLESS_HASHES)) {
       const s = await Simulation.create(ex.build(), { jointFriction: 0 });
       expect(trajectoryHash(s, 1440, 8), ex.name).toBe(FRICTIONLESS_HASHES[ex.name]);
       s.dispose();
@@ -245,7 +247,14 @@ describe('friction off is the frictionless simulation', () => {
     for (const ex of EXAMPLES) {
       const s = await Simulation.create(ex.build(), { jointFriction: REALISTIC });
       s.setJointFriction(0);
-      expect(trajectoryHash(s, 1440, 8), ex.name).toBe(FRICTIONLESS_HASHES[ex.name]);
+      let want = FRICTIONLESS_HASHES[ex.name];
+      if (want === undefined) {
+        // Examples added after the recording: the run created at μ = 0.
+        const off = await Simulation.create(ex.build(), { jointFriction: 0 });
+        want = trajectoryHash(off, 1440, 8);
+        off.dispose();
+      }
+      expect(trajectoryHash(s, 1440, 8), ex.name).toBe(want);
       s.dispose();
     }
   });

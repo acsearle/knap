@@ -2,6 +2,7 @@
 // root, Rotate (also [ / ]), Duplicate, Delete, and the move / rotate keys.
 import { kindLabel } from '../core';
 import type { Kind } from '../core';
+import { wheelSize } from '../editor';
 import type { PartInfo } from '../editor';
 import { button, h, setText } from './dom';
 import { PALETTE } from './palette';
@@ -28,6 +29,7 @@ export class Inspector {
   private readonly title: HTMLElement;
   private readonly badge: HTMLElement;
   private readonly sub: HTMLElement;
+  private readonly wheels: HTMLElement;
   private readonly body: HTMLElement;
   private readonly swatches: HTMLButtonElement[] = [];
   private readonly rootBtn: HTMLButtonElement;
@@ -39,6 +41,7 @@ export class Inspector {
     this.title = h('span');
     this.badge = h('span', { class: 'badge', hidden: true, title: 'This part is fixed in space during simulation' }, 'fixed root');
     this.sub = h('div', { class: 'sub', 'data-role': 'inspector-sub' });
+    this.wheels = h('div', { class: 'wheels', hidden: true, 'data-role': 'inspector-wheels' });
     const pal = h('div', { class: 'palette', role: 'group', 'aria-label': 'Part colour' });
     for (const s of PALETTE) {
       const b = h('button', {
@@ -70,23 +73,36 @@ export class Inspector {
       { class: 'inspector', hidden: true, 'aria-label': 'Selected part', 'data-role': 'inspector' },
       h('h2', null, this.title, this.badge),
       this.sub,
+      this.wheels,
       this.body,
     );
   }
 
-  update(info: PartInfo | null, disabled: boolean): void {
+  /**
+   * `rootFixed`: the model's root is fixed in space (core rootIsFixed). With a free root (ground on,
+   * Fix root off) nothing is fixed, so no part is called the fixed root, and Set as fixed root turns
+   * Fix root back on with this part as the root.
+   */
+  update(info: PartInfo | null, disabled: boolean, rootFixed = true): void {
     this.el.hidden = !info;
     if (!info) return;
     setText(this.title, `Part ${info.id}`);
-    this.badge.hidden = !info.isRoot;
+    const fixedRoot = info.isRoot && rootFixed;
+    this.badge.hidden = !fixedRoot;
     const kinds = KIND_ORDER.filter((k) => info.kinds[k]).map((k) => plural(info.kinds[k]!, k));
     setText(this.sub, `${info.cellCount} ${info.cellCount === 1 ? 'cell' : 'cells'} · ${kinds.join(', ')}`);
+    const w = info.wheels ?? [];
+    this.wheels.hidden = w.length === 0;
+    setText(this.wheels, w.length === 1 ? `Wheel ${wheelSize(w[0]!)}` : w.length ? `Wheels: radius ${w.join(', ')}` : '');
     for (const b of this.swatches) {
       b.classList.toggle('on', b.dataset.color === info.color.toLowerCase());
       b.disabled = disabled;
     }
-    this.rootBtn.disabled = disabled || info.isRoot;
-    this.rootBtn.textContent = info.isRoot ? 'Fixed root' : 'Set as fixed root';
+    this.rootBtn.disabled = disabled || fixedRoot;
+    this.rootBtn.textContent = fixedRoot ? 'Fixed root' : 'Set as fixed root';
+    this.rootBtn.title = rootFixed
+      ? 'Fix this part in space during simulation'
+      : 'Nothing is fixed (Fix root is off): fix this part in space during simulation and turn Fix root on';
     this.dupBtn.disabled = disabled;
     this.delBtn.disabled = disabled;
     for (const b of this.rotBtns) b.disabled = disabled;

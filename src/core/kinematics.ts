@@ -3,7 +3,7 @@
 // Determinism: every step iterates parts in ascending id order and pairs / lines / mates in a
 // canonical sorted order, so the result depends only on the set of parts (ids, cells) and the
 // root, never on the order of `model.parts` or of a part's `cells`.
-import { effectiveRootId, posKey, worldIndex } from './model';
+import { effectiveRootId, posKey, rootIsFixed, worldIndex } from './model';
 import { axisLabel, isMale, shareResult } from './rules';
 import type { Axis, Cell, MateType, Model } from './types';
 
@@ -27,7 +27,10 @@ export interface Body {
   id: number;
   /** Ascending. */
   partIds: number[];
-  /** Contains the root part (effectiveRootId). */
+  /**
+   * Contains the root part (effectiveRootId) **and** rootIsFixed(model) (§3.1 step 4): with a free
+   * root (ground on, fixRoot false) no body is fixed.
+   */
   fixed: boolean;
 }
 
@@ -303,6 +306,7 @@ export function analyze(model: Model): KinematicGraph {
   // own fixed body). Each one is a revolute connection on its line between *every* pair of
   // bodies it passes through, not only the pairs that involve the body holding its cells.
   const connectors: number[] = [];
+  const rootFixedHere = rootIsFixed(model);
 
   let joints: PairJoint[] = [];
   for (let guard = 0; ; guard++) {
@@ -316,9 +320,11 @@ export function analyze(model: Model): KinematicGraph {
       const ms = (matesOfMale.get(pid) ?? []).filter((m) => uf.find(m.holePart) !== r);
       if (ms.length === 0 || ms.some((m) => m.type !== 'revolute')) continue;
       if (!connectors.includes(pid)) connectors.push(pid);
-      // A free pin that is itself the root stays a fixed body of its own: absorbing it would
-      // weld the beam it landed in to the ground.
-      if (pid === rootId) continue;
+      // A free pin that is itself the *fixed* root stays a fixed body of its own: absorbing it
+      // would weld the beam it landed in to the ground. With a free root (§2.6) nothing is fixed,
+      // so it is absorbed like any other free pin (review finding: else it became a 0.5-mass body
+      // of its own whose joints carried only its tiny friction load).
+      if (pid === rootId && rootFixedHere) continue;
       const targets = [...new Set(ms.map((m) => uf.find(m.holePart)))].sort((x, y) => x - y);
       const cur = rootId === null ? null : uf.find(rootId);
       let best = targets[0]!;
@@ -445,11 +451,12 @@ export function analyze(model: Model): KinematicGraph {
   const bodyIdOfRep = new Map<number, number>();
   reps.forEach((r, i) => bodyIdOfRep.set(r, i));
   const bodies: Body[] = reps.map((r, i) => ({ id: i, partIds: [], fixed: false }));
+  const rootFixed = rootIsFixed(model);
   const bodyOfPart = new Map<number, number>();
   for (const p of parts) {
     const bid = bodyIdOfRep.get(uf.find(p.id))!;
     bodies[bid]!.partIds.push(p.id);
-    if (p.id === rootId) bodies[bid]!.fixed = true;
+    if (p.id === rootId && rootFixed) bodies[bid]!.fixed = true;
     bodyOfPart.set(p.id, bid);
   }
   const outJoints: Joint[] = joints.map((j) => {

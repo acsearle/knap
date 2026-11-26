@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import { ModelBuilder, EXAMPLES, axle, beam, beamPath, buildExample, bush, cell, holes, pin } from '../../src/core/examples';
 import { analyze, lineKey, type KinematicGraph } from '../../src/core/kinematics';
-import { setRoot, validateModel } from '../../src/core/model';
+import { rootIsFixed, setRoot, validateModel } from '../../src/core/model';
 import type { Cell, Model } from '../../src/core/types';
 import { mk, plain, rng, shuffleModel } from '../kinematics/helpers';
 
@@ -33,8 +33,9 @@ function expectInvariants(m: Model, g: KinematicGraph) {
     expect([...b.partIds].sort((x, y) => x - y)).toEqual(b.partIds);
     if (i > 0) expect(b.partIds[0]!).toBeGreaterThan(g.bodies[i - 1]!.partIds[0]!);
   });
-  // exactly one fixed body iff there are parts
-  expect(g.bodies.filter((b) => b.fixed).length).toBe(m.parts.length ? 1 : 0);
+  // exactly one fixed body iff there are parts and the root is fixed (DESIGN §3.1 step 4 as amended
+  // for wheels: a free root — ground on, fixRoot false — fixes nothing; the cart example has one)
+  expect(g.bodies.filter((b) => b.fixed).length).toBe(m.parts.length && rootIsFixed(m) ? 1 : 0);
   // joints: bodyA < bodyB, one per pair, sorted
   const seen = new Set<string>();
   for (const j of g.joints) {
