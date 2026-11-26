@@ -1,0 +1,26 @@
+scale knap, T 1s, floor 200x1x200 cuboid unless noted, start at x=3.3,z=-150
+floor | variant | v0 | v(T) | v(T)/v0 | mean lever along travel | lateral drift
+cuboid | default | 0.1 | -4.4647 | -44.6470 | -0.0053 | 0.0012
+cuboid | default | 1 | 5.4894 | 5.4894 | -0.0055 | 0.0026
+cuboid | default | 10 | 9.2745 | 0.9275 | 9.01e-4 | 0.0023
+cuboid | default | 50 | 49.3267 | 0.9865 | 8.16e-4 | 0.0179
+cuboid | noRecycle | 0.1 | -4.3541 | -43.5407 | -0.0052 | 0.0013
+cuboid | noRecycle | 1 | 5.4894 | 5.4894 | -0.0055 | 0.0026
+cuboid | noRecycle | 10 | 9.2745 | 0.9275 | 9.01e-4 | 0.0023
+cuboid | noRecycle | 50 | 49.3267 | 0.9865 | 8.16e-4 | 0.0179
+cuboid | mu 0.8 prism64 | 0.1 | -0.0117 | -0.1171 | 0.0055 | 1.19e-5
+cuboid | mu 0.8 prism64 | 1 | 0.0428 | 0.0428 | -0.0190 | 1.99e-4
+cuboid | mu 0.8 prism64 | 10 | -0.0500 | -0.0050 | -0.0056 | 9.72e-4
+cuboid | mu 0.8 prism64 | 50 | 11.3386 | 0.2268 | 5.70e-4 | 0.3307
+halfspace | default | 0.1 | 0.1000 | 0.9995 | 2.08e-4 | 0.0011
+halfspace | default | 1 | 0.9994 | 0.9994 | -2.07e-4 | 0.0011
+halfspace | default | 10 | 9.9958 | 0.9996 | 2.04e-4 | 0.0088
+halfspace | default | 50 | 49.9591 | 0.9992 | 1.75e-5 | 0.0789
+halfspace | noRecycle | 0.1 | 0.1000 | 0.9995 | 2.08e-4 | 0.0011
+halfspace | noRecycle | 1 | 0.9994 | 0.9994 | -2.07e-4 | 0.0011
+halfspace | noRecycle | 10 | 9.9958 | 0.9996 | 2.04e-4 | 0.0088
+halfspace | noRecycle | 50 | 49.9591 | 0.9992 | 1.75e-5 | 0.0789
+halfspace | mu 0.8 prism64 | 0.1 | 0.0141 | 0.1409 | -0.0225 | 6.84e-4
+halfspace | mu 0.8 prism64 | 1 | 0.0620 | 0.0620 | -0.0128 | 6.97e-4
+halfspace | mu 0.8 prism64 | 10 | 7.17e-4 | 7.17e-5 | 9.68e-4 | 0.0078
+halfspace | mu 0.8 prism64 | 50 | 12.7505 | 0.2550 | 6.94e-4 | 0.0529

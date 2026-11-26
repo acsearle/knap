@@ -1,0 +1,9 @@
+scale | floor | recreate | runaway (drift>0.5r) | median plateau |v| | max |v| | max drift | min dist
+knap r1 | cuboid | false | 4/4 | 8.7724 | 8.9185 | 36.4662 | -0.0139
+knap r1 | cuboid | true | 3/4 | 5.3651 | 8.4052 | 31.2707 | -0.0234
+knap r1 | halfspace | false | 0/4 | 5.70e-5 | 0.0103 | 0.0011 | -0.0072
+knap r1 | halfspace | true | 0/4 | 7.20e-5 | 0.0103 | 0.0011 | -0.0072
+SI r0.5 | cuboid | false | 3/4 | 0.1918 | 0.4890 | 0.6277 | -0.0133
+SI r0.5 | cuboid | true | 2/4 | 0.2380 | 0.4355 | 0.9806 | -0.0019
+SI r0.5 | halfspace | false | 0/4 | 1.41e-6 | 0.0021 | 4.04e-5 | -5.72e-5
+SI r0.5 | halfspace | true | 0/4 | 0.0011 | 0.0021 | 0.0091 | -5.68e-5

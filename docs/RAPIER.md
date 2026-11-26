@@ -67,10 +67,14 @@ g = 1226.25 units/s², fixed step 1/480 s.
 
 ## Contacts
 
-- **Parry keeps only the first four vertices of a polyhedron face for a contact manifold (cause known).** In `ConvexPolyhedron::local_support_feature`: `face.num_vertices_or_edges.min(4)`, with a TODO; parry 0.31 per DEVIATIONS (the wheels spike says "parry 0.21"). A 3-hole beam lying on a 9-hole beam was gone in 1 s.
+- **Parry keeps only the first four vertices of a polyhedron face for a contact manifold (cause known; re-examined in `spikes/rapier-limits/polygon`).** In `ConvexPolyhedron::local_support_feature`: `face.num_vertices_or_edges.min(4)`, with a TODO ("select four vertices that maximize the area"). A 3-hole beam lying on a 9-hole beam was gone in 1 s.
+  - **What the face becomes: one quad.** The four are consecutive vertices of the face's boundary loop, closed by a chord from the fourth back to the first. Not two triangles, not four loose points: contact points from edge crossings land exactly on the chord. Which four depends on the hull builder's triangle order. The quad covers about 4 % of a regular 16-gon, 25 % of an octagon, 50 % of a hexagon.
+  - **Outside the quad** a convex–convex pair still gets one point: the closest/deepest pair from GJK/EPA is always added in 3D. One soft point does not hold a body: at Rapier's own defaults (g 9.81, 1/60 s) a box on the cut-off part of a 32-gon tilts 7.5° and sinks 0.063; on a 0.02-thick plate it falls through. The sink grows with gravity (0.023 at g 2.45, 0.175 at g 78.5), so at this project's gravity it is always a fall-through.
+  - **Against a half-space** there is no extra point at all (`contact_manifold_halfspace_pfm` emits only the kept vertices): an n-gon prism with n ≥ 6 lying on a half-space tips about 45° and sinks, at both scales.
+  - A deliberate approximation that is wrong at any scale; upstream knows only through the TODO.
   - **Workaround:** shapes.ts `bevelledPrism` / `prismShape` with `BEVEL` = 0.01. Every end face is a kept 4-vertex rectangle surrounded by facets sloping 1.5–8°.
   - **Still wrong:** a part whose COM lies outside the rectangle rests a few degrees tilted. A beam rolled past the 1.5–3.5° facet slope (an r 4 wheel lying across a loose beam) gets half-space contact on one end facet and sinks about 0.4–0.6 into the floor (0.36 at 20 s). Left as a known limit because changing `BEVEL` changes every recorded trajectory.
-- **Rapier's convex-hull builder merges nearly coplanar facets back into one face.** That re-triggers the 4-vertex limit: a 0.005 bevel merged and fell through, 0.006 held. For large radii it fails above roughly r > 80–100 × bevel.
+- **Rapier's convex-hull builder merges nearly coplanar facets back into one face.** The test is n1·n2 > 1 − √(f32 ε), i.e. a dihedral below 1.5057° (measured: merged at 1.505°, separate at 1.510°). That re-triggers the 4-vertex limit: a 0.005 bevel merged and fell through, 0.006 held. For large radii it fails above roughly r > 80–100 × bevel.
   - **Workaround:** `BEVEL` 0.01 for parts. `WHEEL_BEVEL` = 0.02·r for the wheel ground guard. The wheel hull uses wedges (6-point pieces, every face ≤ 4 vertices, no bevel).
 - **Parry returns one contact point where a beam edge crosses a hull end face (cause known: printed manifolds).** A wheel lying across a beam pivoted on that point and sank 0.37–0.458 (of HC = 0.46). This is not the 4-vertex limit: a native cylinder sank the same.
   - **Workaround:** the wheel hull is 32 wedges × 2 slabs (shapes.ts `wheelHullPieces`, `WHEEL_SEGMENTS` 32, `WHEEL_SLABS` 2), 64 convex-hull colliders per wheel.
@@ -85,12 +89,18 @@ g = 1226.25 units/s², fixed step 1/480 s.
     - Supersession: DEVIATIONS §5 "Tolerance scales" says 60/120 Hz changed none of the tested numbers, and "Contacts" says the setter had no measurable effect. Later spikes (teeth2, M7 fix) show it clearly matters for dynamic–dynamic contacts.
 - **Contacts with fixed bodies use `static_contact_softness` (60 Hz, ζ = 10), which the 0.21 JS API does not expose.** The JS `contact_natural_frequency` setter affects dynamic–dynamic contacts only.
   - **Workaround:** none; documented limit.
-- **Native cylinder narrow phase.**
+- **Native cylinder narrow phase (re-examined in `spikes/rapier-limits`, which corrects the wheels spike).**
+  - How parry sees a cylinder against a box or hull (`polygonal_feature_map.rs`): the curved side is one line segment, each cap an inscribed square (64 % of the cap) turned toward the contact, switching between the two when the contact direction is 60° from the axis. A half-space uses a different routine.
   - (a) The exact cylinder–cylinder test costs about 0.6 ms per rotated, coaxial, nested pair per step, even with contacts disabled. Every pin in a hole is such a pair; the 4-body four-bar cost about 2.5 ms/step.
-  - (b) A cylinder on a cuboid creeps, accelerates by itself and tunnels (r 1: 0 → 8.4 units/s within 1.6 s).
-  - (c) A cylinder against a convex hull falls through at rest with zero contacts.
-  - (d) A cylinder runs away upright on beams.
-  - Measured in the wheels spike and the M7 fix; cause inferred to be parry narrow-phase defects.
+  - (b) **A rolling cylinder (or capsule) on a cuboid or hull accelerates by itself. This is a defect in parry, present at Rapier's own defaults.** g 9.81, 1/60 s, default iterations, sleeping on: a 0.5 m cylinder given 0.05 m/s reaches 0.52–0.55 m/s on a fixed cuboid and keeps 0.0500 on a half-space (`spikes/rapier-limits/minimal.mjs`).
+    - Cause (shown by a single switch): `contact_manifold_pfm_pfm` reuses the previous step's contact points through `try_update_contacts_eps(cos 1°, 1e-6)` as long as the normals agree within 1° and each point's material position slid less than 1e-3. In pure rolling the material point at the contact does not slide, so the points stay frozen until the body has turned 1°. The support then trails the centre by up to r·1°, which acts as a downhill slope in the direction of travel.
+    - The push stops once the body turns more than 1° per step, so speed climbs to about v* = r·(π/180)/dt and stays: 0.52 m/s for r 0.5 m at 1/60 s; 8.4 units/s for r 1 at 1/480 s, which is the wheels spike's "0 → 8.4 units/s". Measured plateaus are within 0–6 % of v* for r 1 and 2.5 and dt 1/240–1/960.
+    - The switch: moving the fixed floor ±0.1 along the cylinder's axis every step (which defeats the reuse without changing what the cylinder touches) takes 8.83 → 0.48 units/s and, at SI, 0.519 → 0.054 m/s; ±0.0003 (below the threshold) changes nothing.
+    - No setting reachable from JS helps (contact frequency, iterations, dt, prediction, allowed error, soft CCD, Rapier's own contact recycling switched off through a hook). A ball does not run away; a half-space floor does not; prisms do not, but they cannot roll freely.
+    - A wheel standing on its rim on a beam does the same and rolls off the beam end in 1.5–1.9 s (9 of 24 runs within 2 s). This is the old "(d) runs away upright on beams".
+  - (c) **Retracted: "a cylinder against a convex hull falls through at rest with zero contacts".** In 2,496 rest tests (cuboid, box-hull, 9-hole arm and 1-hole barrel floors, both scales) no cylinder fell through a hull it was still over. The wheels spike's cases were (b): the cylinder rolled off the end of the beam and then fell past it; the old script printed y and the contact count but never x. Reproduced to the digit with x printed.
+  - **Retracted: "tunnels" through a cuboid.** Every 400 units/s fall was a roll off an edge.
+  - Two small defects remain: the manifold can be empty for 1–2 steps while a cylinder rolls over a floor edge, and a cap placed exactly flush and centred on a box gets a horizontal first normal and drops 0.04–0.1.
   - **Workaround:** part cylinders become circumscribed 16-gon prisms (`DEFAULT_CYLINDER_SEGMENTS`), and a liftarm run becomes one stadium prism. A wheel's native cylinder ("round") meets only the ground and other rounds (`GROUP` bits in sim.ts); it carries the mass, friction 0.8. The hull meets parts. The ground is a half-space.
   - **Still wrong:**
     - Prisms cannot roll (they lose energy per facet), so a wheel rolling along a beam slows quickly.
@@ -151,6 +161,9 @@ g = 1226.25 units/s², fixed step 1/480 s.
 
 - Raw or unstable API used: `impulseJoints.raw.jointSetLimits` (generic-joint limits; gear radial stop), `raw.jointConfigureMotorModel`, `raw.jointConfigureMotorVelocity`, `raw.jointSetMotorMaxForce` (friction motors), with raw enum values cast in sim.ts (`LIN_X`, `ANG_X`, `ACCELERATION_BASED`).
 - Not exposed in 0.21 JS: joint softness, `warmstart_joints`, `num_internal_stabilization_iterations`, `static_contact_softness`, `enable_gyroscopic_forces`, joint reaction forces, limits on generic multibody joints.
+  - **All of these exist in the Rust API** (Rapier 0.36): `GenericJoint::set_softness`, `IntegrationParameters.{warmstart_joints, num_internal_stabilization_iterations, static_contact_softness, normalized_max_linear_velocity, contact_recycling, contact_clustering}`, `RigidBody::enable_gyroscopic_forces`, the public field `ImpulseJoint.impulses`. The JS `IntegrationParameters` wraps 8 of about 20 fields.
+  - The JS package is a wasm-bindgen wrapper (about 4,400 lines of Rust plus TypeScript, Apache-2.0) in `bindings/typescript` of the Rapier repository. Exposing one of the above is a setter of a few lines and a rebuild with wasm-pack: a fork of the bindings, not of the engine. Not tried.
+  - Needing a patch to the engine itself: the 4-vertex face and the contact-point reuse (parry), a gear or other user constraint (no hook exists), and f64 (a `rapier3d-f64` crate exists, but the TypeScript bindings hard-code `f32`).
 - No feature for:
   - gear constraints (generic LinX row re-anchored each step);
   - one-way/ratchet joints (a re-anchored revolute with a [0, π] limit proposed; spike only);
@@ -177,6 +190,6 @@ g = 1226.25 units/s², fixed step 1/480 s.
 - A compound collider of 40 teeth costs like a smooth disc while separate hulls cost ×8–35 (teeth2, "cannot explain").
 - A velocity motor on a disc-less arm failed to lift at f = 2 while the same arm with a disc lifted at 1.1 (skeptic, unexplained).
 - Free-gearbox angular momentum error and the planetary p_β leak ∝ substep count: likely the same Rapier per-substep artefact as the spin gain, but not proven.
-- The parry version: DEVIATIONS says 0.31, the wheels spike says 0.21.
+- Settled: the parry version is 0.31. `@dimforge/rapier3d-compat` 0.21.0 is built from Rapier 0.36.0 and parry 0.31 (bindings changelog); the wheels spike's "parry 0.21" confused it with the JS package version.
 - Why a driven gear pair reads (E − E0)/drive work ≈ 1.09–1.10 with the guard off: taken to be the mesh row's f32 gain above, not separately proven.
 - A loose 8-tooth gear rolling on the ground wanders sideways (0.49 over 160 units; 16 teeth and up 0.003). Not investigated; it rolls on a 32-wedge hull at its tip radius like the others.
