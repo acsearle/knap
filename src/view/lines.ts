@@ -215,6 +215,46 @@ export class FatLines extends THREE.Mesh<THREE.InstancedBufferGeometry, THREE.Sh
   }
 }
 
+/**
+ * The FatLines shader as a stand-alone material (no ID fade), for segment sets drawn as plain meshes
+ * that share one geometry (colliders.ts: one geometry per part shape, many parts and two passes).
+ * Uniforms uWidth (device px), uDepthBias, uOpacity as in FatLines.
+ */
+export function createLineMaterial(uniforms: LineUniforms, opts: { width?: number; depthTest?: boolean; depthBias?: number; opacity?: number } = {}): THREE.ShaderMaterial {
+  return new THREE.ShaderMaterial({
+    vertexShader: VERT,
+    fragmentShader: FRAG,
+    uniforms: {
+      uResolution: uniforms.uResolution,
+      uWidth: { value: opts.width ?? 2 },
+      uDepthBias: { value: opts.depthBias ?? 0 },
+      uOpacity: { value: opts.opacity ?? 1 },
+    },
+    transparent: true,
+    depthTest: opts.depthTest ?? false,
+    depthWrite: false,
+  });
+}
+
+/** An instanced segment geometry for createLineMaterial: `ends` 6 floats and `colors` 4 per segment. */
+export function createSegmentGeometry(ends: Float32Array, colors: Float32Array): THREE.InstancedBufferGeometry {
+  const n = Math.floor(ends.length / 6);
+  const geo = new THREE.InstancedBufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute([-1, -1, 0, 1, -1, 0, 1, 1, 0, -1, 1, 0], 3));
+  geo.setIndex([0, 1, 2, 0, 2, 3]);
+  const a = new Float32Array(n * 3);
+  const b = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) {
+    a.set(ends.subarray(6 * i, 6 * i + 3), 3 * i);
+    b.set(ends.subarray(6 * i + 3, 6 * i + 6), 3 * i);
+  }
+  geo.setAttribute('iA', new THREE.InstancedBufferAttribute(a, 3));
+  geo.setAttribute('iB', new THREE.InstancedBufferAttribute(b, 3));
+  geo.setAttribute('iColor', new THREE.InstancedBufferAttribute(colors.slice(0, n * 4), 4));
+  geo.instanceCount = n;
+  return geo;
+}
+
 /** '#rrggbb' → [r, g, b, a] in display space 0..1. */
 export function rgba(hex: string, alpha = 1): [number, number, number, number] {
   const v = parseInt(hex.replace('#', ''), 16);

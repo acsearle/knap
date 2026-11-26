@@ -1772,6 +1772,71 @@ export class Simulation {
     return bodyId === undefined ? null : this.bodyTransform(bodyId);
   }
 
+  /**
+   * Debug / tests only (DESIGN §7.4 "Show colliders"; tests/physics/colliderspecs.test.ts): Rapier's
+   * own colliders per live model body (the ground's half-space is not a model body and is left out),
+   * read back from the engine. Per body: its reference point `ref` (the body's frame origin at t = 0,
+   * so an edit-time world point is ref + rotate(rotation, local) + translation of the collider). Per
+   * collider: Rapier's shape type ('convexHull' | 'cuboid' | 'cylinder' | 'other'), its raw
+   * collision groups (membership << 16 | filter), its translation / rotation relative to the body,
+   * and the shape read from the WASM collider (not the JS-side cached ColliderDesc shape): a hull's
+   * vertices (after its convex-hull builder), a cuboid's half extents, a cylinder's radius and half
+   * height (along its local Y). Read-only.
+   */
+  colliderDump(): {
+    bodyId: number;
+    fixed: boolean;
+    ref: Vec3;
+    colliders: {
+      type: 'convexHull' | 'cuboid' | 'cylinder' | 'other';
+      groups: number;
+      translation: Vec3;
+      rotation: Quat;
+      vertices?: Vec3[];
+      halfExtents?: Vec3;
+      radius?: number;
+      halfHeight?: number;
+    }[];
+  }[] {
+    this.alive();
+    const out: ReturnType<Simulation['colliderDump']> = [];
+    for (const b of this.bodies) {
+      const rb = b.rb;
+      if (!rb) continue;
+      const colliders: ReturnType<Simulation['colliderDump']>[number]['colliders'] = [];
+      for (let i = 0; i < rb.numColliders(); i++) {
+        const c = rb.collider(i);
+        const t = c.translationWrtParent();
+        const r = c.rotationWrtParent();
+        const st = c.shapeType();
+        // Shape data from the WASM collider itself (c.radius() etc.), never `c.shape`: Rapier's JS
+        // Collider caches the ColliderDesc's own shape object at creation, so `shape` would return
+        // sim.ts's input rather than what the engine built.
+        const entry: (typeof colliders)[number] = {
+          type: st === RAPIER.ShapeType.ConvexPolyhedron ? 'convexHull' : st === RAPIER.ShapeType.Cuboid ? 'cuboid' : st === RAPIER.ShapeType.Cylinder ? 'cylinder' : 'other',
+          groups: c.collisionGroups() >>> 0,
+          translation: t ? vec(t) : [0, 0, 0],
+          rotation: r ? quat(r) : [0, 0, 0, 1],
+        };
+        if (entry.type === 'convexHull') {
+          const raw = c.vertices();
+          const v: Vec3[] = [];
+          for (let k = 0; k + 2 < raw.length; k += 3) v.push([raw[k]!, raw[k + 1]!, raw[k + 2]!]);
+          entry.vertices = v;
+        } else if (entry.type === 'cuboid') {
+          const he = c.halfExtents();
+          if (he) entry.halfExtents = vec(he);
+        } else if (entry.type === 'cylinder') {
+          entry.radius = c.radius();
+          entry.halfHeight = c.halfHeight();
+        }
+        colliders.push(entry);
+      }
+      out.push({ bodyId: b.id, fixed: b.fixed, ref: [...b.ref], colliders });
+    }
+    return out;
+  }
+
   /** Body id of a part (undefined for an unknown part). */
   bodyOf(partId: number): number | undefined {
     return this.bodyOfPart.get(partId);

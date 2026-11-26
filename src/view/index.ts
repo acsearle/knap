@@ -86,6 +86,13 @@
 //   setOutlineDebug({ ink?, softFade? }), softFade()   test diagnostics only (e2e ink measures);
 //                                   the canvas carries the viewport as canvas.__knapViewport for them.
 //   setViewCubeVisible(bool)
+//   setShowColliders(bool), showColliders   Show colliders (DESIGN §7.4, colliders.ts): every collider
+//                                   the simulation makes of a part (physics/shapes colliderSpecs),
+//                                   translucent fills + its own edges (hidden edges fainter), roles by
+//                                   colour (COLLIDER_STYLE); the solids become a faint ghost without
+//                                   ink (the selection outline stays). Follows setModel, transforms
+//                                   and visibility. colliderInfo(): per part counts by role, drawn
+//                                   matrix, the solid's matrix, visible (test hook).
 //
 // CAMERA  (CameraState = { target: [x,y,z], yaw, pitch, height }: radians; yaw 0 looks from +Z
 //          (front), +π/2 from +X (right); pitch ∈ [−π/2, π/2], + = from above; height = visible
@@ -183,6 +190,16 @@ export type {
   ViewportPointerEvent,
 } from './viewport';
 export { jointGlyphsFromGraph, meshGlyphsFromModel } from './glyphs';
+export {
+  COLLIDER_ROLES,
+  COLLIDER_STYLE,
+  colliderMeshData,
+  cylinderGeometry,
+  hullGeometry,
+  boxGeometry,
+  partColliderData,
+} from './colliders';
+export type { ColliderMeshData } from './colliders';
 export { SOFT_FULL_PX, SOFT_GONE_PX, TOOTH_PITCH, softContourFade } from './patches';
 export { FLOOR_EDGE_Y, FLOOR_TINT, SHADOW_COLOR, floorEdgeAlpha } from './floor';
 export {

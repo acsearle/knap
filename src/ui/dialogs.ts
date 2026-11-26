@@ -133,6 +133,7 @@ export function helpDialog(): Dialog {
           [k(`${MOD}S`), 'Save (download .knap.json)'],
           [k(`${MOD}O`), 'Open a .knap.json file'],
           [k('K'), 'Show kinematics (bodies and joints)'],
+          [k('C'), 'Show colliders: the shapes the simulation collides with, coloured by what they hit (also while simulating)'],
           [k('G'), 'Ground: a floor under the model, shown by a soft shadow (Model panel; with it, “Fix root” off makes a free vehicle)'],
         ]),
         h('h3', null, 'Gears'),

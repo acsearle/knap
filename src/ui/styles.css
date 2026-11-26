@@ -160,9 +160,21 @@ button, input, select { font: inherit; color: inherit; }
 .swatch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* toggle */
-.toggle { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 6px; border-radius: var(--radius); cursor: pointer; flex: none; }
-.toggle:hover { background: var(--chrome-2); }
-.toggle input { margin: 0; accent-color: var(--accent); }
+.toggle, .toggle-c { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 6px; border-radius: var(--radius); cursor: pointer; flex: none; }
+.toggle:hover, .toggle-c:hover { background: var(--chrome-2); }
+.toggle input, .toggle-c input { margin: 0; accent-color: var(--accent); }
+.show-group { display: inline-flex; align-items: center; gap: 0; flex: none; }
+.show-group .seg-caption { padding: 0 2px 0 2px; }
+.show-group .toggle, .show-group .toggle-c { gap: 4px; padding: 0 4px; font-size: 11.5px; }
+/* The bar is full at 1280 px: with the Show group (kinematics + colliders) everything in it sits a
+   little tighter (gaps 2 px, separators 3 px, segmented buttons 5 px) so that nothing is clipped. */
+.topbar { gap: 2px; }
+.topbar .sep { margin: 0 3px; }
+.topbar .tool-palette { gap: 2px; }
+.topbar .seg button { padding: 0 5px; }
+.topbar .spacer { min-width: 6px; }
+.topbar .brand { padding: 0 6px 0 2px; }
+.topbar > .btn:not(.icon-only), .topbar .menu-wrap > .btn { padding: 0 7px; }
 
 /* simulate controls */
 .simgroup { display: flex; align-items: center; gap: 3px; flex: none; }
@@ -316,6 +328,27 @@ body.busy, body.busy * { cursor: progress !important; }
 .model-settings .ms-toggle.disabled { color: var(--faint); cursor: default; }
 .model-settings .ms-toggle.disabled:hover { background: transparent; }
 body.simulating .model-settings { opacity: 0.6; }
+/* Show colliders legend (DESIGN §7.4): under the Model block and the inspector (so a selection's Delete stays in view) while the view is on */
+.collider-legend {
+  background: rgba(251, 251, 250, 0.97);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  box-shadow: 0 3px 14px rgba(0, 0, 0, 0.07);
+  padding: 6px 8px 6px 10px;
+}
+.collider-legend[hidden] { display: none; }
+.collider-legend h2 { margin: 0 0 4px; font-size: 11px; font-weight: 650; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+.cl-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+.cl-list li { display: flex; align-items: flex-start; gap: 7px; }
+.cl-swatch { flex: none; width: 14px; height: 14px; margin-top: 1px; border: 2px solid; border-radius: 3px; }
+.cl-swatch.floor { border: 0; border-radius: 7px; background: radial-gradient(closest-side, rgba(40, 42, 46, 0.55), rgba(40, 42, 46, 0)); }
+.cl-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }
+.cl-head { display: flex; justify-content: space-between; gap: 6px; }
+.cl-swatch.note { border: 0; width: 14px; }
+.cl-note .cl-label { font-weight: 600; color: var(--muted); }
+.cl-label { font-weight: 600; }
+.cl-meets { color: var(--muted); font-size: 11px; }
+.cl-count { flex: none; color: var(--muted); font-variant-numeric: tabular-nums; }
 .inspector .wheels { color: var(--text); margin: -4px 0 8px; }
 
 /* inspector (the selected part; in the side panel) */

@@ -1125,41 +1125,59 @@ New parts take the current palette colour (or the kind default, §6.1).
   glyph at its pitch point (two short interlocking ticks). Hovering a gear with Select says
   "Part 3 · gear 24 teeth ∥ Z · meshes with part 5 (40 teeth)"; the inspector shows a selected
   gear's tooth count and its meshes with their ratios.
-- **Show colliders** toggle `[C]` (both modes; beside Show kinematics; a view preference, not
-  saved in the file): draws **what the simulation collides with instead of what the parts look
+- **Show colliders** toggle `[C]` (both modes; in one top-bar group with Show kinematics —
+  "Show ☐ kinematics ☐ colliders", since two separate toggles do not fit at 1280 px; a view
+  preference, not saved in the file and not an undo step): draws **what the simulation collides with instead of what the parts look
   like** — owner's request ("a visualization of the collider meshes/primitives as a mode just
   like the constraints/joints visualization"). It exists to answer "why did that catch / sink /
   pass through?" and to show how coarse the physics shapes are.
-  - *One source.* `colliderSpecs(part, segments)` in `src/physics/shapes.ts` (pure, no Rapier)
+  - *One source.* `colliderSpecs(part, segments, ground)` in `src/physics/shapes.ts` (pure, no Rapier)
     lists every collider the simulation creates for a part, built from the same `partShapes`
     the simulation consumes: `{ role, shape }` with `shape` a convex point set (`hull`), a
     `box`, or a native `cylinder`, in edit-time world coordinates. A unit test builds a
     `Simulation` for every example and for random parts and checks the list against Rapier's
     own colliders (count per body, shape type, collision group ↔ role, and every hull's vertex
-    set / box extents / cylinder radius, half-length and axis, to 1e-5). The view draws that
-    list and nothing else, so the picture cannot drift from the physics.
+    set / box extents / cylinder radius, half-length and axis, to 1e-5). "Rapier's own" means
+    read back from the engine (`Simulation.colliderDump()` calls `vertices()`,
+    `halfExtents()`, `radius()`, `halfHeight()` on each collider — not `Collider.shape`, which
+    only caches what was passed in). The view draws that list and nothing else, so the picture
+    cannot drift from the physics.
   - *Roles* (the collision groups of §5.1, which decide what meets what):
     `part` — the bevelled prisms and boxes of ordinary cells (meet parts, hulls and the floor);
     `round` — a wheel's or gear's native cylinder (meets only the floor and other rounds);
     `hull` — a wheel's or gear's 64 wedge pieces (meet only parts);
     `guard` — a wheel's ground guard (meets only the floor; present only with a ground).
-    Gears use their tip-radius shapes. The floor is a half-space: it stays shown by its contact
-    shadow only.
-  - *Look.* While the toggle is on the part solids step back (a faint ghost, no outlines) and
-    the colliders are drawn over them: each primitive with its own crisp edges, so that the
+    Gears use their tip-radius shapes, and a gear's disc never meets another gear's disc.
+    The floor is a half-space: it stays shown by its contact shadow only.
+  - *What the picture cannot say, the legend must.* Colliders are drawn overlapping wherever
+    the simulation never lets them touch: parts welded into one body, bodies that share a
+    joint (§5.1), and two gears' discs. The legend is therefore worded from what the model
+    holds and from the collision groups — "Part shapes", "Wheel pieces" / "Gear pieces",
+    "Wheel discs", a separate "Gear discs" row ("never hit another gear's disc"), "Ground
+    guards", "Floor" (only with a ground), and a note "Joined parts: never hit each other
+    (welded, or linked by a pin or axle)" whenever the model has a joint or a welded body.
+    Counts leave out bodies removed while simulating. With nothing to draw: one "None" row.
+    The legend sits in the side panel below the inspector, so a selection's Delete stays in
+    view at 1280×720.
+  - *Look.* While the toggle is on the part solids step back (a faint ghost, no outlines: one
+    flat neutral grey, or the body tint with Show kinematics — unshaded and blended once per
+    pixel, so that neither the part's colour nor its holes and seams read as features of the
+    colliders) and the colliders are drawn over them: each primitive with its own crisp edges, so that the
     individual pieces — one stadium prism per liftarm run, the 16-gon barrels, the 0.01 bevels,
     the 64 wedges of a wheel — can be counted; roles told apart by colour, with a small legend
     (role, what it meets, how many) shown while the toggle is on. Edges hidden behind other
     colliders stay visible but fainter (a wheel's round cylinder and guard sit inside its
-    hull). Still a tool, not a game: flat fills, no shadows of its own.
+    hull). Still a tool, not a game: translucent headlight-shaded fills blended once per
+    pixel (stencil), no shadows of its own. Role edge and fill colours differ pairwise by at
+    least 10 L*.
   - *Simulate mode.* Each part's colliders follow that part's body transform exactly as its
     solid does (a collider never moves relative to its part); removed bodies' colliders
     disappear with them. Picking, hover, grab, tools, selection and Show kinematics work
     unchanged and can be combined with it.
   - *Cost.* Built once per part signature and cached like the solids; toggling off restores
     the ordinary picture pixel for pixel.
-  - Test hook: `setShowColliders(on)`, `colliderInfo()` → `{ on, parts: [{ partId, part, round,
-    hull, guard }] }`.
+  - Test hook: `setShowColliders(on)`, `colliderInfo()` (per part: counts by role, gear
+    counts, the drawn matrix and the solid's, visibility), `colliderSpecCounts()`.
 - **Model settings** (edit mode only; saved in the file; each change is one undo step): a
   **Ground** toggle `[G]` and a **Fix root** toggle, in a small always-visible "Model" block of
   the inspector panel (not the top bar, which is full). Fix root is checked and disabled while
@@ -1181,7 +1199,8 @@ body per call, so a vehicle needs each of its bodies pushed) so e2e can roll a c
 mouse. `groundShadowAt(x, z)`: the contact shadow's strength (0…1, after blur) at a floor point,
 read back from the shadow texture, or null when the ground is off. For gears:
 `simInfo().substeps` (current `k`), `simInfo().meshes` (engaged pairs with phase error in
-teeth), `analyze().meshes` (edit-time count).
+teeth), `analyze().meshes` (edit-time count). For the collider view: `setShowColliders(on)`,
+`colliderInfo()`, `colliderSpecCounts()` (§7.4).
 
 ---------------------------------------------------------------------------------------------
 

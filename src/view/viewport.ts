@@ -3,6 +3,8 @@
 import * as THREE from 'three';
 import { DIRS, effectiveRootId } from '../core';
 import type { Cell, Dir, Model, Part } from '../core';
+import { COLLIDER_GHOST_COLOR, COLLIDER_GHOST_OPACITY, COLLIDER_HIDDEN_LINE_PX, COLLIDER_LINE_PX, COLLIDER_ORDER, ColliderLayer, modelHasGround } from './colliders';
+import type { ColliderRole } from '../physics/shapes';
 import { buildPartMesh, geometryReady, indexToothWeights, initGeometry, partOrigin, partSignature } from '../geometry';
 import { glyphSegments, meshGlyphSegments } from './glyphs';
 import type { JointGlyph, MeshGlyph, RigidTransform } from './glyphs';
@@ -374,6 +376,9 @@ export class Viewport {
   private readonly rootLines: FatLines;
   private rootMarkerVisible = true;
   private gridVisible = true;
+  /** Show colliders (DESIGN §7.4): the collider drawing, created on first use. */
+  private collidersOn = false;
+  private colliderLayer: ColliderLayer | null = null;
 
   // camera
   private cam: CameraState = defaultCamera();
@@ -439,7 +444,8 @@ export class Viewport {
       this.addedPosition = true;
     }
 
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' });
+    // A stencil buffer for Show colliders (colliders.ts: each pixel's fill is blended once).
+    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, stencil: true, powerPreference: 'high-performance' });
     this.renderer.autoClear = false;
     // The ID buffer is RG32F, renderable only with EXT_color_buffer_float (near-universal on
     // WebGL2). Without it the outline passes are skipped (parts still render, without lines).
@@ -575,7 +581,76 @@ export class Viewport {
     }
     for (const [id, pv] of this.views) if (!seen.has(id)) this.destroyView(pv);
     this.rootId = effectiveRootId(model);
+    if (this.collidersOn) this.syncColliders();
     this.requestRender();
+  }
+
+  /**
+   * Show colliders (DESIGN §7.4): draw what the simulation collides with (physics/shapes
+   * colliderSpecs: every collider, its own edges, roles by colour) over the part solids, which step
+   * back to a faint ghost without outlines. Follows setModel, part transforms and visibility like
+   * the solids. Off restores the ordinary picture exactly.
+   */
+  setShowColliders(on: boolean): void {
+    if (on === this.collidersOn) return;
+    this.collidersOn = on;
+    if (on) {
+      this.colliderLayer ??= new ColliderLayer(this.colorScene, this.colorScene, this.lineUniforms);
+      this.syncColliders();
+    } else this.colliderLayer?.clear();
+    for (const pv of this.views.values()) this.applyGhost(pv);
+    this.requestRender();
+  }
+
+  get showColliders(): boolean {
+    return this.collidersOn;
+  }
+
+  /**
+   * Test hook (§7.4 colliderInfo): per part, the colliders drawn by role, the drawn matrix of its
+   * colliders and of its solid (column-major; equal by construction) and whether they are visible.
+   */
+  colliderInfo(): { on: boolean; parts: { partId: number; counts: Record<ColliderRole, number>; gear: { round: number; hull: number }; matrix: number[]; partMatrix: number[]; visible: boolean }[] } {
+    const parts: { partId: number; counts: Record<ColliderRole, number>; gear: { round: number; hull: number }; matrix: number[]; partMatrix: number[]; visible: boolean }[] = [];
+    if (this.collidersOn && this.colliderLayer)
+      for (const pv of this.views.values()) {
+        const i = this.colliderLayer.partInfo(pv.id);
+        if (i) parts.push({ partId: pv.id, counts: i.counts, gear: i.gear, matrix: i.matrix, partMatrix: [...pv.colorMesh.matrix.elements], visible: i.visible && pv.colorMesh.visible });
+      }
+    return { on: this.collidersOn, parts };
+  }
+
+  private syncColliders(): void {
+    const layer = this.colliderLayer;
+    if (!layer || !this.model) return;
+    layer.sync(this.model.parts, modelHasGround(this.model));
+    for (const pv of this.views.values()) layer.setPart(pv.id, pv.colorMesh.matrix, !this.hidden.has(pv.id));
+  }
+
+  /**
+   * The part solid as itself, or (colliders shown) as a faint ghost drawn before the colliders: one
+   * flat colour (neutral grey, or the body tint of Show kinematics), blended once per pixel (stencil
+   * bit 2; the collider fill uses bit 1), so the part's own colour, its pin holes and seams do not
+   * show through the collider fills as if they were features of the colliders.
+   */
+  private applyGhost(pv: PartView): void {
+    const m = pv.colorMesh.material;
+    const ghost = this.collidersOn;
+    if (m.transparent === ghost) return;
+    m.transparent = ghost;
+    m.depthWrite = !ghost;
+    m.uniforms.uOpacity!.value = ghost ? COLLIDER_GHOST_OPACITY : 1;
+    m.uniforms.uGhost!.value = ghost ? 1 : 0;
+    m.stencilWrite = ghost;
+    m.stencilRef = 2;
+    m.stencilFuncMask = 2;
+    m.stencilWriteMask = 2;
+    m.stencilFunc = THREE.NotEqualStencilFunc;
+    m.stencilZPass = THREE.ReplaceStencilOp;
+    m.stencilFail = THREE.KeepStencilOp;
+    m.stencilZFail = THREE.KeepStencilOp;
+    pv.colorMesh.renderOrder = ghost ? COLLIDER_ORDER.ghost : 0;
+    m.needsUpdate = true;
   }
 
   /** The model last passed to setModel. */
@@ -590,20 +665,27 @@ export class Viewport {
     this.requestRender();
   }
 
+  /** Called after setPartVisible / showAllParts change what is shown (the colliders legend recounts). */
+  onPartVisibility: (() => void) | null = null;
+
   /** Show / hide one part (persists across setModel until changed). */
   setPartVisible(partId: number, visible: boolean): void {
+    const was = !this.hidden.has(partId);
     if (visible) this.hidden.delete(partId);
     else this.hidden.add(partId);
     const pv = this.views.get(partId);
     if (pv) this.applyVisibility(pv);
     this.requestRender();
+    if (was !== visible) this.onPartVisibility?.();
   }
 
   /** Show every part again. */
   showAllParts(): void {
+    const any = this.hidden.size > 0;
     this.hidden.clear();
     for (const pv of this.views.values()) this.applyVisibility(pv);
     this.requestRender();
+    if (any) this.onPartVisibility?.();
   }
 
   /**
@@ -1123,6 +1205,7 @@ export class Viewport {
     this.dprQuery = null;
     for (const c of this.cleanups) c();
     for (const pv of [...this.views.values()]) this.destroyView(pv);
+    this.colliderLayer?.dispose();
     if (this.ghostGeo) this.releaseGeometry(this.ghostGeo.sig);
     for (const e of this.geoCache.values()) e.geometry.dispose();
     this.geoCache.clear();
@@ -1205,7 +1288,9 @@ export class Viewport {
     this.idScene.add(idMesh);
     const shadowMesh = this.shadow.createCaster(geo.geometry);
     this.shadowDirty = true;
-    return { id: part.id, part, sig, origin: partOrigin(part), geo, slot, colorMesh, idMesh, shadowMesh, color: part.color };
+    const pv: PartView = { id: part.id, part, sig, origin: partOrigin(part), geo, slot, colorMesh, idMesh, shadowMesh, color: part.color };
+    this.applyGhost(pv);
+    return pv;
   }
 
   private destroyView(pv: PartView): void {
@@ -1223,6 +1308,7 @@ export class Viewport {
   private applyColor(pv: PartView): void {
     const c = this.colorOverrides?.get(pv.id) ?? pv.color;
     (pv.colorMesh.material.uniforms.uColor!.value as THREE.Color).set(c);
+    (pv.colorMesh.material.uniforms.uGhostColor!.value as THREE.Color).set(this.colorOverrides?.get(pv.id) ?? COLLIDER_GHOST_COLOR);
     (pv.colorMesh.material.uniforms.uMarkColor!.value as THREE.Color).set(markColor(c));
   }
 
@@ -1241,6 +1327,7 @@ export class Viewport {
     pv.colorMesh.visible = v;
     pv.idMesh.visible = v;
     pv.shadowMesh.visible = v;
+    if (this.collidersOn) this.colliderLayer?.setPart(pv.id, pv.colorMesh.matrix, v);
   }
 
   private partMatrix(pv: PartView, out: THREE.Matrix4): THREE.Matrix4 {
@@ -1266,6 +1353,7 @@ export class Viewport {
     pv.idMesh.matrix.copy(pv.colorMesh.matrix);
     pv.colorMesh.matrixWorldNeedsUpdate = true;
     pv.idMesh.matrixWorldNeedsUpdate = true;
+    if (this.collidersOn) this.colliderLayer?.setPart(pv.id, m, !this.hidden.has(pv.id));
   }
 
   private worldBox(pv: PartView): Box3 {
@@ -1492,10 +1580,19 @@ export class Viewport {
       this.grid.update([cx, cz], Math.max(10, ext * 0.6 + 7), Math.sin(this.cam.pitch), dpr);
     }
     this.updateFloor(dpr);
+    if (this.collidersOn && this.colliderLayer) {
+      // Edges on a collider's surface pass the depth test with a bias of ≈ 1.5 CSS px of depth
+      // (a steep face's depth changes across the line's width); those behind it draw faint.
+      const biasWorld = (1.5 * this.cam.height) / Math.max(1, this.cssH);
+      const bias = (2 * biasWorld) / Math.max(1e-6, this.camera.far - this.camera.near);
+      this.colliderLayer.setLineParams(COLLIDER_LINE_PX * dpr, COLLIDER_HIDDEN_LINE_PX * dpr, bias);
+    }
     r.render(this.colorScene, this.camera);
 
-    // 4: lines
-    if (this.floatTargets && this.debugInk) this.outline.composite(r, params, this.visibleSelection().length > 0);
+    // 4: lines. Show colliders: the part solids are a ghost without ink; the selection outline stays.
+    const selOn = this.visibleSelection().length > 0;
+    if (this.collidersOn) params.inkWidth = -4; // no ink coverage anywhere (outline.ts: width/2 + 0.5 − d ≤ 0)
+    if (this.floatTargets && this.debugInk && (!this.collidersOn || selOn)) this.outline.composite(r, params, selOn);
 
     // 5: overlays in the scene (hover, ghost, root marker, glyphs on top)
     // Bold (overlayStyle: over a part of the overlay's own colour): the line at double width, the

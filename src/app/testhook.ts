@@ -5,6 +5,8 @@ import type { Dir, Model } from '../core';
 import { describeGraph } from '../core/kinematics';
 import { pickCell, pickGrid } from '../editor';
 import type { FrictionLevel } from '../physics';
+import { DEFAULT_CYLINDER_SEGMENTS, colliderSpecs } from '../physics/shapes';
+import { groundLevel } from '../core/model';
 import type { App } from './app';
 
 type V3 = [number, number, number];
@@ -258,6 +260,7 @@ export function installTestHook(app: App): void {
       canRedo: app.history.canRedo,
       historySize: app.history.size,
       showKinematics: app.showKinematics,
+      showColliders: app.showColliders,
       speed: app.speed,
       friction: app.friction,
       paused: app.session?.paused ?? false,
@@ -318,6 +321,34 @@ export function installTestHook(app: App): void {
         return t && { p: [Number.NaN, t.p[1], t.p[2]], q: t.q };
       };
       return true;
+    },
+    /** Show colliders (DESIGN §7.4), as if toggled in the top bar (any mode). */
+    setShowColliders: (on: boolean): void => app.setShowColliders(on),
+    /**
+     * The collider view (§7.4): { on, parts: [{ partId, part, round, hull, guard }] } — colliders drawn
+     * per part by role — plus, per part, `matrix` (the drawn colliders' matrix, column-major),
+     * `partMatrix` (the part solid's) and `visible`. Empty `parts` while off.
+     */
+    colliderInfo: () => {
+      const i = vp.colliderInfo();
+      return {
+        on: i.on,
+        parts: i.parts.map((p) => ({ partId: p.partId, part: p.counts.part, round: p.counts.round, hull: p.counts.hull, guard: p.counts.guard, gearRound: p.gear.round, gearHull: p.gear.hull, matrix: p.matrix, partMatrix: p.partMatrix, visible: p.visible })),
+      };
+    },
+    /**
+     * Test only: per part, the colliders physics/shapes colliderSpecs lists for the current model
+     * (what the Simulation creates; independent of the view), by role — to check colliderInfo.
+     */
+    colliderSpecCounts: (): Record<number, { part: number; round: number; hull: number; guard: number }> => {
+      const ground = groundLevel(app.model) !== null;
+      const out: Record<number, { part: number; round: number; hull: number; guard: number }> = {};
+      for (const p of app.model.parts) {
+        const c = { part: 0, round: 0, hull: 0, guard: 0 };
+        for (const s of colliderSpecs(p, DEFAULT_CYLINDER_SEGMENTS, ground)) c[s.role]++;
+        out[p.id] = c;
+      }
+      return out;
     },
     flushAutosave: (): void => app.flushAutosave(),
     openText: (name: string, text: string): boolean => app.openText(name, text),

@@ -14,7 +14,7 @@ Examples → Cart, press Play and drag it about.
 
 ## Quick tour
 
-The window has a top bar (File, Examples, Undo/Redo, colour palette, Show kinematics, the
+The window has a top bar (File, Examples, Undo/Redo, colour palette, Show kinematics / colliders, the
 simulation controls with playback speed and joint friction, help `?` and About), a tool bar on the left, the 3D view with the view cube
 top-right, an inspector for the selected part, and a status bar (what is under the cursor, what a
 click will do, the last message or error, and counts of parts / bodies / joints). The `?` button
@@ -110,6 +110,18 @@ crank wheel (a wheel on a fixed upright turned by a link hanging from a crank ho
 axis (ring = revolute, ring + double arrow = cylindrical, double arrow = prismatic) and two short
 interlocking ticks at the pitch point of every gear mesh, so you can see what is welded, what moves
 and what drives what before pressing Play. The status bar counts the meshes too.
+
+**Show colliders** (`C`, in the top bar's *Show* group beside kinematics; works while simulating
+too) draws what the simulation collides with instead of what the parts look like: the parts fade to
+a faint flat grey ghost and every collision shape is drawn with its own edges — one bevelled prism per
+liftarm run, 16-sided prisms for pins and axles, and for each wheel or gear a smooth cylinder, 64
+wedge pieces and (with the ground on) a ground guard. Colours say what each shape hits (parts,
+the floor, other wheels); edges hidden behind other shapes are drawn fainter, and a small legend in
+the side panel names the colours, says what each kind hits and counts the shapes. Shapes may overlap
+without colliding: parts joined by a pin or axle (or welded into one body) never hit each other, and
+one gear's disc never hits another gear's — the legend says so. It is taken from the same list the physics
+engine is built from, so it shows why something caught, sank or passed through. It is a view
+setting: not saved in the file and not an undo step.
 
 **Simulating.** Play (`Space`) freezes the model and runs the physics; Pause (`Space`), Step
 (`.`, 1/60 s), and the speed buttons 1× ½× ¼× ⅒× (default ¼× so the motion is readable) control

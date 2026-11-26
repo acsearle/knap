@@ -1,0 +1,40 @@
+import { it } from 'vitest';
+import { EXAMPLES } from '../../src/core/examples';
+import { setGround } from '../../src/core/model';
+import { DEFAULT_CYLINDER_SEGMENTS, colliderSpecs } from '../../src/physics/shapes';
+import { colliderMeshData } from '../../src/view/colliders';
+import type { Vec3 } from '../../src/physics/math';
+const sub = (a: Vec3, b: Vec3): Vec3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+const cr = (a: Vec3, b: Vec3): Vec3 => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+const dt = (a: Vec3, b: Vec3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+function maxFaceVerts(v: Vec3[]): number {
+  let best = 0; const tol = 1e-7; const seen: string[] = [];
+  const n = v.length;
+  for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) for (let k = j + 1; k < n; k++) {
+    let nn = cr(sub(v[j]!, v[i]!), sub(v[k]!, v[i]!)); const l = Math.hypot(...nn); if (l < 1e-9) continue;
+    nn = nn.map((x) => x / l) as Vec3; const d = dt(nn, v[i]!);
+    let a = 0, b = 0, on = 0;
+    for (const p of v) { const s = dt(nn, p) - d; if (s > tol) a++; else if (s < -tol) b++; else on++; }
+    if (a && b) continue; best = Math.max(best, on);
+  }
+  return best;
+}
+it('dbg', () => {
+  const hist: Record<string, number> = {};
+  let t0 = performance.now();
+  for (const ex of EXAMPLES) {
+    const m = setGround(ex.build(), true);
+    for (const p of m.parts) for (const s of colliderSpecs(p, DEFAULT_CYLINDER_SEGMENTS, true)) {
+      if (s.shape.type !== 'hull') continue;
+      const k = `${s.role}:${maxFaceVerts(s.shape.points)}`; hist[k] = (hist[k] ?? 0) + 1;
+    }
+  }
+  console.log('max vertices on one face, per hull:', JSON.stringify(hist), (performance.now() - t0).toFixed(0), 'ms');
+  for (const name of ['cart', 'gear-train', 'collision']) {
+    const m = EXAMPLES.find((e) => e.name === name)!.build();
+    const t = performance.now();
+    let tri = 0, edges = 0;
+    for (const p of m.parts) { const d = colliderMeshData(colliderSpecs(p, 16, m.ground === true)); tri += d.positions.length / 9; edges += d.ends.length / 6; }
+    console.log(`${name}: colliderMeshData for all parts ${(performance.now() - t).toFixed(1)} ms (node), ${tri} triangles, ${edges} edges`);
+  }
+});

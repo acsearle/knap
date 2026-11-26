@@ -1933,6 +1933,54 @@ changed a rule (§2.7 rules 1 and 6, §4.2, §4.3, §5.1 "Smaller steps", §6.1,
   solve of the mesh row adds about 10 % of the kinetic energy per second (linear in substeps
   per second). The guard removes it in normal use. See docs/RAPIER.md.
 
+## Milestone 9: Show colliders view
+
+Built by one agent, reviewed two ways ("truth": is the picture the physics; "look": can it be
+read), fixed by one agent.
+
+- **Top bar.** Separate "Show kinematics" and "Show colliders" toggles overflowed the bar by
+  53 px at 1280×720, so they are one group, "Show ☐ kinematics ☐ colliders". Even grouped the
+  bar had to be tightened by a pixel or two per gap (gaps 3→2, separator margins 4→3, palette
+  gap 3→2, segmented-button padding 6→5, spacer minimum 8→6, text-button padding 8→7; the
+  group's labels are 11.5 px). Slack after: 9.8 px. The bar still overflows below 1280 px, as
+  before.
+- **`colliderSpecs(part, segments, ground)`** takes the ground flag (a guard exists only with
+  a ground) and marks gear colliders `gear: true`, so the proof can tell gear collision groups
+  from wheels'.
+- **`Simulation.colliderDump()`** (debug and tests only; the one change to `sim.ts`) reads each
+  shape back from the WASM collider. The first version read `Collider.shape`, which Rapier
+  0.21 caches from the `ColliderDesc`, so the "proof against Rapier" compared the input with
+  itself; the reviewer showed it by changing the engine's cylinder and seeing no difference.
+- **Renderer** is created with `stencil: true`. Collider fills and the part ghost each blend
+  once per pixel through a stencil bit; without it the coplanar faces of two colliders (a
+  beam's box and prism, neighbouring wedges) z-fight into stripes. A per-role polygon offset
+  was tried first and failed on SwiftShader. Toggling off is pixel-identical to before
+  (0 differing pixels, Cart and Gear train).
+- **Fill order** where roles' faces coincide (a wheel's hub prism, pieces and disc share end
+  planes): part, pieces, disc, guard.
+- **Ghost.** DESIGN said "a faint ghost". As first built (shaded, part-coloured, 0.3 opacity)
+  the ghost's pin-hole walls and tyre seams showed through the fills as crescents and stripes
+  and read as holes in the colliders, and part colour shifted the role colours by up to
+  ΔE ≈ 20 (a red beam looked like a disc, a green one like a guard). Now flat neutral grey
+  `#8f959c`, or the body tint with Show kinematics; a beam's top face is the same colour for
+  all 8 palette colours. Cost: gear teeth are no longer visible inside a gear's disc.
+- **Legend.** Both reviewers found the same defect in meaning: the view draws big overlaps
+  that never collide (pins inside beams, welded parts, meshing gears' discs) and the first
+  legend's fixed sentences said they hit. The legend is now worded from the model (DESIGN
+  §7.4), gear discs have their own row, hidden (removed) parts are not counted, and an empty
+  model shows one "None" row. Gear discs keep the wheel-disc colour: only the legend tells
+  them apart.
+- **Legend position**: below the inspector, not under the Model block, so Delete stays in view
+  with a selection at 1280×720 (bottom at 487 px against the panel's 684 px); the legend's
+  lower rows scroll instead.
+- Left open: selection outline and build ghost are the same blue as the Part shapes role (a
+  selected beam is blue on blue); wheels are the busiest thing in the picture and the wheel
+  disc reads only as a dark ring hugging the 32-gon; looking straight through a through-hole
+  shows a slightly lighter disc; removal was tested by hiding a part through the test hook,
+  not by a body really falling out; WebGL context loss with the view on and GPU cache growth
+  over a long session were not measured; render cost with the view on was measured only in
+  SwiftShader (about ×2.5–3), which says little about a real GPU.
+
 ## §9 Tooling
 
 - **Vitest 4.1** (not 3.x): 3.x pulls in `tinypool`/`@vitest/mocker` versions with published

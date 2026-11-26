@@ -33,9 +33,19 @@ uniform float uKeyStrength;
 uniform float uAmbTop;
 uniform float uAmbBottom;
 uniform float uOpacity;
+uniform float uGhost;
+uniform vec3 uGhostColor;
 varying vec3 vNormal;
 varying float vMark;
 void main() {
+  // Show colliders' ghost (viewport applyGhost): one flat colour, no shading, no index mark — so
+  // the part's inner faces (pin holes, tread seams) and its own colour do not show through the
+  // collider fills as features of the colliders.
+  if (uGhost > 0.5) {
+    gl_FragColor = vec4(mix(uGhostColor, uTint, uTintAmount), uOpacity);
+    #include <colorspace_fragment>
+    return;
+  }
   vec3 n = normalize(vNormal);
   if (!gl_FrontFacing) n = -n;
   float amb = mix(uAmbBottom, uAmbTop, n.y * 0.5 + 0.5);
@@ -61,6 +71,8 @@ export function createPartMaterial(color: string): THREE.ShaderMaterial {
       uAmbTop: { value: LIGHT.ambientTop },
       uAmbBottom: { value: LIGHT.ambientBottom },
       uOpacity: { value: 1 },
+      uGhost: { value: 0 },
+      uGhostColor: { value: new THREE.Color(color) },
     },
     side: THREE.FrontSide,
   });

@@ -1,5 +1,5 @@
 // Top bar: app name, File (New / Open… / Save / Examples ▾), Undo / Redo, colour palette,
-// Show kinematics, simulate controls (Play/Stop, Pause, Step, speed, joint friction), help and
+// Show kinematics / colliders, simulate controls (Play/Stop, Pause, Step, speed, joint friction), help and
 // about. The simulated-time readout and the "can't keep up" pill are built here but placed by the
 // host over the viewport (next to the SIMULATING badge), so the top bar never changes width.
 import type { FrictionLevel } from '../physics';
@@ -22,6 +22,7 @@ export interface TopBarHandlers {
   redo(): void;
   pickColor(color: string): void;
   setShowKinematics(on: boolean): void;
+  setShowColliders(on: boolean): void;
   playStop(): void;
   togglePause(): void;
   step(): void;
@@ -40,6 +41,7 @@ export interface TopBarState {
   canRedo: boolean;
   color: string;
   showKinematics: boolean;
+  showColliders: boolean;
   speed: number;
   friction: FrictionLevel;
 }
@@ -74,6 +76,7 @@ export class TopBar {
   private readonly redoBtn: HTMLButtonElement;
   private readonly swatches: HTMLButtonElement[] = [];
   private readonly kinInput: HTMLInputElement;
+  private readonly colInput: HTMLInputElement;
   private readonly playBtn: HTMLButtonElement;
   private readonly pauseBtn: HTMLButtonElement;
   private readonly stepBtn: HTMLButtonElement;
@@ -151,7 +154,24 @@ export class TopBar {
 
     this.kinInput = h('input', { type: 'checkbox', 'data-action': 'kinematics' });
     this.kinInput.addEventListener('change', () => on.setShowKinematics(this.kinInput.checked));
-    const kin = h('label', { class: 'toggle', title: 'Tint parts by rigid body and show joint axes (K)' }, this.kinInput, 'Show kinematics');
+    this.colInput = h('input', { type: 'checkbox', 'data-action': 'colliders' });
+    this.colInput.addEventListener('change', () => on.setShowColliders(this.colInput.checked));
+    // "Show" followed by two checkboxes (DESIGN §7.4): two "Show …" toggles do not fit the 1280 px bar.
+    const show = h(
+      'span',
+      { class: 'show-group', role: 'group', 'aria-label': 'Show', 'data-role': 'show-group' },
+      h('span', { class: 'seg-caption', 'aria-hidden': 'true' }, 'Show'),
+      h('label', { class: 'toggle', title: 'Show kinematics: tint parts by rigid body and show joint axes (K)' }, this.kinInput, 'kinematics'),
+      // (class toggle-c, styled like .toggle: e2e scripts address the kinematics label as label.toggle)
+      h(
+        'label',
+        { class: 'toggle-c', title: 'Show colliders: the shapes the simulation collides with instead of the parts, coloured by what they hit (C)' },
+        this.colInput,
+        'colliders',
+      ),
+    );
+    this.kinInput.setAttribute('aria-label', 'Show kinematics');
+    this.colInput.setAttribute('aria-label', 'Show colliders');
 
     this.playBtn = button([icon(ICONS.play), 'Play'], { class: 'btn primary play', title: 'Simulate (Space)', 'data-action': 'play', onclick: () => on.playStop() });
     this.pauseBtn = button(icon(ICONS.pause), { class: 'btn icon-only', title: 'Pause / resume (Space)', 'aria-label': 'Pause', 'data-action': 'pause', onclick: () => on.togglePause() });
@@ -191,7 +211,7 @@ export class TopBar {
       h('span', { class: 'sep' }),
       palette,
       h('span', { class: 'sep' }),
-      kin,
+      show,
       h('span', { class: 'spacer' }),
       h('span', { class: 'simgroup' }, this.playBtn, this.pauseBtn, this.stepBtn, seg, fric),
       h('span', { class: 'sep' }),
@@ -278,6 +298,7 @@ export class TopBar {
       b.classList.toggle('on', b.dataset.color === s.color);
     }
     this.kinInput.checked = s.showKinematics;
+    this.colInput.checked = s.showColliders;
 
     const running = s.mode !== 'edit';
     this.playBtn.replaceChildren(icon(running ? ICONS.stop : ICONS.play), s.mode === 'starting' ? 'Starting…' : running ? 'Stop' : 'Play');

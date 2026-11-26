@@ -378,6 +378,53 @@ export function groundPlane(model: Model, slopeDeg = 0, segments = DEFAULT_CYLIN
   return { normal, d };
 }
 
+/**
+ * What a collider meets (DESIGN §7.4 "Show colliders"; the collision groups of sim.ts):
+ *  - part: an ordinary cell's prism or box — meets parts, wheel / gear hulls and the floor;
+ *  - round: a wheel's or gear's native cylinder — meets only the floor and other rounds;
+ *  - hull: a wheel's or gear's wedge pieces — meet only parts;
+ *  - guard: a wheel's or gear's ground guard — meets only the floor (present only with a ground).
+ */
+export type ColliderRole = 'part' | 'round' | 'hull' | 'guard';
+
+/** One collider's shape, edit-time world coordinates (DESIGN §7.4). */
+export type ColliderShapeSpec =
+  /** A convex hull of `points` (Rapier's convex-hull builder; the solid is the hull of the points). */
+  | { type: 'hull'; points: Vec3[] }
+  | { type: 'box'; center: Vec3; halfExtents: Vec3 }
+  /** A native cylinder about world axis `axis`. */
+  | { type: 'cylinder'; center: Vec3; axis: Axis; radius: number; halfLength: number };
+
+export interface ColliderSpec {
+  role: ColliderRole;
+  shape: ColliderShapeSpec;
+  /** The collider belongs to a gear (its round / hull use the gear collision groups). */
+  gear?: boolean;
+}
+
+/**
+ * Every collider the Simulation creates for `part` (DESIGN §7.4 "Show colliders"), in the order
+ * sim.ts creates them, built from the same partShapes it consumes: a hull shape → one 'part' convex
+ * hull, a box → one 'part' cuboid, a wheel / gear → its 'round' native cylinder, its 'hull' pieces
+ * and — only when the model has a ground (`ground`: groundLevel(model) !== null, as sim.ts tests
+ * it) — its 'guard'. Edit-time world coordinates. Pure.
+ */
+export function colliderSpecs(part: Part, segments: number, ground: boolean): ColliderSpec[] {
+  const out: ColliderSpec[] = [];
+  for (const sh of partShapes(part, segments)) {
+    if (sh.kind === 'hull') out.push({ role: 'part', shape: { type: 'hull', points: sh.points.map((q) => [...q] as Vec3) } });
+    else if (sh.kind === 'box') out.push({ role: 'part', shape: { type: 'box', center: [...sh.center], halfExtents: [...sh.halfExtents] } });
+    else {
+      const gear = sh.gear !== undefined;
+      const tag = gear ? { gear: true } : {};
+      out.push({ role: 'round', shape: { type: 'cylinder', center: [...sh.center], axis: sh.axis, radius: sh.radius, halfLength: sh.halfLength }, ...tag });
+      for (const piece of sh.hull) out.push({ role: 'hull', shape: { type: 'hull', points: piece.map((q) => [...q] as Vec3) }, ...tag });
+      if (ground) out.push({ role: 'guard', shape: { type: 'hull', points: sh.guard.map((q) => [...q] as Vec3) }, ...tag });
+    }
+  }
+  return out;
+}
+
 type Cyl = Extract<ColliderPrim, { shape: 'cylinder' }>;
 
 /** Shapes of one part, in edit-time world coordinates. */

@@ -2,7 +2,8 @@
 // physics into the tool of DESIGN.md §7. One instance per page (see src/main.ts).
 //
 // State that is *not* the model (and therefore not in the undo history): the tool state, the
-// selection, the mode (edit / starting / simulate), the kinematics toggle, the playback speed and
+// selection, the mode (edit / starting / simulate), the kinematics and colliders toggles (view
+// preferences: not saved, not undo steps), the playback speed and
 // the joint-friction level (a UI preference kept in localStorage under FRICTION_PREF_KEY, never in
 // the model or its file).
 // Every model change goes through History, and History's change listener (`modelChanged`) is the
@@ -61,6 +62,7 @@ import { DEFAULT_FRICTION_LEVEL, JOINT_FRICTION } from '../physics';
 import type { FrictionLevel } from '../physics';
 import { groundPlane } from '../physics/shapes';
 import { Viewport, cameraBasis, defaultCamera, jointGlyphsFromGraph } from '../view';
+import { ColliderLegend, colliderLegendRows } from '../ui/colliderlegend';
 import type { ViewportPointerEvent } from '../view';
 import { Banner, aboutDialog, helpDialog } from '../ui/dialogs';
 import type { Dialog } from '../ui/dialogs';
@@ -138,6 +140,7 @@ export class App {
   readonly toolbar: Toolbar;
   readonly inspector: Inspector;
   readonly modelSettings: ModelSettings;
+  readonly colliderLegend: ColliderLegend;
   readonly status: StatusBar;
   readonly banner: Banner;
   readonly help: Dialog;
@@ -148,6 +151,8 @@ export class App {
   selection: number | null = null;
   mode: Mode = 'edit';
   showKinematics = false;
+  /** Show colliders (DESIGN §7.4): a view preference, in both modes; not in the file, not undoable. */
+  showColliders = false;
   speed = 0.25;
   /** Joint-friction level (DESIGN §5.1): a remembered UI preference, not part of the model. */
   friction: FrictionLevel = DEFAULT_FRICTION_LEVEL;
@@ -205,6 +210,7 @@ export class App {
         redo: () => this.redo(),
         pickColor: (c) => this.pickColor(c),
         setShowKinematics: (on) => this.setShowKinematics(on),
+        setShowColliders: (on) => this.setShowColliders(on),
         playStop: () => void (this.mode === 'edit' ? this.play() : this.stop()),
         togglePause: () => this.togglePause(),
         step: () => void this.stepButton(),
@@ -240,6 +246,8 @@ export class App {
       setGround: (on) => this.setGround(on),
       setFixRoot: (on) => this.setFixRoot(on),
     });
+    this.colliderLegend = new ColliderLegend();
+    this.vp.onPartVisibility = () => this.updateColliderLegend();
     this.status = new StatusBar();
     this.banner = new Banner();
     this.help = helpDialog();
@@ -254,7 +262,7 @@ export class App {
     viewEl.append(
       h('div', { class: 'sim-status' }, this.simBadge, this.topbar.readout, this.topbar.slow),
       this.banner.el,
-      h('div', { class: 'side-panel', 'data-role': 'side-panel' }, this.modelSettings.el, this.inspector.el),
+      h('div', { class: 'side-panel', 'data-role': 'side-panel' }, this.modelSettings.el, this.inspector.el, this.colliderLegend.el),
     );
     root.replaceChildren(this.topbar.el, this.toolbar.el, viewEl, this.status.el);
     // Fit / Home frame the model clear of the side panel (Model block, inspector) on the right.
@@ -372,6 +380,7 @@ export class App {
     this.vp.setRootMarkerVisible(rootIsFixed(m));
     this.updateFloor();
     this.updateKinematicsOverlay();
+    this.updateColliderLegend();
     this.status.setCounts(countsText(m, this.graph()));
     this.scheduleAutosave();
     this.refreshUI();
@@ -431,6 +440,7 @@ export class App {
       canRedo: this.history.canRedo,
       color: this.tool.color,
       showKinematics: this.showKinematics,
+      showColliders: this.showColliders,
       speed: this.speed,
       friction: this.friction,
     });
@@ -474,6 +484,17 @@ export class App {
       this.vp.setPartColors(null);
       this.vp.setGlyphsVisible(false);
     }
+  }
+
+  /** The colliders legend (§7.4): each role drawn in the model with its count, and the floor. */
+  private updateColliderLegend(): void {
+    if (!this.showColliders) {
+      this.colliderLegend.update(false, []);
+      return;
+    }
+    const g = this.graph();
+    const joined = g.joints.length > 0 || g.bodies.some((b) => b.partIds.length > 1);
+    this.colliderLegend.update(true, colliderLegendRows(this.vp.colliderInfo().parts, groundPlane(this.history.current) !== null, joined));
   }
 
   private clearEditOverlays(): void {
@@ -859,6 +880,14 @@ export class App {
     this.refreshUI();
   }
 
+  /** Show colliders [C] (§7.4): both modes; a view preference (no undo step, not saved). */
+  setShowColliders(on: boolean): void {
+    this.showColliders = on;
+    this.vp.setShowColliders(on);
+    this.updateColliderLegend();
+    this.refreshUI();
+  }
+
   // ===========================================================================================
   // Undo / files / examples
 
@@ -1218,6 +1247,11 @@ export class App {
     if (lower === 'k') {
       e.preventDefault();
       this.setShowKinematics(!this.showKinematics);
+      return;
+    }
+    if (lower === 'c') {
+      e.preventDefault();
+      this.setShowColliders(!this.showColliders);
       return;
     }
     if (key === 'f' || key === 'F') {
