@@ -1,0 +1,6 @@
+square loop μ 0: engaged 4/4 pairs, arm swing range 3.059 rad, θ 2.0319/-2.0319/2.0319/-2.0319, E max − E0 5.35e-1 (E0 17347.8), phase max 2.44e-4, joint err 7.15e-7, |ω| end 1.25e+1
+square loop μ 0.2: engaged 4/4 pairs, arm swing range 2.708 rad, θ 1.5013/-1.5013/1.5013/-1.5013, E max − E0 0.00e+0 (E0 17347.8), phase max 1.76e-4, joint err 6.75e-7, |ω| end 2.26e-3
+locked train μ 0: 10 s at rest moved 2.39e-7 rad, E max − E0 0.00e+0; after a 20 rad/s kick moved 8.53e-14 rad, max |ω| after 3.81e-6, E max − E(kick) 0.00e+0, joint err 9.49e-11, k 1, releases 0,0,0,0
+locked train μ 0.05: 10 s at rest moved 2.44e-7 rad, E max − E0 0.00e+0; after a 20 rad/s kick moved 1.66e-11 rad, max |ω| after 3.88e-6, E max − E(kick) 0.00e+0, joint err 9.52e-11, k 1, releases 0,0,0,0
+locked train μ 0.2: 10 s at rest moved 2.61e-7 rad, E max − E0 0.00e+0; after a 20 rad/s kick moved 7.18e-11 rad, max |ω| after 4.14e-6, E max − E(kick) 0.00e+0, joint err 1.04e-10, k 1, releases 0,0,0,0
+16+16 at distance 3: engagements 0, gap 1.0000, B ω 1.12e-19

@@ -1,0 +1,24 @@
+// Undo / selection after Duplicate on the gear train.
+import { session, model, frames, K, canon, status, state, scr } from './review-m8-ux-lib.mjs';
+const s = await session();
+const { page, errors } = await s.open('undo');
+const log = (...a) => console.log(...a);
+const MOD = process.platform === 'darwin' ? 'Meta' : 'Control';
+const settle = async () => { await page.waitForFunction(() => !window.__knap.getState().animating); await frames(page, 2); };
+const show = async (label) => { const m = await model(page); const st = await state(page); log(`${label}: parts ${m.parts.length} ids ${m.parts.map((p) => p.id)} sel=${st.selection} canUndo=${st.canUndo} canRedo=${st.canRedo} hist=${st.historySize} msg="${(await status(page)).message}"`); return m; };
+await K(page, () => window.__knap.loadExample('gear-train'));
+await page.keyboard.press('Home'); await settle();
+await show('loaded');
+const p24 = await scr(page, [2.9, 3.6, 2.5]);
+await page.mouse.move(p24.x, p24.y); await page.mouse.down(); await page.mouse.up(); await frames(page, 2);
+await show('selected');
+await page.keyboard.press('PageUp'); await frames(page, 2); await show('pgup');
+await page.keyboard.press(`${MOD}+z`); await frames(page, 2); await show('undo');
+await page.keyboard.press('d'); await frames(page, 2); await show('dup');
+await page.keyboard.press(`${MOD}+z`); await frames(page, 2); await show('undo dup');
+await page.keyboard.press('Delete'); await frames(page, 2); await show('delete');
+await page.keyboard.press(`${MOD}+z`); await frames(page, 2); await show('undo delete');
+await page.keyboard.press(`${MOD}+z`); await frames(page, 2); await show('undo again');
+await page.keyboard.press(`${MOD}+z`); await frames(page, 2); await show('undo again');
+log('errors', errors);
+await s.close();

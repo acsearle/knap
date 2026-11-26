@@ -15,6 +15,8 @@ const EXAMPLES = [
   // §8 examples 8 and 9 (wheels): the cart has a free root, so no body is fixed.
   { name: 'crank-wheel', bodies: 3 },
   { name: 'cart', bodies: 6, fixed: 0 },
+  // §8 example 10 (gears): frame, arm with the 40, pinion with two 8s, output with the 24.
+  { name: 'gear-train', bodies: 4 },
 ];
 
 export default async function ({ page, url, shot, assert, step, errors }) {
@@ -26,7 +28,7 @@ export default async function ({ page, url, shot, assert, step, errors }) {
     await step(`${ex.name}: load from the menu`, async () => {
       await press(page, '[data-action=examples]');
       assert(await page.locator('[data-role=examples-menu]').isVisible(), 'menu opens');
-      // The menu scrolls when it is taller than the window (9 examples at 1280×720).
+      // The menu scrolls when it is taller than the window (10 examples at 1280×720).
       await page.locator(`[data-example=${ex.name}]`).scrollIntoViewIfNeeded();
       await press(page, `[data-example=${ex.name}]`);
       assert(!(await page.locator('[data-role=examples-menu]').isVisible()), 'menu closes');

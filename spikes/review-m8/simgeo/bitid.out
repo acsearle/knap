@@ -1,0 +1,10 @@
+
+ RUN  v4.1.12 /Users/antony/Desktop/knap.nosync
+
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  17:57:55
+   Duration  709.57s (transform 513ms, setup 0ms, import 629ms, tests 708.74s, environment 0ms)
+
+npx vitest run --config spikes/review-m8/simgeo/vitest.config.ts bitid  348.66s user 3.46s system 49% cpu 11:50.32 total

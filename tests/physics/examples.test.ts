@@ -45,6 +45,50 @@ const WHEEL_HUBS: [number, Vec3][] = [
   [9, [8, 0, 3]],
 ];
 
+/**
+ * Gear train (§8 example 10): the arm (part 3) swings; the pinion (part 2) turns 5× as fast the other
+ * way and the output (part 4) 5/3 as fast the same way (unwrapped twists about Z, within 1e-3 once
+ * the arm has turned 0.05 rad); both meshes stay engaged every sample.
+ */
+function gearTrainCheck(minDeg: number): Check {
+  const tw = (s: Simulation, id: number) => 2 * Math.atan2(s.partTransform(id)!.q[2], s.partTransform(id)!.q[3]);
+  let last: number[] | null = null;
+  const acc = [0, 0, 0];
+  let maxA = 0;
+  let errP = 0;
+  let errQ = 0;
+  let notEngaged = 0;
+  let phase = 0;
+  return {
+    sample: (s) => {
+      const now = [3, 2, 4].map((id) => tw(s, id));
+      if (last) now.forEach((v, i) => {
+        let d = v - last![i]!;
+        while (d > Math.PI) d -= 2 * Math.PI;
+        while (d < -Math.PI) d += 2 * Math.PI;
+        acc[i]! += d;
+      });
+      last = now;
+      maxA = Math.max(maxA, Math.abs(acc[0]!));
+      if (Math.abs(acc[0]!) > 0.05) {
+        errP = Math.max(errP, Math.abs(acc[1]! / acc[0]! + 5));
+        errQ = Math.max(errQ, Math.abs(acc[2]! / acc[0]! - 5 / 3));
+      }
+      const ms = s.meshStates();
+      if (ms.length !== 2) notEngaged++;
+      for (const m of ms) phase = Math.max(phase, Math.abs(m.phaseErrorTeeth));
+    },
+    finish: () => {
+      expect((maxA * 180) / Math.PI).toBeGreaterThan(minDeg);
+      expect(errP).toBeLessThan(1e-3 * 5);
+      expect(errQ).toBeLessThan(1e-3 * 5 / 3);
+      expect(notEngaged).toBe(0);
+      expect(phase).toBeLessThan(0.005);
+      return `arm swings to ${((maxA * 180) / Math.PI).toFixed(0)}°, pinion/arm −5 ± ${errP.toExponential(1)}, output/arm 5/3 ± ${errQ.toExponential(1)}, phase ≤ ${phase.toExponential(1)} teeth, both meshes engaged throughout`;
+    },
+  };
+}
+
 const CHECKS: Record<string, (collisionBound?: number) => Check> = {
   pendulum: () => swingCheck(2, 90),
   'triple-pendulum': () => swingCheck(4, 90),
@@ -144,6 +188,7 @@ const CHECKS: Record<string, (collisionBound?: number) => Check> = {
   },
   // Wheel (part 2) on its pin rocks: crank from 45° above horizontal down past crank-down.
   'crank-wheel': () => swingCheck(2, 90),
+  'gear-train': () => gearTrainCheck(120),
   cart: () => {
     // The free cart rolls back and forth under the swinging arm (part 10), stays on its wheels
     // (chassis tilt small, wheels on the floor) and nothing is removed.

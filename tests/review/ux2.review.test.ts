@@ -74,7 +74,7 @@ function modelBox(m: Model): { lo: V3; hi: V3 } {
   const hi: V3 = [-Infinity, -Infinity, -Infinity];
   for (const p of m.parts)
     for (const c of p.cells) {
-      const r = c.rim ?? 0.5;
+      const r = (c.rim ?? 0.5) + (c.teeth ? 3 / 32 : 0);
       const q = [c.x, c.y, c.z];
       for (let a = 0; a < 3; a++) {
         const e = a === c.axis ? 0.5 : Math.max(0.5, r);
@@ -125,6 +125,8 @@ const refIsHole = (k: string) => k.endsWith('Hole');
 const refIsMale = (k: string) => k === 'pin' || k === 'axle' || k === 'frictionPin';
 function refRim(c: Cell): number | undefined {
   const r = c.rim;
+  // A gear is picked over its tip disc (DESIGN §7.3 "Gears in picking": radius r + 3/32).
+  if (c.teeth === true && r !== undefined && refIsHole(c.kind) && [0.5, 1, 1.5, 2.5].includes(r)) return r + 3 / 32;
   return r !== undefined && refIsHole(c.kind) && r >= 1 && r <= 4 && Math.abs(r * 2 - Math.round(r * 2)) < 1e-9 ? r : undefined;
 }
 interface RefPart {
@@ -438,7 +440,7 @@ describe('ux2 review: pickBack against a ray-marching reference', () => {
     expect(t.mism).toEqual([]);
   }, 300_000);
 
-  it('the nine examples', () => {
+  it('every built-in example', () => {
     const rnd = lcg(7);
     const t: Tally = { n: 0, compared: 0, ambiguous: 0, agree: 0, mism: [] };
     for (const ex of EXAMPLES) sampleModel(buildExample(ex.name), rnd, 400, t, ex.name);

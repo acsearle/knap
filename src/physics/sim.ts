@@ -44,12 +44,29 @@
 //    groups, so such a model is simulated exactly as before.
 //  - With a free root (rootIsFixed false) no body is fixed; bodies with a horizontal-axis rim
 //    touching the ground at Play are the sinks of the joint-friction load ranking (loadMasses).
+//
+// Gears (DESIGN §2.7, §5.1 "Gears", "Smaller steps at speed"; reference spikes/gearsim and
+// spikes/adaptive):
+//  - A gear's disc becomes the wheel's three colliders at its tip radius (groups gearRound /
+//    gearHull / guard: never against another gear), friction 0.4, mass of the solid pitch disc.
+//  - Every pair of gears on different bodies, not both fixed, is a mesh candidate (MeshPair). Before
+//    every world step updateMeshes engages / releases each pair by the MESH thresholds and re-anchors
+//    an engaged pair's joint: a generic joint with only LinX constrained (the pitch points move
+//    together along the common tangent) plus a one-sided LinY limit (the radial stop), the anchors
+//    led by λ and offset by the phase error e so the tooth phase is held exactly.
+//  - Each fixed step runs as k ∈ {1, 2, 4, 8} world steps of fixedDt/k (chooseK, from the speed of
+//    the gears with an engaged mesh), solver iterations divided by k; joint friction and the energy
+//    guard once per fixed step; grab, mesh update, removal and the 300 rad/s cap per world step.
+//    With no engaged mesh k = 1 and every step is exactly what it was before gears existed.
 import type { ColliderDesc, EventQueue, ImpulseJoint, RigidBody, World } from '@dimforge/rapier3d-compat';
+import { gearPlaneBasis, gearTeeth } from '../core/gears';
 import { analyze } from '../core/kinematics';
+import { isHole } from '../core/rules';
 import type { Joint, KinematicGraph } from '../core/kinematics';
-import { groundLevel } from '../core/model';
+import { groundLevel, isGear } from '../core/model';
 import type { Model } from '../core/types';
 import { HC, R_BORE } from '../geometry/dims';
+import { GEAR_COLL_EXTRA } from '../geometry/colliders';
 import { groundPlane, partShapes } from './shapes';
 import {
   add,
@@ -132,12 +149,59 @@ const SPEED_CAP = 400;
  * WheelShape.guard; not in DESIGN, see DEVIATIONS §5). Used only for models with a rim or a ground.
  */
 const GROUP = {
-  ground: (0x1 << 16) | (0x2 | 0x8 | 0x10),
-  round: (0x2 << 16) | (0x1 | 0x2),
+  ground: (0x1 << 16) | (0x2 | 0x8 | 0x10 | 0x20),
+  round: (0x2 << 16) | (0x1 | 0x2 | 0x20),
   hull: (0x4 << 16) | 0x8,
-  part: (0x8 << 16) | (0x1 | 0x4 | 0x8),
+  part: (0x8 << 16) | (0x1 | 0x4 | 0x8 | 0x40),
   guard: (0x10 << 16) | 0x1,
+  /** A gear's round collider (bit 32): the ground and plain wheels' round colliders, never another gear (DESIGN §5.1 "Gears"). */
+  gearRound: (0x20 << 16) | (0x1 | 0x2),
+  /** A gear's hull (bit 64): ordinary part colliders only. A gear's ground guard uses `guard`. */
+  gearHull: (0x40 << 16) | 0x8,
 } as const;
+
+/** Friction of a gear's round collider (plastic, like the parts; DESIGN §5.1 "Gears"). */
+export const GEAR_FRICTION = 0.4;
+
+/** Circular pitch of every gear: π × module ⅛ unit (DESIGN §2.7), units of arc. */
+export const GEAR_PITCH = Math.PI / 8;
+
+/**
+ * Mesh thresholds (DESIGN §5.1 "Gears", measured in spikes/gearsim). gap = D − r₁ − r₂ with D the
+ * hub distance in gear 1's plane, delta the axial offset of gear 2's hub along gear 1's axis, par the
+ * angle between the axes (mod π).
+ */
+export const MESH = {
+  /** Engage when par ≤ parIn, |delta| ≤ axialIn, minGap ≤ gap ≤ engageGap and both bodies are slower than maxLinSpeed. */
+  parIn: 0.035,
+  axialIn: 0.6,
+  engageGap: 0.125,
+  minGap: -0.25,
+  /** Release when par > parOut, |delta| > axialOut, gap > releaseGap, gap < releaseMinGap or either body is faster than maxLinSpeed. */
+  parOut: 0.087,
+  axialOut: 0.9,
+  releaseGap: 0.25,
+  releaseMinGap: -0.5,
+  /** Linear speed (units/s) above which a mesh releases and does not engage (Rapier clamps at 400). */
+  maxLinSpeed: 350,
+  /** The rate-limited snap: φ₀ moves toward φ_T by at most snapRate·h units of arc per world step h. */
+  snapRate: 0.96,
+  /** The radial stop sits this far below min(0, gap at engagement). */
+  stopSlack: 0.005,
+} as const;
+
+/**
+ * Smaller steps at speed (DESIGN §5.1): world steps per fixed step, and the rotation per world step
+ * of the fastest gear with an engaged mesh that k steps up above / down below (rad).
+ */
+export const SUBSTEP_LEVELS = [1, 2, 4, 8] as const;
+const K_UP = 0.08;
+const K_DOWN = 0.04;
+const K_MAX: number = SUBSTEP_LEVELS[3];
+/** k steps down no sooner than this after its last step up (simulated seconds). */
+const K_HOLD = 0.1;
+/** Speed cap of a gear with an engaged mesh, rad/s (DESIGN §5.1 "Speed cap"). */
+export const GEAR_SPEED_CAP = 300;
 
 /** Friction of a wheel's round collider (a tyre; DESIGN §5.1; combine rule average with the 0.4 of the ground and parts). */
 export const TYRE_FRICTION = 0.8;
@@ -223,6 +287,11 @@ export interface SimOptions {
    * toward +X and things roll toward +X. Default 0. Tests only for now (DESIGN §5.1 "Ground").
    */
   groundSlopeDeg?: number;
+  /**
+   * Tests only: pin the number of world steps per fixed step to this k (1, 2, 4 or 8) instead of
+   * choosing it from the gears' speed (DESIGN §5.1 "Smaller steps at speed"). Default: adaptive.
+   */
+  substeps?: number;
 }
 
 const DEFAULTS = {
@@ -333,6 +402,77 @@ interface SimJoint {
   lin: Stick;
 }
 
+/** A gear on a body: hub centre and axis in the body's local frame (= world − ref at t = 0). */
+interface SimGear {
+  body: number;
+  partId: number;
+  /** Index of the hub cell in its part. */
+  cell: number;
+  local: Vec3;
+  axisIndex: 0 | 1 | 2;
+  axis: Vec3;
+  /** Pitch radius. */
+  r: number;
+  teeth: number;
+}
+
+/** Unwrapped angle tracker (f64). */
+interface Tracker {
+  prev: number | undefined;
+  acc: number;
+}
+
+/** A mesh candidate: two gears on different bodies, not both fixed (DESIGN §5.1 "Gears"). g1.body < g2.body. */
+interface MeshPair {
+  g1: SimGear;
+  g2: SimGear;
+  engaged: boolean;
+  /** A body was removed: never looked at again (its joint went with the body). */
+  dead: boolean;
+  joint: ImpulseJoint | null;
+  /** Unwrapped trackers: gear 2's twist relative to body 1 about gear 1's axis, and ψ (see updateMeshes). */
+  th2: Tracker;
+  psi: Tracker;
+  /** Phase reference and its target, units of arc. */
+  phi0: number;
+  phiT: number;
+  /** Phase error φ − φ₀ at the last update, units of arc. */
+  e: number;
+  stopMin: number;
+  /** Diagnostics: last gap / delta / par, engagement count, release count, snap of the last engagement (teeth). */
+  gap: number;
+  delta: number;
+  par: number;
+  engagements: number;
+  releases: number;
+  lastSnap: number;
+}
+
+/** An engaged mesh (Simulation.meshStates). `cell` is the hub cell's index in its part. */
+export interface MeshState {
+  a: { partId: number; cell: number };
+  b: { partId: number; cell: number };
+  teethA: number;
+  teethB: number;
+  /** Phase error φ − φ₀ in teeth (signed). */
+  phaseErrorTeeth: number;
+}
+
+/** Every mesh candidate with its state (Simulation.meshDiagnostics; tests and diagnostics). */
+export interface MeshDiagnostics extends MeshState {
+  bodyA: number;
+  bodyB: number;
+  engaged: boolean;
+  dead: boolean;
+  gap: number;
+  delta: number;
+  par: number;
+  engagements: number;
+  releases: number;
+  /** Phase snap of the last engagement, teeth (φ_T − φ at engagement). */
+  lastSnap: number;
+}
+
 interface Grab {
   body: SimBody;
   local: Vec3;
@@ -344,6 +484,7 @@ interface Grab {
 /** JointAxis.LinX as the raw enum (same value) for RawImpulseJointSet.jointSetLimits. */
 type RawAxis = Parameters<World['impulseJoints']['raw']['jointSetLimits']>[1];
 const LIN_X = 0 as RawAxis; // RAPIER.JointAxis.LinX (asserted in tests/physics/joints.test.ts)
+const LIN_Y = 1 as RawAxis; // RAPIER.JointAxis.LinY (asserted in tests/physics/gears.test.ts)
 const ANG_X = 3 as RawAxis; // RAPIER.JointAxis.AngX (asserted in tests/physics/friction.test.ts)
 type RawMotorModel = Parameters<World['impulseJoints']['raw']['jointConfigureMotorModel']>[2];
 const ACCELERATION_BASED = 0 as RawMotorModel; // RAPIER.MotorModel.AccelerationBased
@@ -391,6 +532,27 @@ export class Simulation {
   private readonly groundSinks = new Set<number>();
   /** Collision groups are in use (the model has a rim or a ground). */
   private readonly grouped: boolean;
+  /** Gears and mesh candidates (DESIGN §5.1 "Gears"). */
+  private readonly gears: SimGear[] = [];
+  private readonly meshes: MeshPair[] = [];
+  /** Dynamic bodies with joints (they get the jointed solver iterations; see setK). */
+  private readonly jointedIds = new Set<number>();
+  /** World steps per fixed step and the world step fixedDt / k (DESIGN §5.1 "Smaller steps at speed"). */
+  private kValue = 1;
+  private h: number;
+  /** ω* bookkeeping of chooseK: max |ω| at the previous fixed step, fixed step of the last step up. */
+  private lastOmega = 0;
+  private lastUpStep = -Infinity;
+  private readonly pinnedK: number | null;
+  /** World steps taken (diagnostics). */
+  worldSteps = 0;
+  /** Test drives (setDriveTorque): constant world torques, and their work per guard group this fixed step. */
+  private readonly drives = new Map<number, Vec3>();
+  private readonly driveWork = new Map<number, number>();
+  /** Total work done by the test drives so far. */
+  driveWorkTotal = 0;
+  /** Energy the gear speed cap has removed (diagnostics). */
+  capRemoved = 0;
 
   /** Analyse `model` (which must be valid) and build its Rapier world. */
   static async create(model: Model, opts: SimOptions = {}): Promise<Simulation> {
@@ -408,6 +570,10 @@ export class Simulation {
     if (!(o.speed >= 0) || !Number.isFinite(o.speed)) throw new Error(`speed must be >= 0 (got ${o.speed})`);
     this.opts = o;
     this.fixedDt = o.fixedDt;
+    this.h = o.fixedDt;
+    const pin = options.substeps;
+    if (pin !== undefined && !(SUBSTEP_LEVELS as readonly number[]).includes(pin)) throw new Error(`substeps must be 1, 2, 4 or 8 (got ${pin})`);
+    this.pinnedK = pin ?? null;
     this.speedValue = o.speed;
     this.frictionValue = checkFriction(o.jointFriction);
     this.gravity = options.gravity ? [...options.gravity] : [0, -G, 0];
@@ -476,11 +642,12 @@ export class Simulation {
       this.buildBodies(model);
       this.buildGround(model);
       this.buildJoints();
+      this.buildMeshCandidates();
       this.applyFriction();
-      if (o.energyGuard) {
-        this.events = new RAPIER.EventQueue(true);
-        this.initGroups();
-      }
+      if (o.energyGuard) this.events = new RAPIER.EventQueue(true);
+      // Groups exist without the guard too: the gear speed cap scales a whole group.
+      this.initGroups();
+      if (this.pinnedK !== null) this.setK(this.pinnedK);
     } catch (e) {
       this.events?.free();
       world.free();
@@ -497,6 +664,7 @@ export class Simulation {
       jointed.add(j.bodyB);
     }
     const extra = Math.max(0, o.solverIterations - this.baseIterations);
+    for (const b of this.graph.bodies) if (!b.fixed && jointed.has(b.id)) this.jointedIds.add(b.id);
     for (const b of this.graph.bodies) {
       const parts = b.partIds.map((id) => partById.get(id)!).filter((p) => p && p.cells.length > 0);
       let ref: Vec3 = [0, 0, 0];
@@ -545,6 +713,12 @@ export class Simulation {
         }
       }
       this.bodies.push({ id: b.id, fixed: b.fixed, ref, rb });
+      for (const p of parts)
+        p.cells.forEach((c, index) => {
+          if (!isGear(c) || !isHole(c.kind)) return;
+          const r = c.rim;
+          this.gears.push({ body: b.id, partId: p.id, cell: index, local: sub([c.x, c.y, c.z], ref), axisIndex: c.axis, axis: unitAxis(c.axis), r, teeth: gearTeeth(r) });
+        });
     }
     // Free bodies (no joints) can fall fast onto other parts: give them soft CCD (predictive
     // contacts reaching one step ahead at the speed cap). Rapier's hard CCD solver is switched off
@@ -574,23 +748,26 @@ export class Simulation {
     const s = Math.SQRT1_2;
     const rot = sh.axis === 0 ? { x: 0, y: 0, z: -s, w: s } : sh.axis === 2 ? { x: s, y: 0, z: 0, w: s } : { x: 0, y: 0, z: 0, w: 1 };
     const m = sh.mass;
-    const ia = m.inertia[sh.axis]! * o.density;
-    const it = m.inertia[(sh.axis + 1) % 3]! * o.density;
+    const gear = sh.gear !== undefined;
+    // A gear's mass is the solid pitch disc at density 1, given explicitly (DESIGN §5.1 "Gears").
+    const density = gear ? 1 : o.density;
+    const ia = m.inertia[sh.axis]! * density;
+    const it = m.inertia[(sh.axis + 1) % 3]! * density;
     const round = RAPIER.ColliderDesc.cylinder(sh.halfLength, sh.radius)
       .setTranslation(c[0], c[1], c[2])
       .setRotation(rot)
       // Collider-local frame: the cylinder's axis is local Y.
-      .setMassProperties(m.volume * o.density, { x: 0, y: 0, z: 0 }, { x: it, y: ia, z: it }, { x: 0, y: 0, z: 0, w: 1 })
-      .setFriction(TYRE_FRICTION)
+      .setMassProperties(m.volume * density, { x: 0, y: 0, z: 0 }, { x: it, y: ia, z: it }, { x: 0, y: 0, z: 0, w: 1 })
+      .setFriction(gear ? GEAR_FRICTION : TYRE_FRICTION)
       .setRestitution(o.restitution)
-      .setCollisionGroups(GROUP.round);
+      .setCollisionGroups(gear ? GROUP.gearRound : GROUP.round);
     add(round);
     for (const piece of sh.hull) {
       const pts = new Float32Array(piece.length * 3);
       piece.forEach((q, i) => pts.set(sub(q, ref), i * 3));
       const hull = RAPIER.ColliderDesc.convexHull(pts);
       if (!hull) throw new Error('convex hull failed for a wheel');
-      hull.setDensity(0).setFriction(o.friction).setRestitution(o.restitution).setCollisionGroups(GROUP.hull);
+      hull.setDensity(0).setFriction(o.friction).setRestitution(o.restitution).setCollisionGroups(gear ? GROUP.gearHull : GROUP.hull);
       add(hull);
     }
     if (this.groundY === null) return; // the guard only meets the ground
@@ -635,8 +812,10 @@ export class Simulation {
       if (bid === undefined || this.bodies[bid]!.fixed) continue;
       for (const c of p.cells) {
         if (c.rim === undefined || c.axis === 1) continue;
-        // Lowest point of the disc along −n: hub height above the plane less r·|n in the disc's plane|.
-        const h = dot(sub([c.x, c.y, c.z], nominal), n) - c.rim * Math.sqrt(Math.max(0, 1 - n[c.axis]! ** 2));
+        // Lowest point of the disc along −n: hub height above the plane less r·|n in the disc's plane|
+        // (a gear's collider reaches r + 0.085 instead of r − 0.04, i.e. ⅛ further).
+        const R = isGear(c) ? c.rim + GEAR_COLL_EXTRA + (0.5 - HC) : c.rim;
+        const h = dot(sub([c.x, c.y, c.z], nominal), n) - R * Math.sqrt(Math.max(0, 1 - n[c.axis]! ** 2));
         if (h <= GROUND_SINK_DIST + 1e-9) this.groundSinks.add(bid);
       }
     }
@@ -985,18 +1164,418 @@ export class Simulation {
     return done;
   }
 
-  /** Exactly n fixed steps (ignores speed and the accumulator). */
+  /**
+   * Exactly n fixed steps (ignores speed and the accumulator). Each fixed step is k world steps of
+   * fixedDt / k (DESIGN §5.1 "Smaller steps at speed"; k = 1 without an engaged mesh): per world
+   * step the grab spring, the mesh update, the world step, body removal and the gear speed cap;
+   * per fixed step joint friction and the energy guard.
+   */
   stepFixed(n = 1): void {
     this.alive();
     for (let i = 0; i < n; i++) {
-      this.applyGrab();
-      if (this.events) this.world.step(this.events);
-      else this.world.step();
+      if (this.meshes.length && this.pinnedK === null) this.chooseK();
+      // Every fixed step (review m8: cleared only while a drive existed, the last drive's work
+      // stayed credited to the guard after setDriveTorque(…, [0, 0, 0]) and disabled it).
+      this.driveWork.clear();
+      // The fixed step in units of fixedDt / K_MAX, so k can step up between its world steps.
+      let rem = K_MAX;
+      while (rem > 0) {
+        this.applyGrab();
+        if (this.meshes.length && this.updateMeshes() && this.pinnedK === null && this.chooseK(true)) {
+          // A mesh engaged in this world step and k stepped up for it (review m8: the engaging step
+          // ran at the k chosen before the mesh existed and lost up to 98 % of the energy): re-anchor
+          // the engaged meshes for the new step h (the lead λ is proportional to h).
+          this.updateMeshes();
+        }
+        rem -= K_MAX / this.kValue;
+        const w0 = this.drives.size ? this.applyDrives() : null;
+        if (this.events) this.world.step(this.events);
+        else this.world.step();
+        if (w0) this.creditDrives(w0);
+        this.worldSteps++;
+        this.removeFallen();
+        if (this.meshes.length) this.capGearSpeed();
+      }
       this.stepCount++;
-      this.removeFallen();
       if (this.frictionValue > 0) this.updateFriction();
       if (this.events) this.guardEnergy();
     }
+  }
+
+  /**
+   * Tests and diagnostics: apply a constant world torque `tau` to a dynamic body from the next world
+   * step on ([0, 0, 0] removes it). It is a user torque set before every world step, and its work ½·h·tau·(ω_before + ω_after) is external work credited to the energy guard's reference
+   * (so the guard does not take it out again). Returns false for a fixed, removed or unknown body.
+   */
+  setDriveTorque(bodyId: number, tau: Vec3): boolean {
+    this.alive();
+    const b = this.bodies[bodyId];
+    if (!b?.rb || b.fixed || !tau.every(Number.isFinite)) return false;
+    if (tau.every((x) => x === 0)) {
+      if (this.drives.delete(bodyId) && this.grabState?.body !== b) b.rb.resetTorques(true);
+    } else this.drives.set(bodyId, [...tau]);
+    return true;
+  }
+
+  /**
+   * Set the drives' torques for this world step (a user torque, applied in every solver substep; an
+   * impulse before the step would turn a balanced body by ½·α·h² per step while its velocity reads
+   * 0); returns ω before the step per driven body. A grabbed body's torques were reset by applyGrab.
+   */
+  private applyDrives(): Map<number, Vec3> {
+    const w0 = new Map<number, Vec3>();
+    for (const [id, tau] of this.drives) {
+      const rb = this.bodies[id]!.rb;
+      if (!rb) continue;
+      w0.set(id, vec(rb.angvel()));
+      if (this.grabState?.body.id !== id) rb.resetTorques(false);
+      rb.addTorque(xyz(tau), true);
+    }
+    return w0;
+  }
+
+  private creditDrives(w0: Map<number, Vec3>): void {
+    for (const [id, wa] of w0) {
+      const rb = this.bodies[id]!.rb;
+      if (!rb) continue;
+      const W = 0.5 * this.h * dot(this.drives.get(id)!, add(wa, vec(rb.angvel())));
+      this.driveWorkTotal += W;
+      const r = this.findGroup(id);
+      this.driveWork.set(r, (this.driveWork.get(r) ?? 0) + W);
+    }
+  }
+
+  /** World steps per fixed step in use (1, 2, 4 or 8; DESIGN §5.1 "Smaller steps at speed"). */
+  get substeps(): number {
+    return this.kValue;
+  }
+
+  // ------------------------------------------------------------------------------------------
+  // Smaller steps at speed (DESIGN §5.1)
+
+  /**
+   * Bodies carrying a gear with an engaged mesh (dynamic, live), each with the size weight of
+   * chooseK: max(1, √r) over its gears with an engaged mesh.
+   */
+  private meshedBodies(): Map<number, number> {
+    const out = new Map<number, number>();
+    for (const m of this.meshes) {
+      if (!m.engaged) continue;
+      for (const g of [m.g1, m.g2]) {
+        const b = this.bodies[g.body]!;
+        if (b.fixed || !b.rb) continue;
+        out.set(b.id, Math.max(out.get(b.id) ?? 1, Math.sqrt(g.r)));
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Once per fixed step, from the state alone: ω* = max over the bodies carrying a gear with an
+   * engaged mesh of |ω|·max(1, √r) (r = the largest such gear on the body), plus the positive part
+   * of its rise over the previous fixed step. Up at once to the smallest k with ω*·dt/k ≤ K_UP; down
+   * to the smallest k′ < k with ω*·dt/k′ ≤ K_DOWN, no sooner than K_HOLD after the last step up. No
+   * engaged mesh: k = 1.
+   *
+   * The √r weight (review m8, DEVIATIONS): the mesh row starts to brake at a rotation per world step
+   * that falls with the gear's size, measured at k = 1 and 2 (onset ω·h of the fastest gear: 8 teeth
+   * 0.133–0.142, 16: 0.096, 24: 0.079–0.083, 40: 0.060–0.063 rad, i.e. ω·h·√r ≈ 0.096–0.100 for
+   * every size and pair). Clamped at 1 so 8- and 16-tooth gears keep exactly DESIGN's rule.
+   *
+   * upOnly (called right after a mesh engaged inside a fixed step): only a step up, and the
+   * previous-step bookkeeping is left alone; returns whether k changed.
+   */
+  private chooseK(upOnly = false): boolean {
+    const ids = this.meshedBodies();
+    if (ids.size === 0) {
+      if (upOnly) return false;
+      this.lastOmega = 0;
+      if (this.kValue !== 1) this.setK(1);
+      return false;
+    }
+    let w = 0;
+    for (const [id, weight] of ids) {
+      const a = this.bodies[id]!.rb!.angvel();
+      w = Math.max(w, Math.hypot(a.x, a.y, a.z) * weight);
+    }
+    const ws = w + Math.max(0, w - this.lastOmega);
+    if (!upOnly) this.lastOmega = w;
+    const dt = this.fixedDt;
+    let want: number = K_MAX;
+    for (const k of SUBSTEP_LEVELS)
+      if ((ws * dt) / k <= K_UP) {
+        want = k;
+        break;
+      }
+    if (want > this.kValue) {
+      this.setK(want);
+      this.lastUpStep = this.stepCount;
+      return true;
+    }
+    if (upOnly) return false;
+    if ((this.stepCount - this.lastUpStep) * dt < K_HOLD - 1e-12) return false;
+    for (const k of SUBSTEP_LEVELS)
+      if (k < this.kValue && (ws * dt) / k <= K_DOWN) {
+        this.setK(k);
+        return true;
+      }
+    return false;
+  }
+
+  /**
+   * Run each fixed step as k world steps: world.timestep = fixedDt / k, the world (free-body)
+   * iterations max(1, round(freeSolverIterations / k)) and every jointed body's additional
+   * iterations up to max(1, round(solverIterations / k)). The soft-CCD prediction stays at the
+   * fixed-step distance; friction and the guard run per fixed step, so nothing else depends on k.
+   */
+  private setK(k: number): void {
+    if (k === this.kValue) return;
+    const o = this.opts;
+    this.kValue = k;
+    this.h = o.fixedDt / k;
+    this.world.timestep = this.h;
+    const jointIt = Math.max(1, Math.round(o.solverIterations / k));
+    const freeIt = Math.min(jointIt, Math.max(1, Math.round(o.freeSolverIterations / k)));
+    this.world.numSolverIterations = freeIt;
+    const extra = Math.max(0, jointIt - freeIt);
+    for (const id of this.jointedIds) this.bodies[id]!.rb?.setAdditionalSolverIterations(extra);
+  }
+
+  /**
+   * After each world step: a gear with an engaged mesh spinning faster than GEAR_SPEED_CAP slows its
+   * whole energy-guard group by one factor (the guard's operation), and the group's guard reference
+   * falls by the energy taken out.
+   */
+  private capGearSpeed(): void {
+    for (const id of this.meshedBodies().keys()) {
+      const rb = this.bodies[id]!.rb!;
+      const a = rb.angvel();
+      const w = Math.hypot(a.x, a.y, a.z);
+      if (!(w > GEAR_SPEED_CAP)) continue;
+      const f = GEAR_SPEED_CAP / w;
+      const r = this.findGroup(id);
+      let removed = 0;
+      for (const b of this.bodies) {
+        if (b.fixed || !b.rb || this.findGroup(b.id) !== r) continue;
+        const k0 = this.kineticOf(b.rb);
+        const v = b.rb.linvel();
+        const ww = b.rb.angvel();
+        b.rb.setLinvel({ x: v.x * f, y: v.y * f, z: v.z * f }, true);
+        b.rb.setAngvel({ x: ww.x * f, y: ww.y * f, z: ww.z * f }, true);
+        removed += k0 * (1 - f * f);
+      }
+      this.capRemoved += removed;
+      const g = this.groups.get(r);
+      if (g?.init) g.eRef -= removed;
+    }
+  }
+
+  /** Kinetic energy of one body from the engine's mass properties. */
+  private kineticOf(rb: RigidBody): number {
+    const m = rb.mass();
+    const v = vec(rb.linvel());
+    const qf = qmul(quat(rb.rotation()), quat(rb.principalInertiaLocalFrame()));
+    const wl = rotate(conj(qf), vec(rb.angvel()));
+    const I = vec(rb.principalInertia());
+    return 0.5 * m * dot(v, v) + 0.5 * (I[0] * wl[0] ** 2 + I[1] * wl[1] ** 2 + I[2] * wl[2] ** 2);
+  }
+
+  // ------------------------------------------------------------------------------------------
+  // Gear meshes (DESIGN §5.1 "Gears")
+
+  /** Mesh candidates: every two gears on different bodies, not both fixed. */
+  private buildMeshCandidates(): void {
+    const g = this.gears;
+    for (let i = 0; i < g.length; i++)
+      for (let j = i + 1; j < g.length; j++) {
+        const a = g[i]!;
+        const b = g[j]!;
+        if (a.body === b.body) continue;
+        if (this.bodies[a.body]!.fixed && this.bodies[b.body]!.fixed) continue;
+        const [g1, g2] = a.body < b.body ? [a, b] : [b, a];
+        this.meshes.push({
+          g1, g2, engaged: false, dead: false, joint: null,
+          th2: { prev: undefined, acc: 0 }, psi: { prev: undefined, acc: 0 },
+          phi0: 0, phiT: 0, e: 0, stopMin: 0,
+          gap: Infinity, delta: 0, par: 0, engagements: 0, releases: 0, lastSnap: 0,
+        });
+      }
+  }
+
+  /**
+   * Before every world step (h = fixedDt / k), for each live candidate, with a = gear 1's world
+   * axis and c the hub centres: par = ∠(a₁, a₂) mod π, δ = (c₂ − c₁)·a, d⊥ = c₂ − c₁ − a·δ,
+   * D = |d⊥|, n = d⊥/D, t = a × n, gap = D − r₁ − r₂; engage / release by MESH.
+   *
+   * The phase φ = r₁θ₁ + r₂θ₂ − (r₁ + r₂)ψ is evaluated in body 1's frame (θ₁ = 0, θ₂ = gear 2's
+   * twist relative to body 1 about gear 1's axis, ψ = the angle of n in gearPlaneBasis of gear 1's
+   * axis, carried by body 1): the same value as DESIGN's world-frame formula whenever body 1 turns
+   * about that axis, and well-defined when it does not (a tumbling free gearbox). With the §2.7
+   * tooth convention φ ≡ 0 (mod GEAR_PITCH) is exactly "teeth interleaved".
+   *
+   * On engagement φ_T = round(φ/p)·p, φ₀ = φ, stopMin = min(0, gap) − stopSlack, one generic joint
+   * (LinX only, contacts on, LinY limit [stopMin, 1e6]) and the two gears' guard groups merge. Every
+   * engaged step: φ₀ → φ_T by ≤ snapRate·h, e = φ − φ₀, lead λ = D₀(1 − κ²)·φ_step/(2κ²) (D₀ = r₁ + r₂,
+   * κ = D₀/r₂, φ_step = (ω₁·a − β̇)·h, β̇ = (v₂(c₂) − v₁(c₁))·t/D), anchor 1 = c₁ + r₁n + λt, anchor 2 =
+   * c₂ − r₂n + (λ − e)t, both frames X = t, Y = n, Z = −a.
+   */
+  private updateMeshes(): boolean {
+    const h = this.h;
+    let engaged = false;
+    for (const m of this.meshes) {
+      if (m.dead) continue;
+      const rb1 = this.bodies[m.g1.body]!.rb;
+      const rb2 = this.bodies[m.g2.body]!.rb;
+      if (!rb1 || !rb2) {
+        this.killMesh(m);
+        continue;
+      }
+      const q1 = quat(rb1.rotation());
+      const q2 = quat(rb2.rotation());
+      const x1 = vec(rb1.translation());
+      const x2 = vec(rb2.translation());
+      const c1 = add(rotate(q1, m.g1.local), x1);
+      const c2 = add(rotate(q2, m.g2.local), x2);
+      const a = rotate(q1, m.g1.axis);
+      const a2 = rotate(q2, m.g2.axis);
+      const par = Math.acos(Math.min(1, Math.abs(dot(a, a2))));
+      const d = sub(c2, c1);
+      const delta = dot(d, a);
+      const dp = sub(d, scale(a, delta));
+      const D = len(dp);
+      const r1 = m.g1.r;
+      const r2 = m.g2.r;
+      const gap = D - (r1 + r2);
+      m.gap = gap;
+      m.delta = delta;
+      m.par = par;
+      const fast = Math.max(len(vec(rb1.linvel())), len(vec(rb2.linvel()))) > MESH.maxLinSpeed;
+      if (!m.engaged) {
+        if (fast || !(par <= MESH.parIn && Math.abs(delta) <= MESH.axialIn && gap <= MESH.engageGap && gap >= MESH.minGap) || !(D > 0)) continue;
+      } else if (fast || par > MESH.parOut || Math.abs(delta) > MESH.axialOut || gap > MESH.releaseGap || gap < MESH.releaseMinGap || !(D > 0)) {
+        this.releaseMesh(m);
+        continue;
+      }
+      const n = scale(dp, 1 / D);
+      const t = cross(a, n);
+      const first = !m.engaged;
+      if (first) {
+        m.th2 = { prev: undefined, acc: 0 };
+        m.psi = { prev: undefined, acc: 0 };
+      }
+      // Phase in body 1's frame (see above).
+      const q1c = conj(q1);
+      const rel = qmul(q1c, q2);
+      const al = m.g1.axis;
+      const th2 = track(m.th2, 2 * Math.atan2(rel[0] * al[0] + rel[1] * al[1] + rel[2] * al[2], rel[3]));
+      const [ui, vi] = gearPlaneBasis(m.g1.axisIndex);
+      const nl = rotate(q1c, n);
+      const psi = track(m.psi, Math.atan2(nl[vi]!, nl[ui]!));
+      const phi = r2 * th2 - (r1 + r2) * psi; // r₁θ₁ + r₂θ₂ − (r₁ + r₂)ψ with θ₁ = 0
+      if (first) {
+        m.phiT = Math.round(phi / GEAR_PITCH) * GEAR_PITCH;
+        m.phi0 = phi;
+        m.lastSnap = (m.phiT - phi) / GEAR_PITCH;
+        m.stopMin = Math.min(0, gap) - MESH.stopSlack;
+      } else {
+        const sr = MESH.snapRate * h;
+        m.phi0 += Math.max(-sr, Math.min(sr, m.phiT - m.phi0));
+      }
+      m.e = phi - m.phi0;
+      const D0 = r1 + r2;
+      const kk = D0 / r2;
+      const vc = sub(vec(rb2.velocityAtPoint(xyz(c2))), vec(rb1.velocityAtPoint(xyz(c1))));
+      const betaDot = dot(vc, t) / D;
+      const phiStep = (dot(vec(rb1.angvel()), a) - betaDot) * h;
+      const lam = (D0 * (1 - kk * kk) * phiStep) / (2 * kk * kk);
+      const P1 = add(add(c1, scale(n, r1)), scale(t, lam));
+      const P2 = add(sub(c2, scale(n, r2)), scale(t, lam - m.e));
+      const A1 = rotate(q1c, sub(P1, x1));
+      const q2c = conj(q2);
+      const A2 = rotate(q2c, sub(P2, x2));
+      const na = scale(a, -1);
+      const F1 = toRot(basisQuat(rotate(q1c, t), rotate(q1c, n), rotate(q1c, na)));
+      const F2 = toRot(basisQuat(rotate(q2c, t), rotate(q2c, n), rotate(q2c, na)));
+      if (first) {
+        const data = RAPIER.JointData.generic(xyz(A1), xyz(A2), { x: 1, y: 0, z: 0 }, RAPIER.JointAxesMask.LinX);
+        const joint = this.world.createImpulseJoint(data, rb1, rb2, true);
+        joint.setContactsEnabled(true);
+        joint.setLocalFrame1(xyz(A1), F1);
+        joint.setLocalFrame2(xyz(A2), F2);
+        this.world.impulseJoints.raw.jointSetLimits(joint.handle, LIN_Y, m.stopMin, 1e6);
+        m.joint = joint;
+        m.engaged = true;
+        m.engagements++;
+        const b1 = this.bodies[m.g1.body]!;
+        const b2 = this.bodies[m.g2.body]!;
+        if (!b1.fixed && !b2.fixed) this.unionGroups(b1.id, b2.id);
+        engaged = true;
+        continue;
+      }
+      m.joint!.setLocalFrame1(xyz(A1), F1);
+      m.joint!.setLocalFrame2(xyz(A2), F2);
+    }
+    return engaged;
+  }
+
+  private releaseMesh(m: MeshPair): void {
+    if (m.joint) this.world.removeImpulseJoint(m.joint, true);
+    m.joint = null;
+    m.engaged = false;
+    m.releases++;
+  }
+
+  /** A body of the pair was removed: Rapier removed the joint with it; never touch the handle again. */
+  private killMesh(m: MeshPair): void {
+    if (m.engaged) m.releases++;
+    m.joint = null;
+    m.engaged = false;
+    m.dead = true;
+  }
+
+  /** The engaged meshes: gears (part id, hub cell index), tooth counts and phase error in teeth. */
+  meshStates(): MeshState[] {
+    this.alive();
+    return this.meshes.filter((m) => m.engaged).map((m) => meshState(m));
+  }
+
+  /** Every mesh candidate with its engagement state and counters (tests, diagnostics). */
+  meshDiagnostics(): MeshDiagnostics[] {
+    this.alive();
+    return this.meshes.map((m) => ({
+      ...meshState(m),
+      bodyA: m.g1.body,
+      bodyB: m.g2.body,
+      engaged: m.engaged,
+      dead: m.dead,
+      gap: m.gap,
+      delta: m.delta,
+      par: m.par,
+      engagements: m.engagements,
+      releases: m.releases,
+      lastSnap: m.lastSnap,
+    }));
+  }
+
+  /**
+   * Deepest contact between any colliders of two bodies in the last world step (Rapier's contact
+   * distance, negative = penetration), or null if they have no contact point (diagnostics).
+   */
+  contactDepth(bodyA: number, bodyB: number): number | null {
+    this.alive();
+    const A = this.bodies[bodyA]?.rb;
+    const B = this.bodies[bodyB]?.rb;
+    if (!A || !B) return null;
+    let best: number | null = null;
+    for (let i = 0; i < A.numColliders(); i++)
+      for (let j = 0; j < B.numColliders(); j++)
+        this.world.contactPair(A.collider(i), B.collider(j), (mf) => {
+          for (let k = 0; k < mf.numContacts(); k++) {
+            const dd = mf.contactDist(k);
+            if (best === null || dd < best) best = dd;
+          }
+        });
+    return best;
   }
 
   // ------------------------------------------------------------------------------------------
@@ -1081,6 +1660,13 @@ export class Simulation {
       this.unionGroups(a, b);
     });
     if (this.grabState?.body.rb) this.resetGroup(this.grabState.body.id);
+    if (this.driveWork.size) {
+      // Re-key the drive work by the group roots after this step's merges.
+      const byRoot = new Map<number, number>();
+      for (const [r, w] of this.driveWork) byRoot.set(this.findGroup(r), (byRoot.get(this.findGroup(r)) ?? 0) + w);
+      this.driveWork.clear();
+      for (const [r, w] of byRoot) this.driveWork.set(r, w);
+    }
     const sums = new Map<number, { e: number; k: number; noise: number; members: SimBody[] }>();
     const gl = len(this.gravity);
     for (const b of this.bodies) {
@@ -1119,6 +1705,8 @@ export class Simulation {
       // subtracts nothing and the guard is exactly the frictionless one).
       const work = this.frictionWork.get(r);
       if (work) g.eRef -= work;
+      const dw = this.driveWork.get(r);
+      if (dw) g.eRef += dw;
       if (e < g.eRef) {
         g.eRef = e;
         continue;
@@ -1150,9 +1738,10 @@ export class Simulation {
     if (!b.rb) return;
     this.resetGroup(b.id);
     if (this.grabState?.body === b) this.grabState = null;
-    this.world.removeRigidBody(b.rb); // also removes its colliders and joints
+    this.world.removeRigidBody(b.rb); // also removes its colliders and joints (mesh joints too)
     b.rb = null;
     for (const j of this.joints) if (j.joint.bodyA === b.id || j.joint.bodyB === b.id) j.handle = null;
+    for (const m of this.meshes) if (!m.dead && (m.g1.body === b.id || m.g2.body === b.id)) this.killMesh(m);
   }
 
   // ------------------------------------------------------------------------------------------
@@ -1255,20 +1844,29 @@ export class Simulation {
     return true;
   }
 
-  /** Total mass of the live dynamic bodies joint-connected to `bodyId` (not through fixed bodies). */
+  /**
+   * Total mass of the live dynamic bodies joint-connected to `bodyId` (not through fixed bodies),
+   * engaged gear meshes counting as joints (DESIGN §5.1 "Gears").
+   */
   private mechanismMass(bodyId: number): number {
     const seen = new Set([bodyId]);
     const stack = [bodyId];
     let m = 0;
+    const visit = (o: number) => {
+      if (o < 0 || seen.has(o) || this.bodies[o]!.fixed || !this.bodies[o]!.rb) return;
+      seen.add(o);
+      stack.push(o);
+    };
     while (stack.length) {
       const u = stack.pop()!;
       m += this.bodies[u]!.rb!.mass();
       for (const j of this.joints) {
         if (!j.handle) continue;
-        const o = j.joint.bodyA === u ? j.joint.bodyB : j.joint.bodyB === u ? j.joint.bodyA : -1;
-        if (o < 0 || seen.has(o) || this.bodies[o]!.fixed || !this.bodies[o]!.rb) continue;
-        seen.add(o);
-        stack.push(o);
+        visit(j.joint.bodyA === u ? j.joint.bodyB : j.joint.bodyB === u ? j.joint.bodyA : -1);
+      }
+      for (const g of this.meshes) {
+        if (!g.engaged) continue;
+        visit(g.g1.body === u ? g.g2.body : g.g2.body === u ? g.g1.body : -1);
       }
     }
     return m;
@@ -1409,6 +2007,11 @@ export class Simulation {
     this.world.free();
     for (const b of this.bodies) b.rb = null;
     for (const j of this.joints) j.handle = null;
+    for (const m of this.meshes) {
+      m.joint = null;
+      m.engaged = false;
+      m.dead = true;
+    }
   }
 
   get isDisposed(): boolean {
@@ -1420,6 +2023,48 @@ export class Simulation {
   }
 }
 
+
+function meshState(m: MeshPair): MeshState {
+  return {
+    a: { partId: m.g1.partId, cell: m.g1.cell },
+    b: { partId: m.g2.partId, cell: m.g2.cell },
+    teethA: m.g1.teeth,
+    teethB: m.g2.teeth,
+    phaseErrorTeeth: m.engaged ? m.e / GEAR_PITCH : 0,
+  };
+}
+
+/** Advance an unwrapped angle tracker by a new raw angle in (−π, π]. */
+function track(st: Tracker, raw: number): number {
+  if (st.prev === undefined) st.acc = raw;
+  else st.acc += wrapAngle(raw - st.prev);
+  st.prev = raw;
+  return st.acc;
+}
+
+/** Quaternion of the rotation whose columns are the orthonormal basis X, Y, Z. */
+function basisQuat(X: Vec3, Y: Vec3, Z: Vec3): Quat {
+  const [m00, m10, m20] = X;
+  const [m01, m11, m21] = Y;
+  const [m02, m12, m22] = Z;
+  const tr = m00 + m11 + m22;
+  if (tr > 0) {
+    const S = Math.sqrt(tr + 1) * 2;
+    return [(m21 - m12) / S, (m02 - m20) / S, (m10 - m01) / S, 0.25 * S];
+  } else if (m00 > m11 && m00 > m22) {
+    const S = Math.sqrt(1 + m00 - m11 - m22) * 2;
+    return [0.25 * S, (m01 + m10) / S, (m02 + m20) / S, (m21 - m12) / S];
+  } else if (m11 > m22) {
+    const S = Math.sqrt(1 + m11 - m00 - m22) * 2;
+    return [(m01 + m10) / S, 0.25 * S, (m12 + m21) / S, (m02 - m20) / S];
+  }
+  const S = Math.sqrt(1 + m22 - m00 - m11) * 2;
+  return [(m02 + m20) / S, (m12 + m21) / S, 0.25 * S, (m10 - m01) / S];
+}
+
+function toRot(q: Quat): { x: number; y: number; z: number; w: number } {
+  return { x: q[0], y: q[1], z: q[2], w: q[3] };
+}
 
 /** Validate μ: a number in [0, MAX_JOINT_FRICTION]; −0 becomes 0. */
 function checkFriction(mu: number): number {

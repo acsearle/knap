@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { E_CONN, E_FREE, HC, R_COLL_ROD, partColliders } from '../../src/geometry';
+import { E_CONN, E_FREE, HC, RIM_COLL_INSET, R_COLL_ROD, partColliders } from '../../src/geometry';
+import { GEAR_COLL_EXTRA } from '../../src/geometry/colliders';
+import { makeCell } from '../../src/core';
 import type { ColliderPrim } from '../../src/geometry';
 import { CATALOG } from '../../e2e/geom-catalog';
 import { c, liftarm, part } from './helpers';
@@ -62,5 +64,57 @@ describe('partColliders', () => {
       }
       expect(cyls(a)).toHaveLength(p.cells.length);
     }
+  });
+});
+
+describe('partColliders: gears (§4.3)', () => {
+  const gear = (x: number, y: number, z: number, r: number, axis: 0 | 1 | 2 = 2) => makeCell(x, y, z, 'pinHole', axis, r, true);
+  it('GEAR_COLL_EXTRA = ⅛ − (½ − HC) = 0.085', () => {
+    expect(GEAR_COLL_EXTRA).toBeCloseTo(0.085, 15);
+  });
+  it('a lone gear is one disc at the tip radius, solid, with gear.pitch; no cylinder of its own', () => {
+    for (const r of [0.5, 1, 1.5, 2.5]) {
+      const ps = partColliders(part([gear(3, 4, 5, r, 0)]));
+      expect(ps).toEqual([{ shape: 'disc', center: [0, 0, 0], axis: 0, radius: r + GEAR_COLL_EXTRA, halfLength: HC, innerRadius: 0, cell: 0, male: false, gear: { pitch: r } }]);
+    }
+  });
+  it('hub and web cells yield nothing in the slab; the axial neighbour keeps its barrel to the face', () => {
+    // 24-tooth gear at the origin (axis Z), a web crank hole at (1, 0, 0), a hole behind the hub at (0, 0, 1).
+    const ps = partColliders(part([gear(0, 0, 0, 1.5), c(1, 0, 0, 'pinHole', 2), c(0, 0, 1, 'pinHole', 2)]));
+    expect(ps.filter((p) => p.cell === 1)).toEqual([]);
+    const hub = ps.filter((p) => p.cell === 0);
+    expect(hub).toHaveLength(1);
+    expect(hub[0]!.shape).toBe('disc');
+    const back = ps.filter((p) => p.cell === 2);
+    expect(back).toHaveLength(1);
+    const b = back[0]!;
+    if (b.shape !== 'cylinder') throw new Error('expected a cylinder');
+    expect(b.center[2] - b.halfLength).toBeCloseTo(0.5, 12); // reaches the shared face, not into the slab
+    expect(b.center[2] + b.halfLength).toBeCloseTo(1 + HC, 12);
+  });
+  it('a web crank pin keeps only its rod outside the slab', () => {
+    // 40-tooth gear, a 2-long pin through the web at (1, 0, 0) and (1, 0, 1)
+    const ps = partColliders(part([gear(0, 0, 0, 2.5), c(1, 0, 0, 'pin', 2), c(1, 0, 1, 'pin', 2)]));
+    const web = ps.filter((p) => p.cell === 1);
+    expect(web).toHaveLength(2); // the free end's sliver below the slab and the piece from HC to the connected face
+    const w = web[1]!;
+    if (w.shape !== 'cylinder') throw new Error('expected a cylinder');
+    expect(w.radius).toBe(R_COLL_ROD);
+    expect(w.center[2] - w.halfLength).toBeCloseTo(HC, 12);
+    expect(w.center[2] + w.halfLength).toBeCloseTo(E_CONN, 12);
+    const free = partColliders(part([gear(0, 0, 0, 2.5), c(1, 0, 0, 'pin', 2)])).filter((p) => p.cell === 1);
+    const ends = free.map((p) => (p.shape === 'cylinder' ? [p.center[2] - p.halfLength, p.center[2] + p.halfLength] : []));
+    const want = [
+      [-E_FREE, -HC],
+      [HC, E_FREE],
+    ];
+    expect(ends).toHaveLength(2);
+    ends.forEach((e, i) => e.forEach((x, j) => expect(x).toBeCloseTo(want[i]![j]!, 12)));
+  });
+  it('plain wheels are unchanged (r − 0.04, annulus, no gear field) and a plain rim of a gear radius has no web', () => {
+    const ps = partColliders(part([makeCell(0, 0, 0, 'pinHole', 2, 1.5), c(1, 0, 0, 'pinHole', 2)]));
+    const disc = ps.find((p) => p.shape === 'disc')!;
+    expect({ ...disc, center: undefined }).toEqual({ shape: 'disc', center: undefined, axis: 2, radius: 1.5 - RIM_COLL_INSET, halfLength: HC, innerRadius: HC, cell: 0, male: false });
+    expect(ps.filter((p) => p.cell === 1).length).toBeGreaterThan(0);
   });
 });

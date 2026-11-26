@@ -4,7 +4,7 @@
 //   pickCell(model, ray, opts?) -> nearest cell cube or wheel disc hit (part, cell, face entered) or null
 //   pickBack(model, ray, opts?) -> nearest point where the ray LEAVES a part (Back side): part, cell, face left
 //   pickGrid(ray)               -> grid cell [x, 0, z] under the ray on the plane y = −½, or null
-import { DIRS, axisOfDir, cellsAt, discOverlapsCell, isHole, isMale, isValidRim, worldIndex } from '../core';
+import { DIRS, axisOfDir, cellsAt, discRadiusOf, fineDiscOverlapsCell, isGear, isHole, isMale, tipRadius, worldIndex } from '../core';
 import type { Axis, Cell, Dir, Model, Part, Vec3i } from '../core';
 import { R_ROD } from '../geometry/dims';
 
@@ -66,14 +66,16 @@ export interface PickHit {
   /** The ray origin was inside (or on the boundary of) this cube (or wheel disc). */
   inside: boolean;
   /**
-   * Wheels (§7.3): the ray hit the flat face of a rim's disc (radius r, the hub's layer) outside
+   * Wheels (§7.3): the ray hit the flat face of a rim's disc (radius r, the hub's layer; a gear's
+   * tip disc, radius r + 3/32) outside
    * the part's own cell cubes. `virtual` is the grid cell G under the hit point in the hub's layer
    * (a *virtual cell* of the wheel, never a cell of the part); `cellIndex` / `cell` / `pos` are the
    * hub, `dir` the flat face entered (normal ∥ the hub axis).
    */
   virtual?: Vec3i;
   /**
-   * Wheels (§7.3): the ray hit the tread (the round outer surface) of a rim's disc. `cellIndex` /
+   * Wheels (§7.3): the ray hit the tread (the round outer surface) of a rim's disc — for a gear,
+   * of its tip disc (the teeth). `cellIndex` /
    * `cell` / `pos` are the hub and `dir` is the hub's lateral face whose normal is nearest the
    * radial direction of the hit point, so the hit resolves as that face of the hub being hovered.
    */
@@ -271,9 +273,16 @@ function partBox(p: Part): Box {
   return b;
 }
 
-/** The rim radius of a wheel hub cell (a hole cell with a valid rim), else undefined. */
+/**
+ * The pick radius of a wheel or gear hub cell (a hole cell with a well-formed disc), else
+ * undefined: a plain wheel's radius, or a gear's tip radius r + 3/32 (§7.3 "Gears in picking": a
+ * gear is pickable over its whole tip disc).
+ */
 function rimOf(c: Cell): number | undefined {
-  return c.rim !== undefined && isHole(c.kind) && isValidRim(c.rim) ? c.rim : undefined;
+  if (c.rim === undefined || !isHole(c.kind)) return undefined;
+  const r = discRadiusOf(c);
+  if (r === null) return undefined;
+  return isGear(c) ? tipRadius(r) : r;
 }
 
 /** Indices of a part's wheel hubs (cached). */
@@ -542,7 +551,7 @@ export function pickCell(model: Model, ray: Ray, opts: PickOptions = {}): PickHi
     const g: [number, number, number] = [hub.x, hub.y, hub.z];
     for (const k of [0, 1, 2]) if (k !== a) g[k] = Math.floor(localPoint[k]! + 0.5) + 0;
     // Only a cell the disc really overlaps is a virtual cell (guards float noise at the rim).
-    if (!discOverlapsCell(pos, a, r, g)) return radialHit();
+    if (!fineDiscOverlapsCell(pos, a, r, g)) return radialHit();
     const own = part.cells.findIndex((q) => q.x === g[0] && q.y === g[1] && q.z === g[2]);
     const n = DIR_NORMALS[dir]!;
     const normal = tf ? rotate(tf.q, n) : n;
@@ -895,7 +904,7 @@ export function pickBack(model: Model, ray: Ray, opts: PickOptions = {}): PickHi
     const dir = exitDir(a);
     const g: [number, number, number] = [hub.x, hub.y, hub.z];
     for (const k of [0, 1, 2]) if (k !== a) g[k] = Math.floor(localPoint[k]! + 0.5) + 0;
-    if (!discOverlapsCell(pos, a, r, g)) return treadHit();
+    if (!fineDiscOverlapsCell(pos, a, r, g)) return treadHit();
     const normal = toWorld(DIR_NORMALS[dir]!);
     const j = own(g);
     if (j >= 0) {

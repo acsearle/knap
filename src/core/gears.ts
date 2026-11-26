@@ -88,6 +88,36 @@ export function tipOverlapsCell(hub: Vec3i, axis: Axis, r: number, pos: Vec3i): 
 }
 
 /**
+ * Half-width (units) of the footprint a male cell (pin, axle, friction pin) is tested by against a
+ * gear's tip disc (§2.7 rule 1, review m8): 5/16, just over the drawn rod (0.295) and its collider
+ * (0.29). Along the rod the footprint is the whole cell (±½).
+ */
+export const ROD_HALF_WIDTH = 5 / 16;
+
+/**
+ * Does the tip disc of a gear (hub, axis, pitch radius r) overlap the rod of a male cell at `pos`
+ * along `rodAxis` (§2.7 rule 1 for another part's pin or axle; review m8)? Only in the gear's
+ * layer. The rod's footprint in the gear's plane is a circle of radius ROD_HALF_WIDTH for a rod ∥
+ * the gear axis, else the rectangle ±½ along the rod × ±ROD_HALF_WIDTH across. Overlap means
+ * positive area (touching is clear). Exact (units of 1/32).
+ */
+export function tipOverlapsRod(hub: Vec3i, axis: Axis, r: number, pos: Vec3i, rodAxis: Axis): boolean {
+  if (pos[axis] !== hub[axis]) return false;
+  gearTeeth(r);
+  const [u, v] = planeAxes(axis);
+  const R = Math.round(tipRadius(r) * 32);
+  const W = Math.round(ROD_HALF_WIDTH * 32);
+  const du = 32 * Math.abs(pos[u]! - hub[u]!);
+  const dv = 32 * Math.abs(pos[v]! - hub[v]!);
+  if (rodAxis === axis) return du * du + dv * dv < (R + W) * (R + W);
+  const eu = rodAxis === u ? 16 : W;
+  const ev = rodAxis === v ? 16 : W;
+  const x = Math.max(0, du - eu);
+  const y = Math.max(0, dv - ev);
+  return x * x + y * y < R * R;
+}
+
+/**
  * Does the tip disc of a gear (hubG, axisG, pitch rG) overlap the disc of a plain wheel
  * (hubW, axisW, rW) (§2.7 rule 2)? Parallel or perpendicular, exact.
  */

@@ -101,7 +101,8 @@ export function helpDialog(): Dialog {
           [k('V') + ' / ' + k('Esc'), 'Select'],
           [k('1') + '–' + k('5'), 'Pin hole, axle hole, axle, pin, friction pin'],
           [k('W'), 'Wheel: click a pin / axle hole or a wheel to grow it by ½ unit (radius 1 to 4); Shift+click shrinks it'],
-          [k('E'), 'Erase a sub-part (the part splits if it falls apart); on a wheel, its outer ½ unit'],
+          [k('T'), 'Gear: click a pin / axle hole or a gear to make a gear or step it up (8, 16, 24, 40 teeth); Shift+click steps down'],
+          [k('E'), 'Erase a sub-part (the part splits if it falls apart); on a wheel, its outer ½ unit; on a gear, one size'],
           [k('R'), 'Next orientation of the ghost'],
           [k('N'), 'Toggle “New part”: start a separate part'],
           ['Hold ' + k('Shift'), '“New part” for one click: insert / sleeve / new adjacent part'],
@@ -111,6 +112,7 @@ export function helpDialog(): Dialog {
           ['Pin on a hole’s mouth', 'Insert, through stacked holes'],
           ['Hole on a pin’s end', 'Sleeve a beam on (R: extend)'],
           ['Hole on a wheel’s face', 'A crank hole in the wheel (then a pin goes in)'],
+          ['Hole or pin on a gear’s face', 'A crank hole or crank pin, near the hub only'],
         ]),
       ),
       h(
@@ -132,6 +134,14 @@ export function helpDialog(): Dialog {
           [k(`${MOD}O`), 'Open a .knap.json file'],
           [k('K'), 'Show kinematics (bodies and joints)'],
           [k('G'), 'Ground: a floor under the model, shown by a soft shadow (Model panel; with it, “Fix root” off makes a free vehicle)'],
+        ]),
+        h('h3', null, 'Gears'),
+        rows([
+          ['Meshing', 'Two gears mesh when their axes are parallel, they are in the same layer and their hubs are in a straight line along the grid, as far apart as the sum of their radii'],
+          ['Pairs that mesh', '8+8 at 1 · 8+24 and 16+16 at 2 · 8+40 and 24+24 at 3 · 24+40 at 4 · 40+40 at 5'],
+          ['16 teeth', 'Meshes only with another 16'],
+          ['Where a gear goes', 'A layer of its own: sleeve a hole onto a pin, or extend a hole out of a beam along its axis'],
+          ['Build order', 'Make a small gear before the large gear whose teeth reach its hub (or shrink the large one first)'],
         ]),
         h('h3', null, 'Simulate'),
         rows([

@@ -108,6 +108,39 @@ function extraCheck(name: string, level: FrictionLevel): { sample(s: Simulation)
       },
     };
   }
+  if (name === 'gear-train') {
+    // DESIGN §8 example 10: the pinion (part 2) and the output (part 4) follow the arm (part 3) at
+    // −5 and 5/3 for the whole run (unwrapped twists about Z, sampled every 4th step), both meshes
+    // engaged throughout, and the arm swings past the bottom (> 120° from its horizontal start).
+    const tw = (s: Simulation, id: number) => 2 * Math.atan2(s.partTransform(id)!.q[2], s.partTransform(id)!.q[3]);
+    let last: number[] | null = null;
+    const acc = [0, 0, 0];
+    let maxA = 0;
+    let notEngaged = 0;
+    let maxK = 1;
+    return {
+      sample: (s) => {
+        const now = [3, 2, 4].map((id) => tw(s, id));
+        if (last) now.forEach((v, i) => {
+          let d = v - last![i]!;
+          while (d > Math.PI) d -= 2 * Math.PI;
+          while (d < -Math.PI) d += 2 * Math.PI;
+          acc[i]! += d;
+        });
+        last = now;
+        maxA = Math.max(maxA, Math.abs(acc[0]!));
+        if (s.meshStates().length !== 2) notEngaged++;
+        maxK = Math.max(maxK, s.substeps);
+      },
+      finish: () => {
+        expect((maxA * 180) / Math.PI).toBeGreaterThan(120);
+        expect(Math.abs(acc[1]! / acc[0]! + 5)).toBeLessThan(5e-3);
+        expect(Math.abs(acc[2]! / acc[0]! - 5 / 3)).toBeLessThan(2e-3);
+        expect(notEngaged).toBe(0);
+        return `arm swings to ${((maxA * 180) / Math.PI).toFixed(0)}°, ends at ${((acc[0]! * 180) / Math.PI).toFixed(1)}°; pinion/arm ${(acc[1]! / acc[0]!).toFixed(6)}, output/arm ${(acc[2]! / acc[0]!).toFixed(6)}; k ≤ ${maxK}`;
+      },
+    };
+  }
   if (name === 'cart') {
     // DESIGN §8 example 9: the chassis (part 1) visibly rolls back and forth in the first 2 s
     // (x range ≥ 1 unit, and it reverses), and it stays on its wheels.

@@ -56,13 +56,18 @@ function slope(x: number[], y: number[]): number {
   return sxy / sxx;
 }
 
-// DESIGN §5.1 "Wheels" (ground 1, round 2, hull 4, part 8) plus the ground guard 16 (DEVIATIONS §5).
+// DESIGN §5.1 "Wheels" (ground 1, round 2, hull 4, part 8) plus the ground guard 16 (DEVIATIONS §5),
+// and since gears (§5.1 "Gears") the gear round 32 and gear hull 64 in the filters of ground, round
+// and part (these filter values changed then; a model without gears still interacts exactly as
+// before, see gears-nochange.test.ts).
 const GROUPS = {
-  ground: (0x1 << 16) | (0x2 | 0x8 | 0x10),
-  round: (0x2 << 16) | (0x1 | 0x2),
+  ground: (0x1 << 16) | (0x2 | 0x8 | 0x10 | 0x20),
+  round: (0x2 << 16) | (0x1 | 0x2 | 0x20),
   hull: (0x4 << 16) | 0x8,
-  part: (0x8 << 16) | (0x1 | 0x4 | 0x8),
+  part: (0x8 << 16) | (0x1 | 0x4 | 0x8 | 0x40),
   guard: (0x10 << 16) | 0x1,
+  gearRound: (0x20 << 16) | (0x1 | 0x2),
+  gearHull: (0x40 << 16) | 0x8,
 };
 
 describe('ground and wheel colliders', () => {

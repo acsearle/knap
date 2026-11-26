@@ -5,7 +5,7 @@
 import Module from 'manifold-3d';
 import type { CrossSection, Manifold, ManifoldToplevel } from 'manifold-3d';
 import manifoldWasmUrl from 'manifold-3d/manifold.wasm?url';
-import { DIRS, axisOfDir, cellKey, cellPos, discOverlapsCell, isHole, isMale } from '../core';
+import { DIRS, axisOfDir, cellKey, cellPos, discOverlapsCell, isHole, isMale, isWebCell } from '../core';
 import type { Axis, Cell, Dir, Part } from '../core';
 import {
   CHAMFER,
@@ -28,7 +28,12 @@ import {
 import {
   PartGrid,
   analyzeCells,
+  gearIndexes,
+  gearOutline,
+  gearRootRadius,
+  isGearHub,
   isHub,
+  onToothBand,
   localCenter,
   minusDir,
   partOrigin,
@@ -48,6 +53,26 @@ export interface MeshData {
   indices: Uint32Array;
   /** Integer world position of the part-local frame's origin (= partOrigin(part)). */
   origin: [number, number, number];
+  /**
+   * Gears only (§4.2 "soft patch", §6.1 "Gears"); both fields are absent on a mesh of a part
+   * without gears (such meshes are exactly what they were before gears).
+   *
+   * Per-vertex surface-patch hint for the outline pass, one entry per vertex: 0 = no hint (the
+   * vertex belongs to whatever patch the mesh's own connectivity gives it, as for every other
+   * mesh: see src/view/patches.ts vertexPatches); a non-zero value k means "this vertex belongs
+   * to patch k", and all vertices with the same non-zero k form ONE patch even though the mesh
+   * splits them at creases (separate vertex indices). Gear g of the part (the g-th gear hub in
+   * cell order, GearIndex.patch = g + 1) marks its whole tooth band — every flank, tip land and
+   * root land, within its slab — with k = g + 1. Its flat faces, bores, face groove and
+   * everything else of the part keep 0. Every triangle has the same hint on all three vertices.
+   */
+  patchHint?: Uint16Array;
+  /**
+   * The non-zero patchHint values whose patch is SOFT: the outline pass inks only its true
+   * contours (silhouette, depth jumps such as a tooth in front of the root behind it) and no
+   * creases inside it (§6.1). Today every gear's band is soft, so this is [1, …, number of gears].
+   */
+  softPatches?: readonly number[];
 }
 
 // ------------------------------------------------------------------------------------------
@@ -226,13 +251,13 @@ function zrod(s: Scope, r: number, z0: number, z1: number, chamfer0: boolean, ch
 const SIMPLIFY_TOL = 1e-5;
 
 /** Web boxes of a hole cell (relative to its centre), one per connected lateral face. */
-function webBoxes(t: CellTopo, grid: PartGrid): [Vec3, Vec3][] {
+function webBoxes(t: CellTopo, grid: PartGrid, skip?: (d: Dir) => boolean): [Vec3, Vec3][] {
   const c = t.cell;
   const h = c.axis;
   const out: [Vec3, Vec3][] = [];
   for (let d = 0 as Dir; d < 6; d = (d + 1) as Dir) {
     const n = axisOfDir(d);
-    if (n === h || !t.faces[d]!.connected) continue;
+    if (n === h || !t.faces[d]!.connected || skip?.(d)) continue;
     const lo: Vec3 = [-H, -H, -H];
     const hi: Vec3 = [H, H, H];
     if (DIRS[d]![n]! > 0) {
@@ -546,6 +571,121 @@ function rimBridges(s: Scope, part: Part, w: Cell, origin: Vec3): Manifold[] {
   return out;
 }
 
+// ---- gears (§4.2 "Per gear") ----------------------------------------------------------------
+
+/**
+ * Z-frame 2D coordinates (those of to2D / orient) of the point (pu, pv) of a gear's plane basis
+ * (u, v) = gearPlaneBasis(h) (world axes). A rotation (det +1) for every axis, so a CCW outline
+ * in (u, v) stays CCW about +h: X: (u, v) = (Y, Z), frame (x, y) = (−Z, Y) → (−pv, pu);
+ * Y: (u, v) = (Z, X), frame (x, y) = (X, −Z) → (pv, −pu); Z: identity.
+ */
+function uvToFrame(h: Axis, pu: number, pv: number): [number, number] {
+  if (h === 0) return [-pv, pu];
+  if (h === 1) return [pv, -pu];
+  return [pu, pv];
+}
+
+/**
+ * The gear's positive (instead of the rim cylinder): a prism of gearOutline(r) about the hub axis,
+ * extent [−H, +H], no chamfer. Built in the part's edit-time world orientation, so tooth k is
+ * centred at gearToothAngle(T, k) from +u toward +v by construction (§2.7 phase convention).
+ */
+function gearPrism(s: Scope, w: Cell & { rim: number }, origin: Vec3): Manifold {
+  const CS = getWasm().CrossSection;
+  const pts = gearOutline(w.rim).map(([pu, pv]) => uvToFrame(w.axis, pu, pv));
+  const cs = s.t(new CS([pts], 'Positive'));
+  const z = s.t(extrudeCS(s, cs, 2 * H).translate([0, 0, -H]));
+  return place(s, z, w.axis, localCenter(w, origin));
+}
+
+/** Radius of the cylinder bridging an 8-tooth gear's face to an axial in-part neighbour (§4.2):
+ *  the root radius, 0.01 inside it so its wall never coincides with the root lands. */
+const GEAR8_BRIDGE_INSET = 0.01;
+
+/**
+ * Hole cells a gear's body stands for (§4.2): the gear hub, and the web cells of each gear
+ * (isWebCell: same part, same layer, axis ∥ the hub, centre within r − ½). They contribute their
+ * bores but no barrel or web positive inside the gear's slab.
+ */
+interface Absorbed {
+  gear: Cell & { rim: number; teeth: true };
+  role: 'hub' | 'web';
+}
+
+/**
+ * Barrel of a coaxial hole run (as barrelRun) that contains cells absorbed by a gear. The run's
+ * barrel (radius H) is kept only outside the gears' slabs: inside the slab of
+ * - a hub of r ≥ 1 it is removed except EPS at each face (the barrel radius H lies wholly inside
+ *   the root circle there, so the overlap fuses robustly without reaching the teeth);
+ * - a web cell it is removed up to EPS outside the faces: a web cell's barrel would reach beyond
+ *   the root circle (a crank hole at (2,0) of a 40: 2.47 > 2.344), so it must not enter the slab;
+ *   where a barrel piece meets the face it is joined to the gear by a plug of radius
+ *   min(H, root − offset − GEAR8_BRIDGE_INSET) from 2·EPS outside to EPS inside the face (a barrel
+ *   touching the face exactly gave pinched, non-manifold bore edges: review m8);
+ * - an 8-tooth hub (root 0.344 < H) it is removed over the whole cell; each axially connected
+ *   side gets a bridge cylinder of the root radius (less GEAR8_BRIDGE_INSET) from EPS inside the
+ *   face to EPS into the neighbour's barrel (or to E_CONN at a connected run end).
+ * Adjacent bridges merge, and pieces of EPS or less (left at unconnected run ends) are dropped.
+ */
+function barrelRunGear(s: Scope, run: CellTopo[], ctr: Vec3, absorbed: Map<Cell, Absorbed>): Manifold[] {
+  const first = run[0]!;
+  const last = run[run.length - 1]!;
+  const h = first.cell.axis;
+  const z0 = first.faces[minusDir(h)]!.connected ? -E_CONN : -H;
+  const z1 = run.length - 1 + (last.faces[plusDir(h)]!.connected ? E_CONN : H);
+  let keep: [number, number][] = [[z0, z1]];
+  const cut = (a: number, b: number): void => {
+    const next: [number, number][] = [];
+    for (const [p, q] of keep) {
+      if (b <= p || a >= q) next.push([p, q]);
+      else {
+        if (a > p) next.push([p, a]);
+        if (b < q) next.push([b, q]);
+      }
+    }
+    keep = next;
+  };
+  const bridges: [number, number, number][] = []; // [from, to, radius]
+  const plugs: [number, number, number][] = []; // web cells' plugs, kept where a barrel piece meets them
+  run.forEach((t, i) => {
+    const ab = absorbed.get(t.cell);
+    if (!ab) return;
+    if (ab.role === 'web') {
+      // Stop EPS short of the slab faces and join through a plug that stays inside the root circle
+      // (review m8: a barrel touching the face exactly left a pinched, non-manifold bore edge when
+      // the run continued into another gear's hub; a barrel overlapping the slab pokes a lip out
+      // between the teeth).
+      cut(i - H - EPS, i + H + EPS);
+      const g = ab.gear;
+      const off = Math.hypot(t.cell.x - g.x, t.cell.y - g.y, t.cell.z - g.z);
+      const rp = Math.min(H, gearRootRadius(g.rim) - off - GEAR8_BRIDGE_INSET);
+      plugs.push([i - H - 2 * EPS, i - H + EPS, rp], [i + H - EPS, i + H + 2 * EPS, rp]);
+    }
+    else if (ab.gear.rim >= 1) cut(i - H + EPS, i + H - EPS);
+    else {
+      cut(i - 0.5, i + 0.5);
+      const rb = gearRootRadius(ab.gear.rim) - GEAR8_BRIDGE_INSET;
+      if (i > 0 || first.faces[minusDir(h)]!.connected) bridges.push([i - E_CONN, i - H + EPS, rb]);
+      if (i < run.length - 1 || last.faces[plusDir(h)]!.connected) bridges.push([i + H - EPS, i + E_CONN, rb]);
+    }
+  });
+  // Merge overlapping bridges (two 8-tooth gears stacked: one bridge across the gap).
+  bridges.sort((a, b) => a[0] - b[0]);
+  const merged: [number, number, number][] = [];
+  for (const b of bridges) {
+    const m = merged[merged.length - 1];
+    if (m && b[0] <= m[1] && b[2] === m[2]) m[1] = Math.max(m[1], b[1]);
+    else merged.push([...b]);
+  }
+  const out: Manifold[] = [];
+  const kept = keep.filter(([a, b]) => b - a > EPS + 1e-9);
+  for (const [a, b] of kept) out.push(place(s, zcyl(s, H, H, a, b, true), h, ctr));
+  for (const [a, b, r] of plugs)
+    if (kept.some(([p, q]) => Math.abs(q - (a + EPS)) < 1e-9 || Math.abs(p - (b - EPS)) < 1e-9)) out.push(place(s, zcyl(s, r, r, a, b, true), h, ctr));
+  for (const [a, b, r] of merged) out.push(place(s, zcyl(s, r, r, a, b, true), h, ctr));
+  return out;
+}
+
 /** The mark direction in the Z frame of orient(h) (a unit vector along ±x or ±y). */
 function markDir2D(mk: RimMark): [number, number] {
   const [u, v] = to2D(mk.axis, mk.dir);
@@ -584,9 +724,11 @@ function zmarkCutters(s: Scope, mk: RimMark): { cut: Manifold; probe: Manifold }
     return zbox(s, lo, hi);
   };
   const gap = 2 * (0.5 - H);
+  // A wheel's groove runs out past the edge; a gear's ends at r1 with an end wall (§4.2).
+  const end = mk.gear ? mk.r1 : mk.r1 + over;
   const out = [
-    { cut: box(mk.r0, mk.r1 + over, H - mk.depth, H + over), probe: box(mk.r0, mk.r1 + over, H, H + gap) },
-    { cut: box(mk.r0, mk.r1 + over, -H - over, -H + mk.depth), probe: box(mk.r0, mk.r1 + over, -H - gap, -H) },
+    { cut: box(mk.r0, end, H - mk.depth, H + over), probe: box(mk.r0, end, H, H + gap) },
+    { cut: box(mk.r0, end, -H - over, -H + mk.depth), probe: box(mk.r0, end, -H - gap, -H) },
   ];
   if (mk.tread) out.push({ cut: box(mk.r1 - mk.depth, mk.r1 + over, -H - over, H + over), probe: box(mk.r1, mk.r1 + gap, -H, H) });
   return out;
@@ -642,6 +784,13 @@ function buildSolid(s: Scope, part: Part, fast = true, marks = true): Manifold |
   // Wheels (§4.2): hole cells under a rim's disc (the hub included) take the 3D path, so that
   // their bores are cut after the rim is united (the 2D path subtracts bores before that).
   const hubs = part.cells.filter(isHub);
+  // Gears (§4.2): the hub and the web cells of each gear are drawn by the gear's body.
+  const absorbed = new Map<Cell, Absorbed>();
+  for (const g of hubs) {
+    if (!isGearHub(g)) continue;
+    absorbed.set(g, { gear: g, role: 'hub' });
+    for (const c of part.cells) if (c !== g && isHole(c.kind) && !absorbed.has(c) && isWebCell(g, c)) absorbed.set(c, { gear: g, role: 'web' });
+  }
   const underRim = new Set<CellTopo>();
   if (hubs.length) {
     for (const t of topo) {
@@ -682,30 +831,46 @@ function buildSolid(s: Scope, part: Part, fast = true, marks = true): Manifold |
   for (const t of topo) {
     const ctr = localCenter(t.cell, origin);
     if (isMale(t.cell.kind) || inSlab(t)) continue;
-    for (const [lo, hi] of webBoxes(t, grid)) positives.push(s.t(zbox(s, lo, hi).translate(ctr)));
+    // A cell of a gear's body gets no web toward another cell of the same gear's body (the gear
+    // fills that space; a web box would poke out of a crank hole's wall into the teeth).
+    const ab = absorbed.get(t.cell);
+    const skip = ab
+      ? (d: Dir): boolean => {
+          const nb = t.faces[d]!.neighbour;
+          return nb !== undefined && absorbed.get(nb)?.gear === ab.gear;
+        }
+      : undefined;
+    for (const [lo, hi] of webBoxes(t, grid, skip)) positives.push(s.t(zbox(s, lo, hi).translate(ctr)));
     if (!sealed.has(t)) bores.push(holeBore(s, t, ctr));
   }
   for (const run of axialRuns(topo, (t) => isMale(t.cell.kind), sameKind))
     positives.push(maleRod(s, run, localCenter(run[0]!.cell, origin)));
-  for (const run of holeRuns) positives.push(barrelRun(s, run, localCenter(run[0]!.cell, origin)));
+  for (const run of holeRuns) {
+    const ctr = localCenter(run[0]!.cell, origin);
+    if (absorbed.size && run.some((t) => absorbed.has(t.cell))) positives.push(...barrelRunGear(s, run, ctr, absorbed));
+    else positives.push(barrelRun(s, run, ctr));
+  }
   for (const slab of slabs.values()) positives.push(slabSolid(s, slab));
   let pos: Manifold;
   if (hubs.length === 0) {
     pos = positives.length === 1 ? positives[0]! : s.t(M.union(positives));
   } else {
-    const rimSolids = hubs.map((w) => place(s, zrim(s, w.rim), w.axis, localCenter(w, origin)));
+    const rimSolids = hubs.map((w) => (isGearHub(w) ? gearPrism(s, w, origin) : place(s, zrim(s, w.rim), w.axis, localCenter(w, origin))));
     // Rule 1 (§2.6) joins every cell the *nominal* disc overlaps; the drawn rim is RIM_INSET smaller,
     // so a hole or a male near the rim's edge (e.g. (2, 3) of an r 3 wheel, a crank pin at (2, 2) of
     // an r 2.5 one) would float beside it as a separate shell. Bridge each such cell to its rim with a
     // short web (review findings; DEVIATIONS §4).
-    for (const w of hubs) rimSolids.push(...rimBridges(s, part, w, origin));
+    // Gears need no bridge: rule 5 of §2.7 lets only web cells (inside the gear body, which stands
+    // for them) and cells clear of the tip disc (which the pitch disc does not join) into the layer.
+    for (const w of hubs) if (!isGearHub(w)) rimSolids.push(...rimBridges(s, part, w, origin));
     const base = positives.length === 0 ? null : positives.length === 1 ? positives[0]! : s.t(M.union(positives));
     pos = s.t(M.union(base ? [base, ...rimSolids] : rimSolids));
     if (marks) {
-      rimMarks(part, grid).forEach((mk, i) => {
+      rimMarks(part, grid).forEach((mk) => {
         // Everything of the part except this rim: a groove (or its opening) covered by such
         // material would be a sealed cavity or a slot through it, so that piece of the mark is
-        // left out (see zmarkCutters).
+        // left out (see zmarkCutters). (An 8-tooth gear has no mark, so look the rim up by cell.)
+        const i = hubs.findIndex((w) => w === part.cells[mk.cell]);
         const rest = [...(base ? [base] : []), ...rimSolids.filter((_, j) => j !== i)];
         const others = rest.length === 0 ? null : rest.length === 1 ? rest[0]! : s.t(M.union(rest));
         for (const { cut, probe } of zmarkCutters(s, mk)) {
@@ -760,6 +925,8 @@ interface MeshArrays {
   positions: Float32Array;
   normals: Float32Array;
   indices: Uint32Array;
+  patchHint?: Uint16Array;
+  softPatches?: readonly number[];
 }
 
 /**
@@ -940,7 +1107,30 @@ function buildArrays(part: Part): MeshArrays {
     const m = buildSolid(s, part);
     if (!m) return { positions: new Float32Array(0), normals: new Float32Array(0), indices: new Uint32Array(0) };
     const mesh = m.getMesh();
-    return creasedMesh(mesh.vertProperties, mesh.triVerts);
+    const arrays: MeshArrays = creasedMesh(mesh.vertProperties, mesh.triVerts);
+    const gears = gearIndexes(part);
+    if (gears.length) {
+      // Soft tooth-band patches (§4.2, §6.1): see MeshData.patchHint.
+      // A vertex is on the band if it is a corner of a triangle whose three corners all pass
+      // onToothBand for the same gear (a barrel standing on the gear's face has its lower ring of
+      // vertices in the band region, but its triangles reach out of the slab).
+      const n = arrays.positions.length / 3;
+      const cand = new Uint16Array(n);
+      for (let i = 0; i < n; i++) {
+        const p = arrays.positions.subarray(3 * i, 3 * i + 3);
+        const q = arrays.normals.subarray(3 * i, 3 * i + 3);
+        for (const g of gears) if (onToothBand(g, p, q)) cand[i] = g.patch;
+      }
+      const hint = new Uint16Array(n);
+      const ix = arrays.indices;
+      for (let t = 0; t < ix.length; t += 3) {
+        const k = cand[ix[t]!]!;
+        if (k !== 0 && cand[ix[t + 1]!] === k && cand[ix[t + 2]!] === k) hint[ix[t]!] = hint[ix[t + 1]!] = hint[ix[t + 2]!] = k;
+      }
+      arrays.patchHint = hint;
+      arrays.softPatches = Object.freeze(gears.map((g) => g.patch));
+    }
+    return arrays;
   });
 }
 
@@ -963,5 +1153,10 @@ export function buildPartMesh(part: Part): MeshData {
     cache.set(key, arrays);
     if (cache.size > CACHE_LIMIT) cache.delete(cache.keys().next().value!);
   }
-  return { positions: arrays.positions, normals: arrays.normals, indices: arrays.indices, origin };
+  const out: MeshData = { positions: arrays.positions, normals: arrays.normals, indices: arrays.indices, origin };
+  if (arrays.patchHint) {
+    out.patchHint = arrays.patchHint;
+    out.softPatches = arrays.softPatches!;
+  }
+  return out;
 }

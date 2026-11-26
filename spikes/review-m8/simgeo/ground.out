@@ -1,0 +1,40 @@
+loose gear r 0.5 axis 2: start gap 0.00e+0 (groundY -0.5850), hub dropped 1.12e-2, drift 1.98e-3, rotation 2.36e-4 rad
+loose gear r 0.5 axis 0: start gap 0.00e+0 (groundY -0.5850), hub dropped 1.12e-2, drift 1.98e-3, rotation 2.36e-4 rad
+loose gear r 0.5 axis 1: start gap 0.00e+0 (groundY -0.4600), hub dropped 7.71e-3, drift 3.54e-4, rotation 5.01e-5 rad
+loose gear r 1 axis 2: start gap 0.00e+0 (groundY -1.0850), hub dropped 7.16e-3, drift 1.37e-3, rotation 2.24e-4 rad
+loose gear r 1 axis 0: start gap 0.00e+0 (groundY -1.0850), hub dropped 7.16e-3, drift 1.37e-3, rotation 2.24e-4 rad
+loose gear r 1 axis 1: start gap 0.00e+0 (groundY -0.4600), hub dropped 1.01e-2, drift 6.05e-4, rotation 4.38e-5 rad
+loose gear r 1.5 axis 2: start gap 0.00e+0 (groundY -1.5850), hub dropped 5.76e-3, drift 2.57e-3, rotation 5.42e-4 rad
+loose gear r 1.5 axis 0: start gap 0.00e+0 (groundY -1.5850), hub dropped 5.76e-3, drift 2.57e-3, rotation 5.42e-4 rad
+loose gear r 1.5 axis 1: start gap 0.00e+0 (groundY -0.4600), hub dropped 1.07e-2, drift 5.17e-4, rotation 3.15e-5 rad
+loose gear r 2.5 axis 2: start gap 0.00e+0 (groundY -2.5850), hub dropped 4.87e-3, drift 3.47e-3, rotation 8.17e-4 rad
+loose gear r 2.5 axis 0: start gap 0.00e+0 (groundY -2.5850), hub dropped 4.87e-3, drift 3.47e-3, rotation 8.17e-4 rad
+loose gear r 2.5 axis 1: start gap 0.00e+0 (groundY -0.4600), hub dropped 1.10e-2, drift 3.48e-4, rotation 2.02e-5 rad
+gear r 0.5 rolling: v end 39.908 (-0.23 %), ω·Rc 40.358, hub dropped 1.31e-2, z drift 4.92e-1
+gear r 1 rolling: v end 39.989 (-0.03 %), ω·Rc 40.141, hub dropped 8.18e-3, z drift 2.45e-3
+gear r 1.5 rolling: v end 40.000 (-0.00 %), ω·Rc 40.081, hub dropped 6.45e-3, z drift 2.59e-3
+gear r 2.5 rolling: v end 40.021 (0.05 %), ω·Rc 40.062, hub dropped 5.30e-3, z drift 2.79e-3
+gear r 0.5 axis 2 du 0 on a loose beam: contact depth -0.0004, gear lowest − beam top 0.5804 (approx, untilted), beam dropped 0.0121, gear dropped 0.3867, E 828.0
+gear r 0.5 axis 0 du 0 on a loose beam: contact depth 0.0000, gear lowest − beam top 0.0355 (approx, untilted), beam dropped 0.0121, gear dropped 0.9316, E 827.9
+gear r 0.5 axis 1 du 0 on a loose beam: contact depth 0.0137, gear lowest − beam top -0.0005 (approx, untilted), beam dropped 0.0121, gear dropped 0.0926, E 719.1
+gear r 0.5 axis 1 du 1 on a loose beam: contact depth 0.0137, gear lowest − beam top -0.0004 (approx, untilted), beam dropped 0.0121, gear dropped 0.0926, E 719.0
+gear r 0.5 axis 1 du 2 on a loose beam: contact depth 0.0137, gear lowest − beam top -0.0003 (approx, untilted), beam dropped 0.0121, gear dropped 0.0925, E 718.6
+gear r 1 axis 2 du 0 on a loose beam: contact depth 0.0000, gear lowest − beam top -0.0032 (approx, untilted), beam dropped 0.0162, gear dropped 0.4744, E 5293.6
+gear r 1 axis 0 du 0 on a loose beam: contact depth 0.0057, gear lowest − beam top -0.0030 (approx, untilted), beam dropped 0.0162, gear dropped 0.4742, E 5294.3
+gear r 1 axis 1 du 0 on a loose beam: contact depth 0.0137, gear lowest − beam top -0.0006 (approx, untilted), beam dropped 0.0162, gear dropped 0.0968, E 3087.5
+gear r 1 axis 1 du 1 on a loose beam: contact depth 0.0137, gear lowest − beam top -0.0006 (approx, untilted), beam dropped 0.0162, gear dropped 0.0968, E 3085.4
+gear r 1 axis 1 du 2 on a loose beam: contact depth 0.0137, gear lowest − beam top -0.0005 (approx, untilted), beam dropped 0.0162, gear dropped 0.0967, E 3078.9
+gear r 1.5 axis 2 du 0 on a loose beam: contact depth -0.0069, gear lowest − beam top -0.0047 (approx, untilted), beam dropped 0.0230, gear dropped 0.9827, E 15925.8
+gear r 1.5 axis 0 du 0 on a loose beam: contact depth -0.0026, gear lowest − beam top -0.0042 (approx, untilted), beam dropped 0.0230, gear dropped 0.9821, E 15930.7
+gear r 1.5 axis 1 du 0 on a loose beam: contact depth 0.0137, gear lowest − beam top -0.0009 (approx, untilted), beam dropped 0.0231, gear dropped 0.1039, E 6984.7
+gear r 1.5 axis 1 du 1 on a loose beam: contact depth 0.0137, gear lowest − beam top -0.0008 (approx, untilted), beam dropped 0.0231, gear dropped 0.1039, E 6973.6
+gear r 1.5 axis 1 du 2 on a loose beam: contact depth 0.0137, gear lowest − beam top -0.0007 (approx, untilted), beam dropped 0.0231, gear dropped 0.1038, E 6940.8
+gear r 2.5 axis 2 du 0 on a loose beam: contact depth -0.0230, gear lowest − beam top -0.0103 (approx, untilted), beam dropped 0.0450, gear dropped 1.0103, E 65910.4
+gear r 2.5 axis 0 du 0 on a loose beam: contact depth 0.0000, gear lowest − beam top -0.0098 (approx, untilted), beam dropped 0.0448, gear dropped 1.0096, E 65927.2
+gear r 2.5 axis 1 du 0 on a loose beam: contact depth 0.0137, gear lowest − beam top -0.0018 (approx, untilted), beam dropped 0.0449, gear dropped 0.1267, E 19031.4
+gear r 2.5 axis 1 du 1 on a loose beam: contact depth 0.0137, gear lowest − beam top -0.0017 (approx, untilted), beam dropped 0.0449, gear dropped 0.1267, E 18946.1
+gear r 2.5 axis 1 du 2 on a loose beam: contact depth 0.0137, gear lowest − beam top -0.0013 (approx, untilted), beam dropped 0.0449, gear dropped 0.1262, E 18692.5
+geared cart rest: engaged at start 4/15, travelled -0.000, z drift -3.35e-3, yaw 1.05e-8 rad, chassis sank 6.68e-3, v end 0.000, E max − E0 0.00 (E0 -3.9), joint err max 2.19e-6, releases 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+geared cart push μ 0: engaged at start 4/15, travelled 201.945, z drift -3.09e-4, yaw 3.28e-5 rad, chassis sank 6.71e-3, v end 40.318, E max − E0 1178.79 (E0 136348.3), joint err max 2.05e-5, releases 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+geared cart push μ 0.2: engaged at start 4/15, travelled 96.646, z drift 2.34e-3, yaw 1.61e-5 rad, chassis sank 6.66e-3, v end -0.001, E max − E0 0.00 (E0 136348.3), joint err max 1.60e-5, releases 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+geared cart push μ 0.05: engaged at start 4/15, travelled 75.155, z drift 2.34e-3, yaw 1.62e-6 rad, chassis sank 6.69e-3, v end 9.827, E max − E0 0.00 (E0 34084.1), joint err max 1.63e-5, releases 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0

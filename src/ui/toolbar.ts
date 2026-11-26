@@ -1,5 +1,6 @@
-// Left toolbar (§7.2): Select, the five build tools, Wheel, Erase, plus the "New part" toggle [N], the
+// Left toolbar (§7.2): Select, the five build tools, Wheel, Gear, Erase, plus the "New part" toggle [N], the
 // "Back side" toggle [B] (§7.3) and the orientation cycler [R]. Shortcuts are shown on the buttons.
+import { isBuildTool } from '../editor';
 import type { Tool } from '../editor';
 import { button, h, icon } from './dom';
 import { ICONS } from './icons';
@@ -38,6 +39,7 @@ export const TOOL_DEFS: readonly ToolDef[] = [
   { tool: 'pin', label: 'Pin', key: '4', icon: ICONS.pin },
   { tool: 'frictionPin', label: 'Friction pin', key: '5', icon: ICONS.frictionPin },
   { tool: 'wheel', label: 'Wheel', key: 'W', icon: ICONS.wheel, tip: 'click a pin hole, axle hole or wheel to grow it by half a unit; Shift+click shrinks it' },
+  { tool: 'gear', label: 'Gear', key: 'T', icon: ICONS.gear, tip: 'click a pin hole, axle hole or gear to make a gear or step it up (8, 16, 24, 40 teeth); Shift+click steps down' },
   { tool: 'erase', label: 'Erase', key: 'E', icon: ICONS.erase },
 ];
 
@@ -60,7 +62,7 @@ export class Toolbar {
       });
       this.buttons.set(d.tool, b);
       this.el.append(b);
-      if (d.tool === 'select' || d.tool === 'wheel') this.el.append(h('span', { class: 'sep' }));
+      if (d.tool === 'select' || d.tool === 'gear') this.el.append(h('span', { class: 'sep' }));
     }
     this.el.append(h('span', { class: 'sep' }));
     this.newPartBtn = button([icon(ICONS.newPart), h('span', { class: 'key' }, 'N')], {
@@ -96,7 +98,7 @@ export class Toolbar {
       b.setAttribute('aria-pressed', String(on));
       b.disabled = s.disabled;
     }
-    const build = s.tool !== 'select' && s.tool !== 'erase' && s.tool !== 'wheel';
+    const build = isBuildTool(s.tool);
     this.newPartBtn.disabled = s.disabled || !build;
     this.newPartBtn.classList.toggle('on', s.newPart && build);
     this.newPartBtn.setAttribute('aria-pressed', String(s.newPart));

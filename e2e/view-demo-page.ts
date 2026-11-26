@@ -36,8 +36,12 @@ function allExamples(): Model {
   // Lay every example out along X, 14 units apart, renumbering part ids.
   const parts: Model['parts'] = [];
   let id = 1;
+  // gears=0: leave out the examples with gears (view-gears compares this layout against the view
+  // before gears existed); their slots stay empty so the other examples keep their positions.
+  const noGears = q.get('gears') === '0';
   EXAMPLES.forEach((ex, i) => {
     const m = ex.build();
+    if (noGears && m.parts.some((p) => p.cells.some((c) => c.teeth))) return;
     for (const p of m.parts) parts.push({ id: id++, color: p.color, cells: p.cells.map((c) => ({ ...c, x: c.x + i * 14 })) });
   });
   return { version: 1, parts, rootPartId: 1, nextPartId: id };

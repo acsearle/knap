@@ -16,12 +16,22 @@
 //        `creaseDeg` (fallback for the rare patch that meets itself across a crease, e.g. the
 //        inner corner of an L-shaped beam's wall).
 //    Output RGBA8: r = line to +x, g = line to +y, b/a = the same for the selection boundary.
+//    Soft patches (a gear's tooth band, patches.ts meshPatches: negative patch number; the ID pass
+//    writes the flag into B.z): inside one, the crease fallback is off, and its depth-jump contours
+//    (each tooth occluding the root behind it) are SOFT lines, r/g = ½ instead of 1. A boundary
+//    between a soft patch and another patch of the same part (the gear's faces) is soft too unless
+//    the depth jumps there (the band occluding something of its own part is a real contour).
+//    Silhouettes against the background or other parts stay hard.
 // 3. Composite (drawing-buffer resolution, blended over the shaded colour image): the boundary
 //    between two texels is a unit segment of the texel grid; the midpoints of these segments,
 //    joined around each texel corner, give a polyline that follows the true boundary to within
 //    ~¼ texel (a plain staircase would make diagonals ~30 % heavier). Coverage of each output
 //    pixel = clamp(w/2 + ½ − distance to that polyline, 0, 1): uniform width w, 1-px
 //    anti-aliasing ramp, round joins. Selection outlines are the same with their own width/colour.
+//    Soft lines are drawn at strength `softFade` (patches.ts softContourFade: 1 while a tooth pitch
+//    covers ≥ 6 device px, 0 at 3): coverage = max(hard polyline, softFade × all-lines polyline),
+//    so a soft line never darkens a hard one and with softFade = 1 (or no soft lines) the result
+//    is exactly the plain pass.
 import * as THREE from 'three';
 
 export interface OutlineParams {
@@ -37,6 +47,8 @@ export interface OutlineParams {
   depthTol: number;
   /** Same-patch crease fallback angle (degrees). */
   creaseDeg: number;
+  /** Strength of the lines inside soft patches, 0…1 (default 1; see patches.ts softContourFade). */
+  softFade?: number;
 }
 
 export const DEFAULT_OUTLINE: OutlineParams = {
@@ -47,6 +59,13 @@ export const DEFAULT_OUTLINE: OutlineParams = {
   depthTol: 0.06,
   creaseDeg: 30,
 };
+
+/**
+ * Depth tolerance inside a soft patch, as a fraction of the ordinary one. The residual along a real
+ * tooth-occludes-root contour still varies about 2:1 with sub-texel phase; with the full tolerance
+ * the low end fell under it (dashes). See sideResidual in the edge shader.
+ */
+export const SOFT_TOL = 0.5;
 
 // ------------------------------------------------------------------------------------------
 // ID material (one per part view; the id/selection uniforms are per part)
@@ -77,9 +96,10 @@ layout(location = 1) out vec4 outNormal;
 void main() {
   vec3 n = normalize(cross(dFdx(vViewPos), dFdy(vViewPos)));
   if (n.z < 0.0) n = -n;
-  float id = uSlot * 4096.0 + mod(vPatch, 4096.0) + 1.0;
+  // A negative patch number marks a soft patch (patches.ts meshPatches); flagged in outNormal.z.
+  float id = uSlot * 4096.0 + mod(abs(vPatch), 4096.0) + 1.0;
   outDepthId = vec4(-vViewPos.z, uSelected > 0.5 ? -id : id, 0.0, 1.0);
-  outNormal = vec4(n.xy * 0.5 + 0.5, 0.0, 1.0);
+  outNormal = vec4(n.xy * 0.5 + 0.5, vPatch < 0.0 ? 1.0 : 0.0, 1.0);
 }`;
 
 export function createIdMaterial(slot: number): THREE.RawShaderMaterial {
@@ -108,6 +128,7 @@ uniform sampler2D tNormal;
 uniform float uDepthTol;
 uniform float uCreaseCos;
 uniform float uMinNz;
+uniform float uSoftTol;
 layout(location = 0) out vec4 outEdge;
 
 ivec2 gSize;
@@ -116,8 +137,61 @@ vec3 N(ivec2 p) {
   vec2 e = texelFetch(tNormal, clamp(p, ivec2(0), gSize - 1), 0).xy * 2.0 - 1.0;
   return vec3(e, sqrt(max(0.0, 1.0 - dot(e, e))));
 }
+bool S(ivec2 p) { return texelFetch(tNormal, clamp(p, ivec2(0), gSize - 1), 0).z > 0.5; }
 
-// x: ink line between p and p+d; y: selection boundary between them.
+// Same-patch depth residual inside a soft patch: the jump between p and p+d that the surface on
+// either side cannot explain by linear extrapolation, using on each side the smaller of its two
+// nearest slopes. A tooth flank that occludes the root behind it is seen near grazing and steepens
+// toward its silhouette, so its nearest slope alone explains away much of the jump, by an amount
+// that depends on where the contour falls within the texel: such a contour slightly off the texel
+// grid was drawn dashed and shimmered as the gear turned (review m8 look; measured residual ramping
+// 0.53…1.09 × tol along one contour). A planar flank meeting the root (a crease, no line wanted)
+// has equal slopes and gives the same residual as before.
+float sideResidual(ivec2 p, ivec2 d, float t) {
+  vec2 n0 = G(p);
+  vec2 n1 = G(p + d);
+  float jump = abs(t - n0.x);
+  if (abs(n1.y) != abs(n0.y)) return jump;
+  float s = n0.x - n1.x;
+  vec2 n2 = G(p + 2 * d);
+  if (abs(n2.y) == abs(n0.y) && abs(n1.x - n2.x) < abs(s)) s = n1.x - n2.x;
+  return abs(t - (n0.x + s));
+}
+
+// The soft residual between p and p+d when both lie in one soft patch, else -1.
+float softRes(ivec2 p, ivec2 d) {
+  vec2 a = G(p);
+  vec2 b = G(p + d);
+  if (a.y == 0.0 || abs(a.y) != abs(b.y) || !S(p)) return -1.0;
+  return min(sideResidual(p, -d, b.x), sideResidual(p + d, d, a.x));
+}
+
+// Hysteresis along a soft contour. Even with sideResidual the residual along one contour varies
+// about 2:1 with sub-texel phase, so any single threshold still dashes the contours whose strength
+// straddles it. A residual above SOFT_LO·tol counts when, walking along the contour (perpendicular
+// to d, following the strongest of the three texels across it at each step) through residuals above
+// SOFT_LO·tol, a residual above uSoftTol·tol is reached within SOFT_REACH texels.
+const float SOFT_LO = 0.25;
+const int SOFT_REACH = 32;
+bool softChain(ivec2 p, ivec2 d, ivec2 t) {
+  ivec2 q = p;
+  float hi = uSoftTol * uDepthTol;
+  for (int i = 0; i < SOFT_REACH; i++) {
+    q += t;
+    float best = -1.0;
+    ivec2 bq = q;
+    for (int k = -1; k <= 1; k++) {
+      float r = softRes(q + k * d, d);
+      if (r > best) { best = r; bq = q + k * d; }
+    }
+    if (best > hi) return true;
+    if (best <= SOFT_LO * uDepthTol) return false;
+    q = bq;
+  }
+  return false;
+}
+
+// x: ink line between p and p+d (1 = hard, 0.5 = soft); y: selection boundary between them.
 vec2 between(ivec2 p, ivec2 d, vec2 a) {
   vec2 b = G(p + d);
   float ia = abs(a.y);
@@ -125,14 +199,34 @@ vec2 between(ivec2 p, ivec2 d, vec2 a) {
   float selA = a.y < 0.0 ? 1.0 : 0.0;
   float selB = b.y < 0.0 ? 1.0 : 0.0;
   float sel = selA != selB ? 1.0 : 0.0;
-  if (ia != ib) return vec2(1.0, sel);
+  if (ia != ib) {
+    // Soft patch against another patch of the same part: soft where the surfaces meet (no depth
+    // jump after extrapolation), hard where one occludes the other.
+    if (ia == 0.0 || ib == 0.0 || floor((ia - 1.0) / 4096.0) != floor((ib - 1.0) / 4096.0)) return vec2(1.0, sel);
+    if (!S(p) && !S(p + d)) return vec2(1.0, sel);
+    vec2 a0 = G(p - d);
+    vec2 b1 = G(p + 2 * d);
+    float jump = abs(b.x - a.x);
+    float e1 = abs(a0.y) == ia ? abs(b.x - (2.0 * a.x - a0.x)) : jump;
+    float e2 = abs(b1.y) == ib ? abs(a.x - (2.0 * b.x - b1.x)) : jump;
+    return vec2(min(e1, e2) > uDepthTol ? 1.0 : 0.5, sel);
+  }
   if (ia == 0.0) return vec2(0.0, sel);
   vec2 a0 = G(p - d);
   vec2 b1 = G(p + 2 * d);
   float jump = abs(b.x - a.x);
   float e1 = abs(a0.y) == ia ? abs(b.x - (2.0 * a.x - a0.x)) : jump;
   float e2 = abs(b1.y) == ib ? abs(a.x - (2.0 * b.x - b1.x)) : jump;
-  if (min(e1, e2) > uDepthTol) return vec2(1.0, sel);
+  bool soft = S(p);
+  if (soft) {
+    float r = min(sideResidual(p, -d, b.x), sideResidual(p + d, d, a.x));
+    if (r > uSoftTol * uDepthTol) return vec2(0.5, sel);
+    if (r <= SOFT_LO * uDepthTol) return vec2(0.0, sel);
+    ivec2 t = ivec2(d.y, d.x);
+    return vec2(softChain(p, d, t) || softChain(p, d, -t) ? 0.5 : 0.0, sel);
+  }
+  if (min(e1, e2) > uDepthTol) return vec2(soft ? 0.5 : 1.0, sel);
+  if (soft) return vec2(0.0, sel);
   vec3 na = N(p);
   vec3 nb = N(p + d);
   if (na.z > uMinNz && nb.z > uMinNz && dot(na, nb) < uCreaseCos) return vec2(1.0, sel);
@@ -158,6 +252,7 @@ uniform float uSelW;
 uniform vec3 uInk;
 uniform vec3 uSel;
 uniform float uSelOn;
+uniform float uSoftFade;
 layout(location = 0) out vec4 outColor;
 
 ivec2 eSize;
@@ -200,7 +295,9 @@ void main() {
   int j0 = int(floor(o.y - reach)) - 1;
   int j1 = int(floor(o.y + reach));
   float dInk = 1e9;
+  float dHard = 1e9;
   float dSel = 1e9;
+  bool fading = uSoftFade < 1.0;
   for (int j = j0; j <= j1; j++) {
     for (int i = i0; i <= i1; i++) {
       // corner at (i+1, j+1); incident boundaries:
@@ -213,12 +310,16 @@ void main() {
       vec2 m1 = c + vec2(0.0, 0.5);
       vec2 m2 = c + vec2(-0.5, 0.0);
       vec2 m3 = c + vec2(0.5, 0.0);
-      dInk = min(dInk, cornerDist(o, c, bvec4(e00.r > 0.5, e01.r > 0.5, e00.g > 0.5, e10.g > 0.5), m0, m1, m2, m3));
+      // all lines (hard 1, soft ½); with fading also the hard ones alone
+      dInk = min(dInk, cornerDist(o, c, bvec4(e00.r > 0.25, e01.r > 0.25, e00.g > 0.25, e10.g > 0.25), m0, m1, m2, m3));
+      if (fading)
+        dHard = min(dHard, cornerDist(o, c, bvec4(e00.r > 0.75, e01.r > 0.75, e00.g > 0.75, e10.g > 0.75), m0, m1, m2, m3));
       if (uSelOn > 0.5)
         dSel = min(dSel, cornerDist(o, c, bvec4(e00.b > 0.5, e01.b > 0.5, e00.a > 0.5, e10.a > 0.5), m0, m1, m2, m3));
     }
   }
   float ci = clamp(uInkW * 0.5 + 0.5 - dInk / uSS, 0.0, 1.0);
+  if (fading) ci = max(clamp(uInkW * 0.5 + 0.5 - dHard / uSS, 0.0, 1.0), uSoftFade * ci);
   float cs = uSelOn > 0.5 ? clamp(uSelW * 0.5 + 0.5 - dSel / uSS, 0.0, 1.0) : 0.0;
   float a = cs + ci * (1.0 - cs);
   if (a <= 0.0) discard;
@@ -272,6 +373,7 @@ export class OutlinePass {
         uDepthTol: { value: DEFAULT_OUTLINE.depthTol },
         uCreaseCos: { value: Math.cos((DEFAULT_OUTLINE.creaseDeg * Math.PI) / 180) },
         uMinNz: { value: 0.3 },
+        uSoftTol: { value: SOFT_TOL },
       },
       depthTest: false,
       depthWrite: false,
@@ -288,6 +390,7 @@ export class OutlinePass {
         uInk: { value: new THREE.Vector3(...DEFAULT_OUTLINE.ink) },
         uSel: { value: new THREE.Vector3(...DEFAULT_OUTLINE.sel) },
         uSelOn: { value: 0 },
+        uSoftFade: { value: 1 },
       },
       depthTest: false,
       depthWrite: false,
@@ -346,6 +449,7 @@ export class OutlinePass {
     (u.uInk!.value as THREE.Vector3).set(...p.ink);
     (u.uSel!.value as THREE.Vector3).set(...p.sel);
     u.uSelOn!.value = selectionOn ? 1 : 0;
+    u.uSoftFade!.value = Math.min(1, Math.max(0, p.softFade ?? 1));
     this.fsMesh.material = this.compositeMat;
     renderer.render(this.fsScene, this.fsCamera);
   }

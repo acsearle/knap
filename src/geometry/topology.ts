@@ -1,8 +1,8 @@
 // Shared part-local frame and per-cell connection analysis used by both the render solid
 // (solid.ts) and the collision compound (colliders.ts), so the two cannot disagree. Pure.
-import { DIRS, connects, isHole, isMale, posKey } from '../core';
+import { DIRS, connects, gearPlaneBasis, gearTeeth, gearToothAngle, isGear, isHole, isMale, posKey, tipRadius } from '../core';
 import type { Axis, Cell, Dir, Part } from '../core';
-import { E_CONN, E_FREE, MARK_D, MARK_R0, MARK_W, RIM_INSET } from './dims';
+import { E_CONN, E_FREE, H, MARK_D, MARK_R0, MARK_W, RIM_INSET } from './dims';
 
 export type Vec3 = [number, number, number];
 
@@ -31,12 +31,14 @@ export function localCenter(c: Cell, origin: Vec3): Vec3 {
 /**
  * Translation-normalised signature of a part's cells (kind, axis, rim and position relative to
  * partOrigin, sorted). Equal signatures ⇔ identical geometry in the part-local frame.
- * Colour and id are not part of it. A cell without a rim has exactly the pre-wheels signature.
+ * Colour and id are not part of it. A cell without a rim has exactly the pre-wheels signature, and
+ * a cell without teeth exactly the pre-gears one (a gear appends `,t`).
  */
 export function partSignature(part: Part): string {
   const o = partOrigin(part);
   const items = part.cells.map(
-    (c) => `${c.x - o[0]},${c.y - o[1]},${c.z - o[2]},${c.kind},${c.axis}${c.rim !== undefined ? `,r${c.rim}` : ''}`,
+    (c) =>
+      `${c.x - o[0]},${c.y - o[1]},${c.z - o[2]},${c.kind},${c.axis}${c.rim !== undefined ? `,r${c.rim}` : ''}${c.teeth === true ? ',t' : ''}`,
   );
   items.sort();
   return items.join(';');
@@ -149,6 +151,13 @@ export interface RimMark {
   depth: number;
   /** Is the groove continued across the tread? false when a cell of the part continues past the rim edge along the mark. */
   tread: boolean;
+  /**
+   * Present (true) only on the face groove of a gear (§4.2 "Index"): the groove ends at r1 =
+   * root − GEAR_MARK_END with an end wall (it does not run out across the teeth), and tread is
+   * false. Gears of r ½ (8 teeth) have no RimMark at all: their only index is the painted tooth
+   * (see gearIndexes).
+   */
+  gear?: true;
 }
 
 /** Index marks of every rim of a part (in cell order). */
@@ -160,6 +169,14 @@ export function rimMarks(part: Part, grid: PartGrid = new PartGrid(part)): RimMa
     const t = ((c.axis + 1) % 3) as Axis;
     const dir: Vec3 = [0, 0, 0];
     dir[t] = 1;
+    if (isGear(c)) {
+      // The wheel's face groove along +u (= dir: gearPlaneBasis(axis)[0] is (axis + 1) % 3), from
+      // MARK_R0 to GEAR_MARK_END inside the root circle, faces only (§4.2). None on an 8.
+      if (c.rim < 1) return;
+      const r1 = gearRootRadius(c.rim) - GEAR_MARK_END;
+      out.push({ cell: index, center: localCenter(c, origin), axis: c.axis, dir, r0: MARK_R0, r1, width: MARK_W, depth: MARK_D, tread: false, gear: true });
+      return;
+    }
     const r1 = c.rim - RIM_INSET;
     // Cells on the mark line, in the hub's layer, whose cube reaches the tread groove's radial band.
     let tread = true;
@@ -168,5 +185,190 @@ export function rimMarks(part: Part, grid: PartGrid = new PartGrid(part)): RimMa
     }
     out.push({ cell: index, center: localCenter(c, origin), axis: c.axis, dir, r0: MARK_R0, r1, width: MARK_W, depth: MARK_D, tread });
   });
+  return out;
+}
+
+// ---- gears (§2.7, §4.2 "Per gear") ----------------------------------------------------------
+
+/** Pressure angle of the involute teeth (radians): 20°. */
+export const GEAR_PRESSURE_ANGLE = (20 * Math.PI) / 180;
+/** Dedendum (pitch radius − root radius), units: 5/32. (The addendum is the core's GEAR_TIP, 3/32.) */
+export const GEAR_DEDENDUM = 5 / 32;
+/** Backlash per meshed pair at the pitch circle (units): each tooth is BACKLASH/2 thinner than π/16. */
+export const GEAR_BACKLASH = 0.05;
+/** Points per involute flank (from the base circle to the tip). */
+export const GEAR_FLANK_POINTS = 5;
+/** Segments across each tip land and each root land. */
+export const GEAR_LAND_SEGMENTS = 2;
+/** The gear's face groove (r ≥ 1) ends this far inside the root circle. */
+export const GEAR_MARK_END = 0.05;
+
+/** Is this cell a gear hub (a hole cell with a gear: teeth on a rim in GEAR_RADII)? */
+export function isGearHub(c: Cell): c is Cell & { rim: number; teeth: true } {
+  return isGear(c) && isHole(c.kind);
+}
+/** Root radius r − 5/32 of a gear of pitch radius r. */
+export function gearRootRadius(r: number): number {
+  return r - GEAR_DEDENDUM;
+}
+/** Base circle radius r·cos 20° of a gear of pitch radius r. */
+export function gearBaseRadius(r: number): number {
+  return r * Math.cos(GEAR_PRESSURE_ANGLE);
+}
+
+function involuteFn(a: number): number {
+  return Math.tan(a) - a;
+}
+
+/**
+ * Closed outline of a gear of pitch radius r (§4.2), as points (pu, pv) about the hub in the
+ * gear's plane basis (u, v) = gearPlaneBasis(axis) — world axes — counter-clockwise from +u toward
+ * +v. Tooth k is centred at gearToothAngle(T, k). Per tooth, in order: right flank from the root to
+ * the tip (2 points of the parallel flank below the base circle, then GEAR_FLANK_POINTS involute
+ * points from the base circle to the tip), the middle of the tip land, the left flank from the tip
+ * to the root, the middle of the root land: 16 points per tooth, 2 segments on each land.
+ * Ported from spikes/gearlook/gear.ts (gearProfile, 'involute', underBase 'parallel').
+ */
+export function gearOutline(r: number): [number, number][] {
+  const T = gearTeeth(r);
+  const alpha = GEAR_PRESSURE_ANGLE;
+  const ra = tipRadius(r);
+  const rf = gearRootRadius(r);
+  const rb = gearBaseRadius(r);
+  const pitchAng = (2 * Math.PI) / T;
+  // Half the tooth's angular thickness on the pitch circle: (π/16 − backlash/2) / (2r).
+  const halfP = ((Math.PI * r) / T - GEAR_BACKLASH / 2) / (2 * r);
+  const flankAng = (rho: number): number => halfP + involuteFn(alpha) - involuteFn(Math.acos(rb / Math.max(rho, rb)));
+  const tipHalf = flankAng(ra);
+  // Below the base circle the flank keeps the base circle's linear half-width (parallel flank).
+  const hw = flankAng(rb) * rb;
+  const flank: [number, number][] = []; // (radius, half-angle), root → tip
+  for (const t of [0, 0.5]) {
+    const rho = rf + (rb - rf) * t;
+    flank.push([rho, Math.min(hw / rho, pitchAng / 2 - 0.02)]);
+  }
+  for (let i = 0; i < GEAR_FLANK_POINTS; i++) {
+    const rho = rb + ((ra - rb) * i) / (GEAR_FLANK_POINTS - 1);
+    flank.push([rho, flankAng(rho)]);
+  }
+  const pts: [number, number][] = [];
+  const P = (rho: number, ang: number): void => {
+    pts.push([rho * Math.cos(ang), rho * Math.sin(ang)]);
+  };
+  for (let k = 0; k < T; k++) {
+    const c = gearToothAngle(T, k);
+    for (const [rho, h] of flank) P(rho, c - h);
+    for (let i = 1; i < GEAR_LAND_SEGMENTS; i++) P(ra, c - tipHalf + (2 * tipHalf * i) / GEAR_LAND_SEGMENTS);
+    for (let i = flank.length - 1; i >= 0; i--) P(flank[i]![0], c + flank[i]![1]);
+    const a0 = c + flank[0]![1];
+    const a1 = c + pitchAng - flank[0]![1];
+    for (let i = 1; i < GEAR_LAND_SEGMENTS; i++) P(rf, a0 + ((a1 - a0) * i) / GEAR_LAND_SEGMENTS);
+  }
+  return pts;
+}
+
+/**
+ * Where a gear is and where its index tooth is (§4.2 "Index", §6.1 "Gears"), in the part-local
+ * frame (= world axes at edit time; while simulating it turns with the part's body). The view
+ * paints tooth 0's flanks and tip land in the mark colour on every gear (indexToothWeights), on top
+ * of the face groove that rimMarks describes for gears with r ≥ 1.
+ */
+export interface GearIndex {
+  /** Index of the hub cell in part.cells. */
+  cell: number;
+  /** Hub centre, part-local. */
+  center: Vec3;
+  /** Gear axis. */
+  axis: Axis;
+  /** The plane basis gearPlaneBasis(axis) as unit vectors (u × v = +axis). */
+  u: Vec3;
+  v: Vec3;
+  /** Number of teeth T = 16·r. */
+  teeth: number;
+  /** Pitch, tip and root radius. */
+  pitch: number;
+  tip: number;
+  root: number;
+  /** Angle of the centre of tooth 0 (the index tooth) from +u toward +v: gearToothAngle(T, 0) = π/(2T). */
+  angle: number;
+  /** Patch id of this gear's tooth band in MeshData.patchHint (1-based, in cell order of the gear hubs). */
+  patch: number;
+}
+
+/** Every gear of a part, in cell order. */
+export function gearIndexes(part: Part): GearIndex[] {
+  const origin = partOrigin(part);
+  const out: GearIndex[] = [];
+  part.cells.forEach((c, index) => {
+    if (!isGearHub(c)) return;
+    const [ua, va] = gearPlaneBasis(c.axis);
+    const u: Vec3 = [0, 0, 0];
+    const v: Vec3 = [0, 0, 0];
+    u[ua] = 1;
+    v[va] = 1;
+    const T = gearTeeth(c.rim);
+    out.push({
+      cell: index,
+      center: localCenter(c, origin),
+      axis: c.axis,
+      u,
+      v,
+      teeth: T,
+      pitch: c.rim,
+      tip: tipRadius(c.rim),
+      root: gearRootRadius(c.rim),
+      angle: gearToothAngle(T, 0),
+      patch: out.length + 1,
+    });
+  });
+  return out;
+}
+
+const GEAR_TOL = 2e-3;
+
+/**
+ * Is the mesh vertex at part-local p with unit normal n on the gear's tooth band (flanks, tip
+ * lands, root lands, within the gear's slab ±H)? The flat faces (normal ∥ axis), bores, the
+ * groove and everything outside the slab are not.
+ */
+export function onToothBand(g: GearIndex, p: ArrayLike<number>, n: ArrayLike<number>): boolean {
+  const a = g.axis;
+  const q0 = p[0]! - g.center[0], q1 = p[1]! - g.center[1], q2 = p[2]! - g.center[2];
+  const q = [q0, q1, q2];
+  if (Math.abs(q[a]!) > H + GEAR_TOL || Math.abs(n[a]!) >= 0.5) return false;
+  const rho = Math.hypot(q[(a + 1) % 3]!, q[(a + 2) % 3]!);
+  return rho >= g.root - GEAR_TOL && rho <= g.tip + GEAR_TOL;
+}
+
+/** Is the mesh vertex (p, n) on the index tooth (tooth 0's flanks and tip land, not its root lands)? */
+export function onIndexTooth(g: GearIndex, p: ArrayLike<number>, n: ArrayLike<number>): boolean {
+  if (!onToothBand(g, p, n)) return false;
+  const ua = (g.axis + 1) % 3;
+  const va = (g.axis + 2) % 3;
+  const qu = p[ua]! - g.center[ua]!;
+  const qv = p[va]! - g.center[va]!;
+  const rho = Math.hypot(qu, qv);
+  // Root land: radial normal below the tip (the flank's normal is at most ~34° from tangential).
+  const nr = (n[ua]! * qu + n[va]! * qv) / rho;
+  if (nr > 0.9 && rho < g.tip - GEAR_TOL) return false;
+  let d = Math.atan2(qv, qu) - g.angle;
+  d = Math.atan2(Math.sin(d), Math.cos(d));
+  return Math.abs(d) < Math.PI / g.teeth;
+}
+
+/**
+ * Per-vertex weights (1 = on an index tooth, 0 = elsewhere) for a part's mesh, like the view's
+ * markWeights for the wheel groove: positions/normals as in MeshData. All zero without gears.
+ */
+export function indexToothWeights(part: Part, positions: Float32Array, normals: Float32Array): Float32Array {
+  const n = positions.length / 3;
+  const out = new Float32Array(n);
+  const gears = gearIndexes(part);
+  if (!gears.length) return out;
+  for (let i = 0; i < n; i++) {
+    const p = positions.subarray(3 * i, 3 * i + 3);
+    const q = normals.subarray(3 * i, 3 * i + 3);
+    for (const g of gears) if (onIndexTooth(g, p, q)) out[i] = 1;
+  }
   return out;
 }

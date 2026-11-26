@@ -1,8 +1,8 @@
-// Inspector for the selected part (§7.2): id, cell count, kinds, colour swatches, Set as fixed
-// root, Rotate (also [ / ]), Duplicate, Delete, and the move / rotate keys.
+// Inspector for the selected part (§7.2): id, cell count, kinds, wheel radii and gears (with their
+// meshes, §7.4), colour swatches, Set as fixed root, Rotate (also [ / ]), Duplicate, Delete, and the move / rotate keys.
 import { kindLabel } from '../core';
 import type { Kind } from '../core';
-import { wheelSize } from '../editor';
+import { meshText, wheelSize } from '../editor';
 import type { PartInfo } from '../editor';
 import { button, h, setText } from './dom';
 import { PALETTE } from './palette';
@@ -30,6 +30,7 @@ export class Inspector {
   private readonly badge: HTMLElement;
   private readonly sub: HTMLElement;
   private readonly wheels: HTMLElement;
+  private readonly gears: HTMLElement;
   private readonly body: HTMLElement;
   private readonly swatches: HTMLButtonElement[] = [];
   private readonly rootBtn: HTMLButtonElement;
@@ -42,6 +43,7 @@ export class Inspector {
     this.badge = h('span', { class: 'badge', hidden: true, title: 'This part is fixed in space during simulation' }, 'fixed root');
     this.sub = h('div', { class: 'sub', 'data-role': 'inspector-sub' });
     this.wheels = h('div', { class: 'wheels', hidden: true, 'data-role': 'inspector-wheels' });
+    this.gears = h('div', { class: 'wheels', hidden: true, 'data-role': 'inspector-gears' });
     const pal = h('div', { class: 'palette', role: 'group', 'aria-label': 'Part colour' });
     for (const s of PALETTE) {
       const b = h('button', {
@@ -74,6 +76,7 @@ export class Inspector {
       h('h2', null, this.title, this.badge),
       this.sub,
       this.wheels,
+      this.gears,
       this.body,
     );
   }
@@ -94,6 +97,15 @@ export class Inspector {
     const w = info.wheels ?? [];
     this.wheels.hidden = w.length === 0;
     setText(this.wheels, w.length === 1 ? `Wheel ${wheelSize(w[0]!)}` : w.length ? `Wheels: radius ${w.join(', ')}` : '');
+    // Gears (§7.4): tooth count and each mesh with its ratio, one line per gear.
+    const g = info.gears ?? [];
+    this.gears.hidden = g.length === 0;
+    this.gears.replaceChildren(
+      ...g.map((x) => {
+        const mesh = meshText(x.meshes);
+        return h('div', { 'data-role': 'inspector-gear' }, `Gear ${x.teeth} teeth (radius ${x.r})${mesh ? ` · ${mesh}` : ''}`);
+      }),
+    );
     for (const b of this.swatches) {
       b.classList.toggle('on', b.dataset.color === info.color.toLowerCase());
       b.disabled = disabled;

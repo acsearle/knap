@@ -1,6 +1,6 @@
 // window.__knap — the debug API for automated tests (DESIGN.md §7.5), plus a few extras the e2e
 // scripts need to drive the real UI (screen positions of cell faces and grid cells, state).
-import { DIRS, partById } from '../core';
+import { DIRS, gearMeshes, partById } from '../core';
 import type { Dir, Model } from '../core';
 import { describeGraph } from '../core/kinematics';
 import { pickCell, pickGrid } from '../editor';
@@ -17,6 +17,8 @@ export interface AnalyzeSummary {
   revolute: number;
   cylindrical: number;
   prismatic: number;
+  /** Gear meshes at edit time (core gearMeshes, §7.5). */
+  meshes: number;
   /** "4 bodies (1 fixed) · 4 joints: 4 revolute" */
   summary: string;
   bodyOfPart: Record<number, number>;
@@ -61,6 +63,7 @@ export function installTestHook(app: App): void {
         revolute: count('revolute'),
         cylindrical: count('cylindrical'),
         prismatic: count('prismatic'),
+        meshes: gearMeshes(app.model).length,
         summary: describeGraph(g),
         bodyOfPart: Object.fromEntries(g.bodyOfPart),
         jointList: g.joints.map((j) => ({
@@ -198,6 +201,10 @@ export function installTestHook(app: App): void {
         stepCount: s.sim.stepCount,
         /** World y of the simulation's floor (DESIGN §7.5), null without ground. */
         groundY: s.sim.groundY,
+        /** Current smaller-steps factor k ∈ {1, 2, 4, 8} (§5.1, §7.5). */
+        substeps: s.sim.substeps,
+        /** Engaged gear meshes with their signed phase error in teeth (§7.5). */
+        meshes: s.sim.meshStates(),
       };
     },
     /** Model setting (§7.4), as if toggled in the Model block: one undo step, edit mode only. */

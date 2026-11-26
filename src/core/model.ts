@@ -9,6 +9,7 @@ import {
   isGearRadius,
   isWebCell,
   tipOverlapsCell,
+  tipOverlapsRod,
   tipOverlapsWheel,
   tipRadius,
 } from './gears';
@@ -274,6 +275,16 @@ export class WorldIndex {
   }
 
   /**
+   * Is the world entry a cell in the web of a gear of its own part (§2.7 rule 5, isWebCell)? Such
+   * a cell is part of that gear's body (see discCellIssue).
+   */
+  inOwnGearWeb(e: WorldEntry): boolean {
+    if (this.rims.length === 0) return false;
+    const pos = cellPos(e.cell);
+    return this.rimsNear(pos, BLOCK_REACH).some((r) => r.partId === e.partId && r.gear && isWebCell(r.cell, e.cell));
+  }
+
+  /**
    * Hubs (of any part) whose disc overlaps the cell at `pos` with positive volume (§2.6). For a
    * gear this is its pitch disc (what the gear is made of), not the tip disc that blocks.
    */
@@ -511,15 +522,20 @@ type CellIssue = null | 'inside' | 'cuts';
 
 /**
  * Disc d against a cell (§2.6 rule 2, §2.7 rules 1 and 5). `samePart`: the cell belongs to d's
- * part. `hubHoleAt(q)`: does d's part have a hole cell at q (the mate exception)?
+ * part. `hubHoleAt(q)`: does d's part have a hole cell at q (the mate exception)? `ownWeb`: the
+ * cell lies in the web of a gear of its own part (isWebCell; only read when !samePart).
  * - other part: 'inside' if the blocking disc overlaps the cell, unless it is a male in a hole of d's part;
+ *   a cell in the web of its own part's gear counts not at all, and for a gear's tip disc a male
+ *   (pin, axle) counts by its rod (tipOverlapsRod), not its cube (review m8; DEVIATIONS "Gears"):
+ *   like the hub, the web is its gear's body, which other discs meet only through rules 2–4 (the
+ *   web cubes lie strictly inside the tip disc, so any disc reaching one is judged there);
  * - same part: 'cuts' if d is a gear, the cell is in its layer, not the hub, not in the web
  *   (isWebCell), and the tip disc overlaps it. A wheel and its own part's cells fuse (null).
  * The hub cell of a gear is that gear: other discs meet it only through discPairIssue (§2.7
  * rules 2–4), never as a cube — otherwise an 8-tooth gear (whose hub cube pokes out of its
  * pitch circle) could never mesh (see docs/DEVIATIONS.md "Gears").
  */
-function discCellIssue(d: DiscSpec, samePart: boolean, cell: Cell, hubHoleAt: (q: Vec3i) => boolean): CellIssue {
+function discCellIssue(d: DiscSpec, samePart: boolean, cell: Cell, hubHoleAt: (q: Vec3i) => boolean, ownWeb = false): CellIssue {
   if (isGearHub(cell)) return null;
   const pos = cellPos(cell);
   if (samePart) {
@@ -532,7 +548,14 @@ function discCellIssue(d: DiscSpec, samePart: boolean, cell: Cell, hubHoleAt: (q
   }
   if (!blocksCell(d, pos)) return null;
   if (isMale(cell.kind) && hubHoleAt(pos)) return null;
+  if (ownWeb) return null;
+  if (d.gear && isMale(cell.kind) && !tipOverlapsRod(d.hub, d.cell.axis, d.r, pos, cell.axis)) return null;
   return 'inside';
+}
+
+/** Is `cell` in the web of one of `gears` (gear hubs of the cell's own part)? */
+function inWebOf(gears: readonly Cell[], cell: Cell): boolean {
+  return gears.some((g) => g !== cell && isWebCell(g, cell));
 }
 
 /** Why two discs may not coexist, or null. 'own…' are pairs of one part. */
@@ -598,12 +621,12 @@ function pairReason(issue: Exclude<PairIssue, null>, d: DiscSpec, e: DiscSpec, o
  * Is `cell` (of part `cellPart`, null = a new part) blocked by a disc in `world` (§2.6 rule 2,
  * §2.7 rules 1, 5)? Discs of part `stale` (whose world entries are out of date) are skipped.
  */
-function cellAgainstDiscs(world: WorldIndex, cell: Cell, cellPart: number | null, stale: number | null): CanResult {
+function cellAgainstDiscs(world: WorldIndex, cell: Cell, cellPart: number | null, stale: number | null, ownWeb = false): CanResult {
   if (world.rims.length === 0) return { ok: true };
   const pos = cellPos(cell);
   for (const e of world.rimsNear(pos, BLOCK_REACH)) {
     if (e.partId === stale) continue;
-    const issue = discCellIssue(e, e.partId === cellPart, cell, (q) => world.holeOfPartAt(e.partId, q));
+    const issue = discCellIssue(e, e.partId === cellPart, cell, (q) => world.holeOfPartAt(e.partId, q), ownWeb);
     if (issue === 'inside') return { ok: false, reason: `${fmtPos(cell)} is inside the ${e.gear ? 'gear' : 'wheel'} of part ${e.partId}` };
     if (issue === 'cuts') return { ok: false, reason: `${fmtPos(cell)} would cut into the teeth of this part's gear (hub ${fmtPos(e.hub)})` };
   }
@@ -624,12 +647,17 @@ function discAgainstWorld(
   stale: number | null,
   replacing: { partId: number; index: number } | null,
   ownHoleAt: (q: Vec3i) => boolean,
+  splitOff: ReadonlySet<Cell> | null = null,
 ): CanResult {
   const isReplaced = (e: WorldEntry) => replacing !== null && e.partId === replacing.partId && e.index === replacing.index;
   for (const q of blockedCells(d)) {
     for (const e of world.at(q)) {
       if (e.partId === stale || isReplaced(e)) continue;
-      const issue = discCellIssue(d, e.partId === self, e.cell, ownHoleAt);
+      // A cell of d's part that the change splits off (splitOff) is another part's cell for d.
+      const split = splitOff?.has(e.cell) === true;
+      const same = e.partId === self && !split;
+      const ownWeb = split ? inWebOf([...splitOff!].filter(isGearHub), e.cell) : !same && world.inOwnGearWeb(e);
+      const issue = discCellIssue(d, same, e.cell, ownHoleAt, ownWeb);
       if (issue === 'inside') return { ok: false, reason: `${d.gear ? 'gear teeth' : 'wheel'} would hit part ${e.partId} at ${fmtPos(q)}` };
       if (issue === 'cuts') return { ok: false, reason: `${fmtPos(q)} would cut into the teeth of this part's gear (hub ${fmtPos(d.hub)})` };
     }
@@ -685,8 +713,9 @@ function partAgainstWorld(world: WorldIndex, cells: readonly Cell[], self: numbe
     if (!r.ok) return r;
   }
   if (world.rims.length > 0) {
+    const gears = cells.filter(isGearHub);
     for (const c of cells) {
-      const r = cellAgainstDiscs(world, c, self, self);
+      const r = cellAgainstDiscs(world, c, self, self, inWebOf(gears, c));
       if (!r.ok) return r;
     }
   }
@@ -831,7 +860,7 @@ export function validateModel(m: Model): ValidationError[] {
         for (const e of world.at(q)) {
           if (e.partId === w.partId) continue;
           if (isMale(e.cell.kind) && world.holeOfPartAt(w.partId, q)) continue; // the mate exception
-          if (isGearHub(e.cell)) continue; // a gear meets a wheel disc as a gear (§2.7 rule 2)
+          if (isGearHub(e.cell) || world.inOwnGearWeb(e)) continue; // a gear (hub and web) meets a wheel disc as a gear (§2.7 rule 2)
           errs.push({
             code: 'overlap',
             message: `${fmtPos(q)}: the ${kindLabel(e.cell.kind)} of part ${e.partId} is inside the wheel of part ${w.partId} (hub ${fmtPos(w.hub)}, ${fmtRim(w.r)})`,
@@ -844,7 +873,7 @@ export function validateModel(m: Model): ValidationError[] {
       const hubHoleAt = (q: Vec3i) => world.holeOfPartAt(w.partId, q);
       for (const q of blockedCells(w)) {
         for (const e of world.at(q)) {
-          const issue = discCellIssue(w, e.partId === w.partId, e.cell, hubHoleAt);
+          const issue = discCellIssue(w, e.partId === w.partId, e.cell, hubHoleAt, e.partId !== w.partId && world.inOwnGearWeb(e));
           if (issue === 'inside') {
             errs.push({
               code: 'overlap',
@@ -969,7 +998,7 @@ export function canAddCell(m: Model, partId: number | null, cell: Cell): CanResu
   const occ = occupancyCheck(world, cell, partId);
   if (!occ.ok) return occ;
   // Other parts' discs over the cell, and this part's gears against it (§2.7 rule 5).
-  const inside = cellAgainstDiscs(world, cell, partId, null);
+  const inside = cellAgainstDiscs(world, cell, partId, null, part ? inWebOf(part.cells.filter(isGearHub), cell) : false);
   if (!inside.ok) return inside;
   const d = discSpecOf(cell);
   if (d) {
@@ -1088,12 +1117,18 @@ export function canRemoveCell(m: Model, partId: number, pos: Vec3i): CanResult {
   const cell = cellAt(part, pos);
   if (!cell) return { ok: false, reason: `part ${partId} has no cell at ${fmtPos(pos)}` };
   if (!isHole(cell.kind)) return { ok: true };
+  if (isGearHub(cell)) {
+    // Its web cells stop being the gear's body (exposedWebCheck); its guest, if any, goes with it
+    // into the open like any cell of another part (tipOverlapsRod is already what judged it).
+    const exposed = exposedWebCheck(m, part, cell, null);
+    if (!exposed.ok) return exposed;
+  }
   const guest = worldIndex(m).at(pos).find((e) => e.partId !== partId && isMale(e.cell.kind));
   if (!guest) return { ok: true };
   for (const c of part.cells) {
     if (c === cell || !hasRim(c)) continue;
     const gear = isGear(c);
-    if (gear ? tipOverlapsCell(cellPos(c), c.axis, c.rim, pos) : discOverlapsCell(cellPos(c), c.axis, c.rim, pos)) {
+    if (gear ? tipOverlapsRod(cellPos(c), c.axis, c.rim, pos, guest.cell.axis) : discOverlapsCell(cellPos(c), c.axis, c.rim, pos)) {
       return {
         ok: false,
         reason: `the ${kindLabel(guest.cell.kind)} of part ${guest.partId} at ${fmtPos(pos)} would be inside the ${gear ? 'gear' : 'wheel'} of part ${partId}`,
@@ -1251,7 +1286,26 @@ export function canSetRim(m: Model, partId: number, pos: Vec3i, rim: number | un
  */
 function ungearCheck(m: Model, part: Part, cell: Cell): CanResult {
   if (!isGearHub(cell)) return { ok: true };
-  return cellAgainstDiscs(worldIndex(m), makeCell(cell.x, cell.y, cell.z, cell.kind, cell.axis), part.id, null);
+  const r = cellAgainstDiscs(worldIndex(m), makeCell(cell.x, cell.y, cell.z, cell.kind, cell.axis), part.id, null);
+  return r.ok ? exposedWebCheck(m, part, cell, null) : r;
+}
+
+/**
+ * The gear on `hub` of `part` becomes `next` (a smaller gear, a plain wheel, or nothing: null): the
+ * cells of its web that are not in the web of `next` stop being the gear's body (discCellIssue)
+ * and meet the other parts' discs as cells again (review m8: a crank hole facing a meshing gear is
+ * only allowed while its gear is there).
+ */
+function exposedWebCheck(m: Model, part: Part, hub: Cell, next: Cell | null): CanResult {
+  if (!isGearHub(hub)) return { ok: true };
+  const world = worldIndex(m);
+  for (const c of part.cells) {
+    if (c === hub || !isWebCell(hub, c)) continue;
+    if (next && isGearHub(next) && isWebCell(next, c)) continue;
+    const r = cellAgainstDiscs(world, c, part.id, null);
+    if (!r.ok) return { ok: false, reason: `without this gear, ${r.reason}` };
+  }
+  return { ok: true };
 }
 
 /** Check the hub `cell` of `part` turned into `next` (a new plain rim or gear) against everything. */
@@ -1264,7 +1318,19 @@ function rimChangeCheck(m: Model, part: Part, cell: Cell, next: Cell): CanResult
     if (!asCell.ok) return asCell;
   }
   const index = part.cells.indexOf(cell);
-  return discAgainstWorld(world, d, part.id, null, { partId: part.id, index }, (q) => world.holeOfPartAt(part.id, q));
+  // A gear that shrinks may split cells off its part (setGear → replaceWithPieces); those meet the
+  // new gear as another part's cells (for a male that is its rod, not its cube: review m8).
+  let splitOff: Set<Cell> | null = null;
+  if (cell.rim !== undefined && next.rim! < cell.rim) {
+    const cells = part.cells.map((q) => (q === cell ? next : q));
+    const comps = components(cells);
+    if (comps.length > 1) {
+      const mine = new Set(comps.find((c) => c.includes(index))!);
+      splitOff = new Set(part.cells.filter((_, i) => !mine.has(i)));
+    }
+  }
+  const r = discAgainstWorld(world, d, part.id, null, { partId: part.id, index }, (q) => world.holeOfPartAt(part.id, q), splitOff);
+  return r.ok ? exposedWebCheck(m, part, cell, next) : r;
 }
 
 /**

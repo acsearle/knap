@@ -1761,6 +1761,178 @@ and "Wheel tool on a crank hole" (now also holes the disc only partly covers).
 - **API shape.** gearMeshes' sides carry `index` (cell index within the part) besides partId and cell, plus a common `axis`. isWebCell takes (gearCell, cell) — the part is not needed (the caller decides they belong to one part).
 - **Diagonal meshes.** No phase solve; the diagonal 40+40 at (3,4)/(4,3) is simply blocked, as §2.7 says.
 
+## Milestone 8: gears (solid, physics, drawing, Gear tool, example) and the fixes after its review
+
+Built by four agents in parallel, integrated by a fifth, reviewed three ways (simulation and
+geometry, editor, look) and fixed by two more. DESIGN.md has been updated where a deviation
+changed a rule (§2.7 rules 1 and 6, §4.2, §4.3, §5.1 "Smaller steps", §6.1, §7.2 Gear tool, §8).
+
+### Solid (§4.2)
+
+**Gear solid (§4.2 "Per gear") — milestone 8 geometry**
+
+- **8-tooth axial bridge radius.** DESIGN says the bridge from an 8-tooth gear's face to an axially connected neighbour is "a cylinder of the root radius". It is built at root − 0.01 = 0.334 instead of 0.344. At exactly the root radius its polygon wall would coincide with the root lands, a coincident-surface case for the boolean. The bridge runs from EPS inside the gear face to EPS into the neighbour's barrel, or to ½+EPS at a connected run end. A pin or axle bore (0.31) leaves a 0.024 wall in the 0.03 gap.
+- **How barrels of absorbed cells meet the gear face.** The hub and web cells get no barrel inside the slab, but their axial runs keep barrel pieces outside it:
+  - r ≥ 1 hub: the piece reaches EPS into the slab, the usual fusing overlap. Radius H lies inside the root (≥ 0.844).
+  - Web cell: the piece stops **exactly at the face** (touching, no EPS overlap). A web barrel reaching into the slab would sit in the tooth gaps: a crank hole at (2,0) of a 40 has its barrel reaching 2.47 against a root of 2.344. A touching union is fused by Manifold's symbolic perturbation; tests confirm one closed shell in every case built.
+- **Triangle counts are below the spike budget.** Measured 672/1088/1536/2432 (axle hole) and 704/1120/1568/2464 (pin hole), against the spike's 672/1216/1728/2752. The outline is the same. For r ≥ 1 the middle point of the parallel flank segment is collinear with its ends, and `Manifold.simplify(1e-5)` removes it along with a few other collinear points; the spike did not simplify. Volume and clearance are unchanged (worst rolling clearance 0.0157, as in the spike).
+- **Face groove of a gear.** `RimMark` gains an optional `gear: true` on gears. The groove is cut from MARK_R0 = 0.5 to root − 0.05 with an end wall: no overshoot past r1, no tread cut. 8-tooth gears get no RimMark. Wheels' RimMarks and cutters are unchanged.
+- **The index tooth is data only.** `gearIndexes` / `onIndexTooth` / `indexToothWeights` (src/geometry/topology.ts) describe and tag tooth 0's flanks and tip land. The view (`src/view/markpaint.ts`) does not use them yet. The current `markWeights` paints a gear groove's floor, side walls and inner end wall, but not its outer end wall (it only paints a +dir-facing wall as a tread floor).
+- **Crank pins in a gear's web** (male web cells) keep their ordinary rod. A free end is ±0.48, so it stands 0.01 proud of each gear face, exactly as on a plain wheel today.
+
+### Physics (§4.3, §5.1)
+
+**Gears (milestone 8, physics)**
+
+- **§4.3 gear primitive: the axial extensions of hub and web hole cells are dropped too.** DESIGN keeps them ("their parts outside the slab stay"). An extension runs from HC to ½ at radius HC, and sits face to face with a meshing partner's tip hull at the slab face.
+  - An 8's hub extension lies 0.045 inside its partner's tip radius (the partner reaches 0.415 from the 8's axis).
+  - Web cells on the line of centres overlap the partner's hull by the same 0.045.
+  - Measured on a 1:5 pair with a pivot hole behind each gear: a +1000 torque on the 8 gave ω = −6.4 rad/s after 0.1 s. The contact pair existed at distance 0.0023.
+  - With the extensions gone the same run gives +41.4 rad/s (expected about 41) and there is no contact.
+  - The axial neighbour's own barrel still reaches the shared face at ½, leaving a 0.04 gap to the partner's hull.
+  - A web crank pin's rod keeps its parts outside ±HC. They are radius 0.29, so they clear partner tips.
+- **§5.1 phase φ is evaluated in body 1's frame.**
+  - θ₁ = 0 and θ₂ = gear 2's twist relative to body 1 about gear 1's local axis. ψ = the angle of n carried into body 1, measured in gearPlaneBasis of gear 1's cell axis.
+  - This equals DESIGN's world-frame formula whenever body 1 turns about its gear axis. It stays well defined for a tumbling free gearbox, where a fixed world basis would not.
+  - Not handled: a gear whose body has flipped so its axis is antiparallel, or a gear that became parallel by rotating from a different grid axis. Its off-grid snap target may then be half a tooth off visually; the ratio is unaffected.
+- **§5.1 Smaller steps: with no engaged mesh, k drops to 1 at once.** The 0.1 s hold only applies to step-downs while a mesh is engaged. This is how I read "with no engaged mesh k = 1".
+- **Speed cap measure:** |ω| (the magnitude of the body's angular velocity), as in spikes/adaptive. The guard reference falls by exactly the kinetic energy the cap removed.
+- **Collision groups:** gear round 0x20 (filter ground and round), gear hull 0x40 (filter part). The ground, round and part filters gained these bits. A gear's ground guard uses the wheel guard group 16, which meets only the ground. Models without gears hash identically to 2d3372a.
+- **Test-only API not in DESIGN §5.2:**
+  - `setDriveTorque(bodyId, tau)` applies a constant user torque per world step. Its work is credited to the guard reference, like the spike's setDrive.
+  - `meshDiagnostics()`, `contactDepth()`, the `substeps` option, and the `worldSteps`, `capRemoved` and `driveWorkTotal` counters.
+- **Core rule found while building the test models (src/core, not mine):** §2.7 rule 1 forbids another part's pin or axle in an 8-tooth gear's hub whenever the 8 meshes a 24 or 40, because the partner's tip disc reaches 0.41 into the hub cube. The same happens for 8 + 8. An 8 that meshes can therefore only turn on a pin in another layer of its own part. All test models are built that way. The Gear train example ("an 8-tooth pinion whose axle carries a light pointer") may hit this.
+- **Guard removal after a spinning engagement (spike-mesh "unexplained"): explained, not fixed.**
+  - Source: Rapier's f32 solve of the mesh row. With guard and gravity off, at 20 rad/s, a meshed 1:1 pair gains 9.5 %K/s and 1:5 gains 10.1 %K/s, against 1.8 %/s for a single gear.
+  - Linear in substeps per second: 4.6 / 9.5 / 20.7 %/s at 120 / 240 / 480 iterations, and 20.7 %/s at dt 1/960.
+  - Independent of:
+    - k at a fixed substep count;
+    - speed, 5–50 rad/s;
+    - gravity;
+    - the lead λ (off, 0.5×, 2×) and the phase feedback (off);
+    - PGS iterations, decoupleInertia, and model offset up to 300 units.
+  - The guard removes it: 3.4 %K/s after an engagement in the slider, against 2.5 %K/s with the same gears unmeshed. Scripts: spikes/gearphys/guard*.test.ts.
+
+### Drawing (§6.1, §7.4)
+
+**Drawing gears (src/view, milestone 8)**
+
+- **What "inside a soft patch" covers.** DESIGN §6.1 fades the contours inside a soft patch. The view also treats the boundary between a gear's tooth band and another patch of the same part (mainly the gear's own flat faces, where the toothed edge meets the face) as a soft line when the surfaces meet there with no depth jump.
+  - Reason: if that crease stayed hard, a far iso view would still draw a dense zigzag of teeth along the near face. That is the "dark fringe" DESIGN wants gone.
+  - Where the band occludes something of its own part (a depth jump), the line stays hard. Silhouettes against the background and against other parts are always hard.
+  - Measured: band ink at DPR 1 peaks at 8.0 % (6 px per pitch) and falls to −1.9 % (no more ink than a plain wheel) at 3 px.
+- **"No zoom darker than at full zoom" is read as "no zoom below 6 px per pitch darker than at 6 px"**, the zoom at which the contours are last at full strength.
+  - Ink grows as the pitch shrinks, so at 6 px the band is necessarily darker than at Home zoom (DPR 1: 8.0 % against 3.3 % at 14 px).
+  - Below 6 px it falls monotonically: 6.8, 4.8, 3.2, 2.4, 0.8, −1.9 %.
+- **Index tooth paint strength:** 75 % of the mark colour (INDEX_TOOTH_PAINT = 0.75), against 100 % for the groove, to keep a whole painted tooth "visible but quiet". Chosen by eye.
+- **Gear face groove end walls** are painted: inner at r0 with normal +dir, outer at r1 with normal −dir.
+  - The existing markWeights test for the inner end wall expects normal −dir, but that wall's normal is +dir. So the wall is not painted on plain wheels either; this is a pre-existing bug.
+  - I left wheels unchanged so that meshes without gears draw pixel-identically. I did not fix the wheel case.
+- **Mesh glyph geometry:**
+  - Two parallel ticks along the line of centres at the pitch point, 0.2 apart tangentially; each reaches 0.36 back toward its own hub and 0.14 past the pitch point.
+  - It is drawn with the joint glyphs (same FatLines, magenta, white halo), on top of everything.
+  - It follows both gears' transforms: the pitch point is interpolated between the transformed hubs, and the axis turns with gear A.
+
+### Gear tool and editor (§7.2, §7.3)
+
+**Milestone 8 — Gear tool UI (editor / ui / app)**
+
+- **Top-of-range text.** The task text said "largest gear is 40 teeth"; DESIGN §7.2 says "largest gear has 40 teeth". I followed DESIGN. As with the Wheel tool at radius 4, no ghost is drawn there, only a red face highlight.
+- **Shift+click with the Gear tool on a plain wheel.** DESIGN only defines the plain click (largest gear not above the radius). Shift makes the gear one size *smaller* than that. Examples: radius 2 → click 24 teeth, Shift 16; radius 1 → click 16, Shift 8.
+- **Wheel tool on a gear, both modes.** Click and Shift+click both make a plain wheel of the same radius (1 for an 8-tooth gear). The status line reads "Plain wheel · part 1 · radius 1.5 (24 mm across) instead of the 24-tooth gear"; no Shift hint is shown; the click error reads "Can't make a plain wheel: …".
+- **Gear tool stepping down.** It shows the band that will be removed (radius r_new, or ½ for bare, out to the old tip radius), as Wheel's shrink does, not a ghost of the smaller gear (which would be hidden inside the existing one). Stepping up, and any conversion from a plain wheel, shows the toothed ghost.
+- **"… would fit".** The reason is checked in both directions: going up it scans the larger sizes, going down the smaller gear sizes (bare is not considered). It names the first size that canSetGear allows. From a plain wheel, going up may name a size above the wheel's radius.
+- **Texts DESIGN does not give:**
+  - "Gear · part 1 · back to a bare pin hole"
+  - "Gear · part 1 · 24 teeth (radius 1.5) · from the wheel of radius 2"
+  - "Gear · part 1 — this pin hole has no gear" (Shift on a bare hole)
+  - Erase: "Erase gear teeth · part 1 · 40 → 24 teeth" / "· 8 → bare pin hole" (the click message becomes "Erased gear teeth …")
+  - Several meshes are listed as "meshes with part 2 (8 teeth, 5:1), part 3 (8 teeth, 5:1)"; the ratio is this gear : the partner, reduced.
+  - Gear teeth hint: "Part 1 · gear teeth — point at the gear's flat face or at a hole to build on a gear"
+  - A 16-tooth gear gets "a 16-tooth gear has no room for crank holes" (DESIGN gives only the 8-tooth wording).
+  - "crank holes go within N of the hub" uses N = r − ½ (1 for 24 teeth, 2 for 40).
+- **Erase on a gear can be refused.** When the one-size-down step is invalid (for example an 8 in an 8+8 mesh: "(1, 0, 0) is inside the gear of part 1"), Erase shows the reason and does nothing. Erase on a plain rim is never refused.
+- **What counts as the teeth.** Only the round outer surface of the tip disc is the tread. A flat-face hit outside the web is a virtual cell: Select, Gear, Wheel and Erase act on the gear, and build tools show a red ghost at that cell with the web reason. Shift / New part there still starts a new part in the next layer, as on a wheel face.
+- **Male tools on a gear's web** add a crank pin, as DESIGN §7.3 says. On a plain wheel's face, male tools are still refused with "add a hole here first".
+- **Crank-hole targeting uses one rule for wheels and gears.** A bare hole of the part that a disc overlaps acts on that disc: the exact disc predicate for a plain wheel, the tip disc for a gear; nearest hub, then lower cell index. It applies to Wheel, Gear and Erase. The Gear tool on a plain wheel's crank hole therefore turns that wheel into a gear, and the Wheel tool on a gear's web hole turns the gear into a plain wheel.
+- **Select hover on a gear's hub cell** adds " · holds pin (part N)" when another part's male is in the hub. On the face or the teeth the text is exactly DESIGN's.
+- **Mesh count.** The status counts use a new `countsText(model, graph)` in tools.ts (kinematicsSummary plus " · N mesh(es)") rather than changing kinematicsSummary, because kinview.ts belongs to the integrator.
+- **Rule change in tests/editor/wheels.test.ts (required by DESIGN §7.2):**
+  - (1,1) in a radius-1 wheel used to act on its own hole (cellIndex 1, to 1); it now acts on the wheel (cellIndex 0, from 1, to 1.5).
+  - (2,2) in a radius-2.5 wheel likewise now acts on the wheel (cellIndex 0).
+  - I added a case showing a hole the disc does not reach, (2,0) in a radius-1 wheel, keeps its own wheel.
+- **Known gap (core rules plus tool).** An 8+8 mesh at distance 1 cannot be built with the Gear tool. Each bare hub is "hit" by the other's 8-tooth tips, so neither can become an 8 first. It is only reachable by moving a finished 8-tooth part next to another (or from a file). The other mesh pairs can be built, provided the smaller gear is made first where the larger gear's tips would reach the other bare hub (8+24, 8+40).
+
+### Integration and example 10 (§8)
+
+**Milestone 8 integration**
+
+- **Gear train example layout (§8, example 10).**
+  - DESIGN gives the parts, not a layout. I placed the pinion straight above the 40 on the line of centres, so the off-balance arm, which can only swing through the lower half, never comes near another moving body.
+  - Every hub distance is fixed by the mesh rules, so the pointers had to share layers carefully. The pinion's pointer sits in layer 0 and doubles as its pivot hole: §2.7 rule 1 forbids another part's pin in a meshing 8's hub, so the pinion turns on its pointer's middle hole.
+  - The 24 turns on a long pin from the frame (a friction pin in the frame, smooth in the 24's hub), and its pointer is in layer 3 in front of it.
+  - The arm carries a 3×3 weight at its end. Reason: with a plain 6-hole arm the reflected pivot friction (pinion pivot friction × 5, output pivot friction × 5/3) stopped the train after one swing at Realistic, in about 1 s. With the weight it swings to 169° and rests at 3.0 s (Realistic) and 11.0 s (Low).
+  - Both pointers are balanced 3-hole beams, so they add inertia but no gravity torque.
+  - Cost: at the Home view the pinion's pointer is largely hidden behind the gears.
+- **Mesh glyph feed.** `src/editor/kinview.ts` gets `meshGlyphSpecs(model)`, a pure function that includes the pitch point. The view's own `meshGlyphsFromModel` (src/view/glyphs.ts) still exists and computes the same data. The app uses the kinview function, so the editor-side code is the single source; the view helper is now unused outside tests.
+- **simInfo().meshes at t = 0 is empty.** Meshes engage before each world step (§5.1), so before the first step nothing is reported. The e2e asserts that both meshes are engaged from the first step with phase error < 1e-3 teeth.
+- **view-gears "all-tinted" no-change case** now passes `gears=0` to the demo page, which leaves out examples with gears; the other examples keep their positions. A pixel comparison against the view from before gears cannot include a model that has gears.
+- **ux2 review reference** uses the tip radius r + 3/32 for a gear's disc, per §7.3 "Gears in picking". It used the pitch radius, which disagreed with the picking spec on 30 of 4000 rays.
+
+### Fixes after the review: simulation, geometry, core rules
+
+**Fixes after the milestone-8 review (sim fixer)**
+
+- **§5.1 "Smaller steps at speed": ω\* is weighted by gear size.** DESIGN picks k from ω\* = max |ω| (in radians, the same for every gear size). Measured with k pinned at 1 and 2, the mesh starts to brake at a rotation per world step that falls with gear size. Onset ω·h of the fastest gear: 8 teeth 0.133–0.142, 16 teeth 0.096, 24 teeth 0.079–0.083, 40 teeth 0.060–0.063 rad. Pairs measured: 8+8, 16+16, 24+24, 40+40, 8+24, 8+40 and 24+40, each at k = 1 and k = 2. Weighted by √r this is 0.096–0.100 for every size, and the onset scales exactly with k. `chooseK` therefore uses ω·max(1, √r), with r the largest gear on that body that has an engaged mesh, and keeps K_UP = 0.08 and K_DOWN = 0.04. The weight is clamped at 1, so 8- and 16-tooth gears follow DESIGN's rule exactly. Measured: a 40+40 pair driven at 15 rad/s² now passes 48 rad/s (k reaches 2) with no lost drive work; before, it stalled at 28.7 rad/s at k = 1 with 54 % of the drive work lost.
+- **§5.1: k can step up inside a fixed step when a mesh engages.** DESIGN chooses k once per fixed step, from engaged meshes only. A mesh that engages at speed then ran its engaging world step at the stale k (usually 1) and lost up to 98 % of its energy, and the input reversed. Now the fixed step is counted in units of fixedDt/8. When `updateMeshes` engages a mesh, k may step up at once (never down) using the same ω\* rule, including the rise term. The engaged meshes are then re-anchored for the new h before the world step. Measured after the fix:
+  - matched speeds (8+8 at 100, 16+16 at 60, 24+24 at 40, 40+40 at 40 rad/s): 1.0002 of the energy kept in every case;
+  - a gear meeting one at rest: the plastic-impact result to 0.03 %.
+  
+  With no engaged mesh nothing changes (k = 1, bit-identical).
+- **§2.7 rule 1: another part's male counts by its rod against a gear's tip disc.** In the gear's layer the rod's footprint is a circle of radius 5/16 for a rod parallel to the gear axis, else a ±½ × ±5/16 rectangle. 5/16 is just above the drawn rod (0.295) and its collider (0.29). The test is exact in units of 1/32 (`tipOverlapsRod` in `src/core/gears.ts`). Reason: a pin or axle through an 8 blocked every mesh with that 8, the commonest way to mount a pinion (review m8). Every meshing distance clears a rod in the partner's hub by 3/32. Effect beyond that: a pin of another part parallel beside an 8 at (1, 0) is now allowed (the rod is 0.6875 from the hub, the tips 0.594). Holes beside an 8 are still blocked, and so is a rod pointing at the teeth. Plain wheels (§2.6 rule 2) still test the whole cell.
+- **§2.7 rule 1: a gear's web is its gear, like the hub.** A cell in the web of a gear of its own part (`isWebCell`) is met by other discs only through rules 2–4, never as a cube. The web cubes lie strictly inside the tip disc (the farthest corner is 2.5495 against 2.594 for the 40, and 1.5811 against 1.594 for the 24), so any disc reaching one is already judged there. Reason: a crank hole facing a meshing partner was refused (24+24 at 3; a 40's (2, 0) toward an 8), although the partner's teeth never reach it.
+  
+  Consequence: the gear cannot be taken away from under such a cell. `setGear(undefined)`, `setRim` to a plain radius, shrinking to a gear whose web no longer contains the cell, and `removeCell` of the hub all refuse when a web cell would be left inside another gear. The reason is "without this gear, (1, 0, 0) is inside the gear of part 2", or the rule-2 or rule-5 reason when that fails first. This narrows DESIGN rule 6's "erasing the cell is still allowed", but only for models that were invalid before this change.
+  
+  `canSetGear` on a shrinking gear now treats cells split off the part as another part's cells. This matches what `setGear` does; with males judged by their rod the two can otherwise disagree.
+- **§4.2: a web cell's barrel joins its gear through a plug.** A web cell's barrel used to stop exactly at the gear's slab face. Where the run continued into another gear's hub, this left pinched, non-manifold bore edges (2 of 300 random gear parts in review, 6 of 1000 in my sweep). The barrel now stops EPS short of the face, and a plug of radius min(H, root − offset − 0.01) joins it to the gear, reaching from 2·EPS outside to EPS inside the face. The plug stays inside the root circle; a plain EPS overlap would have poked a lip out between the teeth. After the fix 0 of 1000 random gear parts are bad.
+
+### Fixes after the review: editor and drawing
+
+- **Gear tool skips sizes that do not fit (§7.2).** DESIGN says a click steps "up one size", and when the next size is invalid but a later one is valid, the reason says so ("… · 24 teeth would fit"). Now, when the next size is invalid and a later one in the same direction is valid, the click makes that later size (blue ghost, valid). The text names the skipped sizes and why: "Gear · part 1 · 40 teeth (radius 2.5) · skips 8, 16, 24: (1, 0, 0) would cut into the teeth of this part's gear (hub (2, 0, 0))". Reason (review m8 ux): on a long beam's middle hole the hint named a 40 that no Gear click could reach. The 8, 16 and 24 all cut into the beam; the 40 has the beam cells in its web. The "… would fit" text no longer appears.
+- **Extra Gear-tool and build texts (§7.2, §7.3):**
+  - Near gears that do not mesh: "· does not mesh with part N (T teeth): <why>" for parallel same-layer gears whose pitch circles are less than 1 unit apart.
+  - On a rule-5 refusal with no size that fits: "· a gear needs a layer to itself: sleeve a hole onto a pin, or extend a hole out of the beam along its axis".
+  - On any build refusal "… is inside the gear of part N": "· build this before part N's gear grows over it, or shrink that gear first (Gear tool, Shift+click) and grow it back after".
+  - A redirected crank-hole hover reads "Gear · part P (the T-tooth gear around this hole, hub (x, y, z)) …".
+  - The crank-hole refusal reads "crank holes go on grid cells centred within N of the hub" instead of DESIGN §7.3's "crank holes go within N of the hub".
+- **Gear Erase / Shift+click band:** the highlighted ring now runs from the smaller gear's tip radius (r + 3/32) to the old tip radius; before, it started at the smaller gear's pitch radius. Reason (review m8 look): the old ring read as "delete this wheel".
+- **Soft-patch contours (§6.1, `src/view/outline.ts`):** inside a soft patch the depth test differs from ordinary patches:
+  - each side extrapolates with the smaller of its two nearest slopes;
+  - the threshold is 0.5 × the ordinary depth tolerance (`SOFT_TOL`);
+  - hysteresis along the contour: a residual between 0.25 and 0.5 × tol draws if it connects, within 32 texels, through residuals above 0.25 × tol to one above 0.5 × tol.
+  
+  Reason: measured at yaw 86° pitch 20° DPR 2, the residual along one real tooth-occludes-root contour ramped from 0.53 to 1.09 × tol with sub-texel phase, which drew it dashed. Rejected variants: hysteresis alone with a 6-texel reach changed nothing visibly; a 0.15 lower threshold grew stray stubs. Hard lines are unchanged. Cost on SwiftShader, close-up of the band at 1280×800, median of 7 frames: DPR 1 about 313–323 → 413–435 ms, DPR 2 about 2100–2300 → 2400–2600 ms. A second run with a 1-texel walk measured 336–398 ms against 313–324 ms for the old build, so run-to-run spread is large. Not measured on a real GPU. Some views still show short broken soft contours: DPR 1 yaw 66° pitch 10°, yaw 82° pitch 20°, yaw 86° pitch 10°; DPR 2 yaw 62° pitch 20°, yaw 74° pitch 35°.
+
+### Supervisor notes (milestone 8)
+
+- Superseded above: the physics builder's "§2.7 rule 1 forbids another part's pin or axle in an
+  8-tooth gear's hub" and the editor builder's and integrator's statements that depend on it
+  were true when written; the review fix (males count by their rod) removed that limit. The
+  Gear train example keeps the layout chosen under the old rule.
+- Still true: an 8+8 mesh cannot be made with the Gear tool on two bare holes one apart (each
+  bare hole is inside the other's tips once one is a gear); build one apart and move it.
+- Review findings left open, by decision or for lack of a cheap fix: an 8-tooth gear seen
+  face-on has no visible index (its painted tooth is edge-on); a loose 8 rolling on its tips
+  wanders sideways (0.49 over 160 units; 16 and up 0.003); mesh glyphs pile up at the Home
+  view of the Gear train and their ticks can overlap a joint ring; teeth strobe at some speeds
+  (by design, §6.1); at full fade a gear's face/band boundary disappears; soft contours still
+  break at a few oblique angles; one random non-gear part in 3000 (plain cells, a web-box
+  corner) builds with 3 doubled edges — an older geometry defect, not from gears.
+- `(E − E0)/drive work` reads 1.09–1.10 for driven pairs with the guard off: Rapier's f32
+  solve of the mesh row adds about 10 % of the kinetic energy per second (linear in substeps
+  per second). The guard removes it in normal use. See docs/RAPIER.md.
+
 ## §9 Tooling
 
 - **Vitest 4.1** (not 3.x): 3.x pulls in `tinypool`/`@vitest/mocker` versions with published

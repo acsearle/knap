@@ -13,7 +13,7 @@ import {
 } from '../../src/core/examples';
 import { analyze, type Joint, type KinematicGraph } from '../../src/core/kinematics';
 import { discOverlapsCell } from '../../src/core/disc';
-import { groundLevel, rootIsFixed, validateModel } from '../../src/core/model';
+import { gearMeshes, gearsOf, groundLevel, rootIsFixed, usesGears, validateModel } from '../../src/core/model';
 import { isHole } from '../../src/core/rules';
 import type { Model } from '../../src/core/types';
 
@@ -36,8 +36,9 @@ function planarDof(g: KinematicGraph): number {
 }
 
 describe('registry', () => {
-  // Was "the seven §8 examples": DESIGN §8 added 8 "Crank wheel" and 9 "Cart" (wheels milestone).
-  it('has the nine §8 examples with unique names, titles and descriptions', () => {
+  // Was "the seven §8 examples": DESIGN §8 added 8 "Crank wheel" and 9 "Cart" (wheels milestone)
+  // and 10 "Gear train" (gears milestone).
+  it('has the ten §8 examples with unique names, titles and descriptions', () => {
     expect(EXAMPLES.map((e) => e.name)).toEqual([
       'pendulum',
       'triple-pendulum',
@@ -48,6 +49,7 @@ describe('registry', () => {
       'collision',
       'crank-wheel',
       'cart',
+      'gear-train',
     ]);
     for (const e of EXAMPLES) {
       expect(e.title.length).toBeGreaterThan(0);
@@ -401,5 +403,53 @@ describe('cart (§8 example 9)', () => {
     const arm = m.parts.find((p) => p.id === 10)!;
     const reach = Math.max(...arm.cells.map((c) => Math.hypot(c.x - 4, c.y - 6))) + Math.SQRT1_2;
     expect(6 - reach).toBeGreaterThan(level);
+  });
+});
+
+describe('gear train (§8 example 10)', () => {
+  it('a fixed frame; a 40 with an off-balance arm meshing an 8-tooth pinion; a second 8 → 24 from the pinion; no ground', () => {
+    const { m, g } = graphOf('gear-train');
+    expect(m.version).toBe(3);
+    expect(usesGears(m)).toBe(true);
+    expect(m.ground).toBeUndefined();
+    expect(rootIsFixed(m)).toBe(true);
+    // Gears: part 2 (pinion) carries two 8s, part 3 (arm) the 40, part 4 (output) the 24.
+    const gears = gearsOf(m).map((x) => [x.partId, x.teeth, x.hub[0], x.hub[1], x.hub[2], x.axis]);
+    expect(gears).toEqual([
+      [2, 8, 0, 3, 1, 2],
+      [2, 8, 0, 3, 2, 2],
+      [3, 40, 0, 0, 1, 2],
+      [4, 24, 2, 3, 2, 2],
+    ]);
+    const meshes = gearMeshes(m).map((x) => [x.a.partId, x.teethA, x.b.partId, x.teethB].join(':'));
+    expect(meshes.sort()).toEqual(['2:8:3:40', '2:8:4:24']);
+    // Frame (+ the three pins) fixed; the arm, the pinion and the output each on one revolute about Z.
+    expect(g.bodies.length).toBe(4);
+    expect(g.bodies.filter((b) => b.fixed).length).toBe(1);
+    expect(g.joints.length).toBe(3);
+    expect(g.joints.every((j) => j.type === 'revolute' && j.axis === 2)).toBe(true);
+    const bodyOf = (id: number) => g.bodyOfPart.get(id)!;
+    expect(new Set([bodyOf(2), bodyOf(3), bodyOf(4)]).size).toBe(3);
+    // Every gear turns with its pointer: the pointer is the same part.
+    // The arm starts horizontal along −X: its centre of mass is off the pivot.
+    const arm = m.parts.find((p) => p.id === 3)!;
+    const cx = arm.cells.reduce((a, c) => a + c.x, 0) / arm.cells.length;
+    const cy = arm.cells.reduce((a, c) => a + c.y, 0) / arm.cells.length;
+    expect(cx).toBeLessThan(-2);
+    expect(cy).toBe(0);
+    // The pointers are balanced (centre on their pivot).
+    for (const [id, px, py] of [[2, 0, 3], [4, 2, 3]] as const) {
+      const p = m.parts.find((q) => q.id === id)!;
+      const z = id === 2 ? 0 : 3;
+      const ptr = p.cells.filter((c) => c.z === z);
+      expect(ptr.length).toBe(3);
+      expect(ptr.reduce((a, c) => a + c.x, 0) / 3).toBe(px);
+      expect(ptr.reduce((a, c) => a + c.y, 0) / 3).toBe(py);
+    }
+    // The arm swings below y = 0.5 only (it cannot rise above its start): nothing of another moving
+    // body comes within the arm's reach there, so at most the pinion pointer's sweep (radius
+    // √(1² + 0.47²) + rounding < 1.5 about (0, 3)) bounds it from above at y ≥ 1.5.
+    const reach = Math.max(...arm.cells.filter((c) => c.z === 0).map((c) => Math.hypot(c.x, c.y))) + Math.SQRT1_2;
+    expect(reach).toBeLessThan(7);
   });
 });

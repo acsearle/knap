@@ -1,8 +1,10 @@
 // Joint glyphs (DESIGN.md §7.4): ring = revolute, ring + double arrow = cylindrical, double arrow =
-// prismatic — as world-space polylines (drawn with FatLines, on top of everything). Pure.
-import type { Axis } from '../core';
+// prismatic — as world-space polylines (drawn with FatLines, on top of everything). Gear meshes get
+// their own small glyph at the pitch point: two short interlocking ticks (meshGlyphSegments). Pure.
+import { gearMeshes } from '../core';
+import type { Axis, Model } from '../core';
 import type { KinematicGraph } from '../core/kinematics';
-import { add, cross, len, scale } from './math';
+import { add, cross, len, scale, sub } from './math';
 import type { Vec3 } from './math';
 
 export type Quat = readonly [number, number, number, number];
@@ -92,6 +94,88 @@ export function glyphSegments(glyphs: readonly JointGlyph[], back: Vec3, transfo
         out.push([tip, add(baseP, scale(perp, ARROW_HEAD * 0.6))]);
         out.push([tip, add(baseP, scale(perp, -ARROW_HEAD * 0.6))]);
       }
+    }
+  }
+  return out;
+}
+
+// ---- gear meshes (§7.4: "Each gear mesh gets a small glyph at its pitch point") -----------------
+
+/**
+ * One gear mesh (§2.7) to mark: the two hubs (world, edit time), their pitch radii and the common
+ * axis. The glyph sits at the pitch point hubA + (hubB − hubA)·rA/(rA + rB), in the gears' plane.
+ * With followA / followB it follows those parts' simulation transforms (both hubs are carried, so
+ * the point stays between them as the gears turn; the axis turns with part A).
+ */
+export interface MeshGlyph {
+  hubA: readonly [number, number, number];
+  hubB: readonly [number, number, number];
+  rA: number;
+  rB: number;
+  axis: Axis;
+  followA?: number;
+  followB?: number;
+}
+
+/** One glyph per edit-time gear mesh of the model (core gearMeshes), following the two gears' parts. */
+export function meshGlyphsFromModel(m: Model): MeshGlyph[] {
+  return gearMeshes(m).map((g) => ({
+    hubA: [g.a.cell.x, g.a.cell.y, g.a.cell.z],
+    hubB: [g.b.cell.x, g.b.cell.y, g.b.cell.z],
+    rA: g.a.cell.rim!,
+    rB: g.b.cell.rim!,
+    axis: g.axis,
+    followA: g.a.partId,
+    followB: g.b.partId,
+  }));
+}
+
+/** How far each tick reaches back toward its own hub from the pitch point (units). */
+export const MESH_TICK_BACK = 0.36;
+/** How far each tick reaches past the pitch point toward the other gear (units). */
+export const MESH_TICK_OVER = 0.14;
+/** Half the spacing of the two ticks, along the pitch-circle tangent (units). */
+export const MESH_TICK_GAP = 0.1;
+
+/** World pitch point and frame (c: unit hub A → hub B, t: tangent, a: axis) of a mesh glyph; null if degenerate. */
+export function meshGlyphFrame(g: MeshGlyph, transformOf: (partId: number) => RigidTransform | null): { p: Vec3; c: Vec3; t: Vec3; a: Vec3 } | null {
+  let A: Vec3 = [g.hubA[0], g.hubA[1], g.hubA[2]];
+  let B: Vec3 = [g.hubB[0], g.hubB[1], g.hubB[2]];
+  let a: Vec3 = [0, 0, 0];
+  a[g.axis] = 1;
+  const ta = g.followA !== undefined ? transformOf(g.followA) : null;
+  const tb = g.followB !== undefined ? transformOf(g.followB) : null;
+  if (ta) {
+    A = add(rotateByQuat(ta.q, A), ta.p);
+    a = rotateByQuat(ta.q, a);
+  }
+  if (tb) B = add(rotateByQuat(tb.q, B), tb.p);
+  const d = sub(B, A);
+  // in the plane of the gears
+  const along = d[0] * a[0] + d[1] * a[1] + d[2] * a[2];
+  const dp = sub(d, scale(a, along));
+  const L = len(dp);
+  if (!(L > 1e-6) || !(g.rA + g.rB > 0)) return null;
+  const c = scale(dp, 1 / L);
+  const p = add(A, add(scale(c, (L * g.rA) / (g.rA + g.rB)), scale(a, along * (g.rA / (g.rA + g.rB)))));
+  return { p, c, t: cross(a, c), a };
+}
+
+/**
+ * Segments of the mesh glyphs: at each pitch point two short parallel ticks along the line of
+ * centres, a tangential gap apart, one reaching from gear A's side past the pitch point and one from
+ * gear B's side (they overlap like two meshing teeth). Same world-size idiom as the joint glyphs.
+ */
+export function meshGlyphSegments(glyphs: readonly MeshGlyph[], transformOf: (partId: number) => RigidTransform | null): [Vec3, Vec3][] {
+  const out: [Vec3, Vec3][] = [];
+  for (const g of glyphs) {
+    const f = meshGlyphFrame(g, transformOf);
+    if (!f) continue;
+    const { p, c, t } = f;
+    for (const s of [1, -1]) {
+      // s = 1: gear A's tick (from A's side, offset +t); s = −1: gear B's (from B's side, offset −t)
+      const o = add(p, scale(t, s * MESH_TICK_GAP));
+      out.push([add(o, scale(c, -s * MESH_TICK_BACK)), add(o, scale(c, s * MESH_TICK_OVER))]);
     }
   }
   return out;

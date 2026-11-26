@@ -31,9 +31,11 @@
 //   collider, so the bevel changes the contact geometry only.
 // - A wheel's rim (a 'disc' primitive) becomes a WheelShape: a native cylinder for the ground and
 //   other wheels plus the 32-gon prism cut into 32 wedges × 2 slabs for every other part, and a
-//   bevelled ground guard (DESIGN §5.1 "Wheels").
+//   bevelled ground guard (DESIGN §5.1 "Wheels"). A gear's disc becomes the same at its tip radius,
+//   with the mass of the solid pitch disc (WheelShape.gear; DESIGN §5.1 "Gears").
 // - groundPlane: the floor tangent to the lowest of these colliders (DESIGN §5.1 "Ground").
 // Pure: no Rapier import.
+import { GEAR_GROUND_EXTRA } from '../core/gears';
 import { groundLevel } from '../core/model';
 import type { Axis, Model, Part } from '../core/types';
 import { HC, RIM_COLL_INSET } from '../geometry/dims';
@@ -88,6 +90,12 @@ export interface WheelShape {
    * wobbling r = 4 wheel 1.04 units deep; DEVIATIONS §5 "Wheels, ground, free root").
    */
   guard: Vec3[];
+  /**
+   * Present for a gear (DESIGN §5.1 "Gears"; colliders.ts DiscPrim.gear): the same three colliders
+   * at the tip radius (`radius` = pitch + 0.085, `rim` = pitch), and `mass` is a solid disc of the
+   * pitch radius, half-length HC, at unit density (it stands for the hub cell too).
+   */
+  gear?: { pitch: number };
 }
 
 /** Sides of a wheel's hull polygon and of its ground guard (DESIGN §5.1 "Wheels": a 32-gon). */
@@ -273,18 +281,32 @@ export function wheelHullPieces(center: Vec3, axis: Axis, radius: number, halfLe
   return out;
 }
 
-/** The wheel shape of a disc primitive at world centre `center` (see WheelShape). */
-export function wheelShape(center: Vec3, axis: Axis, radius: number, halfLength: number, innerRadius: number, rim: number): WheelShape {
+/**
+ * Unit-density mass of an annulus (radii `inner` < `outer`, ±halfLength along `axis`) centred at
+ * `center`: volume, centre and the diagonal inertia about it in world axes. inner = 0 is a solid disc.
+ */
+export function annulusMass(center: Vec3, axis: Axis, outer: number, inner: number, halfLength: number): PieceMass {
   const L = 2 * halfLength;
-  const volume = Math.PI * (radius * radius - innerRadius * innerRadius) * L;
-  const r2 = radius * radius + innerRadius * innerRadius;
+  const volume = Math.PI * (outer * outer - inner * inner) * L;
+  const r2 = outer * outer + inner * inner;
   const inertia: Vec3 = [0, 0, 0];
   for (let k = 0; k < 3; k++) inertia[k] = k === axis ? (volume * r2) / 2 : (volume * (3 * r2 + L * L)) / 12;
+  return { volume, com: [...center], inertia };
+}
+
+/**
+ * The wheel shape of a disc primitive at world centre `center` (see WheelShape). With `gear` the
+ * mass is the solid disc of the pitch radius instead of the annulus (DESIGN §5.1 "Gears").
+ */
+export function wheelShape(center: Vec3, axis: Axis, radius: number, halfLength: number, innerRadius: number, rim: number, gear?: { pitch: number }): WheelShape {
+  const mass = gear ? annulusMass(center, axis, gear.pitch, 0, halfLength) : annulusMass(center, axis, radius, innerRadius, halfLength);
   const u = ((axis + 1) % 3) as Axis;
   const hull = wheelHullPieces(center, axis, radius, halfLength);
   const inR = (radius - GUARD_INSET_R) * Math.cos(Math.PI / WHEEL_SEGMENTS); // vertices at radius − GUARD_INSET_R
   const guard = prismShape(center, axis, inR, halfLength - GUARD_INSET_A, WHEEL_SEGMENTS, u, 0, WHEEL_BEVEL * rim).points;
-  return { kind: 'wheel', center: [...center], axis, radius, halfLength, innerRadius, rim, mass: { volume, com: [...center], inertia }, hull, guard };
+  const out: WheelShape = { kind: 'wheel', center: [...center], axis, radius, halfLength, innerRadius, rim, mass, hull, guard };
+  if (gear) out.gear = { pitch: gear.pitch };
+  return out;
 }
 
 /** Default sides of the prisms standing in for collider cylinders (SimOptions.cylinderSegments). */
@@ -309,7 +331,10 @@ export function lowestGroundPoint(parts: readonly Part[], n: Vec3, segments = DE
     for (const c of p.cells) {
       const h = c.x * n[0] + c.y * n[1] + c.z * n[2];
       lo = Math.min(lo, h - half);
-      if (c.rim !== undefined) lo = Math.min(lo, h - c.rim * Math.sqrt(Math.max(0, 1 - n[c.axis]! ** 2)) - 0.5 * Math.abs(n[c.axis]!));
+      if (c.rim !== undefined) {
+        const R = c.teeth ? c.rim + GEAR_GROUND_EXTRA : c.rim; // a gear's collider reaches r + 0.085 (DESIGN §2.7 "Ground level")
+        lo = Math.min(lo, h - R * Math.sqrt(Math.max(0, 1 - n[c.axis]! ** 2)) - 0.5 * Math.abs(n[c.axis]!));
+      }
     }
     return lo;
   });
@@ -410,7 +435,8 @@ export function partShapes(part: Part, segments: number): Shape[] {
 
   for (const p of prims) {
     if (p.shape === 'disc') {
-      out.push(wheelShape(w(p.center), p.axis, p.radius, p.halfLength, p.innerRadius, p.radius + RIM_COLL_INSET));
+      if (p.gear) out.push(wheelShape(w(p.center), p.axis, p.radius, p.halfLength, p.innerRadius, p.gear.pitch, p.gear));
+      else out.push(wheelShape(w(p.center), p.axis, p.radius, p.halfLength, p.innerRadius, p.radius + RIM_COLL_INSET));
       continue;
     }
     if (p.shape === 'cylinder') {

@@ -259,7 +259,15 @@ the gears are and whichever way their parts are turned, with nothing to solve or
    not at distance 2 in line; as in reality.) **A gear's hub cell is its gear:** other discs
    meet it only through rules 2–4, never as a cube — otherwise every mesh with an 8 would be
    blocked by the 8's own hub cube. (So a 24 and an 8 at offset `(2,1)` are allowed: their tip
-   discs clear.)
+   discs clear.) **A gear's web cells are its gear too** (`isWebCell`, rule 5): they lie
+   strictly inside the tip disc, so any disc that could reach one is already judged by rules
+   2–4 (review m8: a crank hole facing a meshing partner was refused). **Another part's male
+   counts by its rod, not its cell:** in the gear's layer a pin or axle is a circle of radius
+   5/16 when parallel to the gear axis, else a `±½ × ±5/16` rectangle (`tipOverlapsRod`, exact
+   in 1/32). Otherwise a pin or axle through an 8 — the usual way to mount a pinion — blocked
+   every mesh with that 8 (review m8); every meshing distance clears a rod in the partner's
+   hub by 3/32. Holes beside an 8 stay blocked, and so does a rod pointing at the teeth. Plain
+   wheels (§2.6 rule 2) still test whole cells.
 2. *Plain wheels (any part):* tip disc × wheel disc must not overlap (generic disc tests with
    `r_t`).
 3. *Other gears, parallel axes, same layer,* hub distance `d`, `s = r₁ + r₂`:
@@ -280,7 +288,10 @@ the gears are and whichever way their parts are turned, with nothing to solve or
    one part still fuse).
 6. *Taking the teeth off.* A gear that stops being one (plain wheel, or bare) is checked like a
    new wheel or an ordinary cell: an 8 meshing with an adjacent 8 cannot become a bare hole
-   there ("inside the gear of part N"); erasing the cell is still allowed.
+   there ("inside the gear of part N"); erasing the cell is still allowed — unless a web cell
+   of the gear would be left inside another gear's tips, in which case un-gearing, shrinking
+   below that web cell and removing the hub are all refused ("without this gear, (1, 0, 0) is
+   inside the gear of part 2").
 Reasons read "gear teeth would hit part N", "the teeth would clash with the gear of part N",
 "inside the gear of part N". `validateModel`, `canAddCell`, `movePart`, `rotatePart`,
 `canSetRim`, `canSetGear` enforce all of it.
@@ -455,17 +466,22 @@ axis, extent `[−H, +H]`, no chamfer.
   a whole mesh cycle for every size pair, and by ≥ 0.0048 at 0.02 closer.
 - An 8-tooth gear's root (0.344) is inside the cell's barrel (`H`): its hub contributes **no
   barrel** in the gear's slab — the gear is the cell. An axial in-part connection is bridged by
-  a cylinder of the root radius.
+  a cylinder 0.01 inside the root radius (at exactly the root its wall would coincide with
+  the root lands).
 - Web cells (§2.7 rule 5) contribute their bores (and rods) but **no barrel or web positive**
   inside the gear's slab — a crank hole is a bore through the gear, leaving ≥ 0.034 of wall to
-  the tooth roots.
+  the tooth roots. Outside the slab a web cell's barrel stops 0.005 short of the gear face and
+  joins it through a plug that stays inside the root circle (a barrel touching the face
+  exactly left pinched, non-manifold bore edges; one reaching into the slab pokes out between
+  the teeth).
 - *Index:* tooth 0 is painted in the mark colour (flanks and tip land) on every gear — the only
   index an 8-tooth gear has room for; gears with `r ≥ 1` also carry the wheel's face groove
   along `+u`, from radius ½ to 0.05 inside the root (not across the teeth).
 - The tooth band (flanks, tip lands, root lands) is flagged as one **soft patch** for the
   outline pass (§6.1): `MeshData` gains an optional per-vertex patch id and a set of soft
   patch ids.
-- Cost measured in the spike: 672 / 1216 / 1728 / 2752 triangles for 8 / 16 / 24 / 40 teeth.
+- Cost: 672 / 1088 / 1536 / 2432 triangles for 8 / 16 / 24 / 40 teeth on an axle hole (32 more
+  on a pin hole); 4–14 ms to build.
 
 Bores are subtracted after all positives are united, so a bore always cuts cleanly through its
 own cell.
@@ -502,7 +518,10 @@ type ColliderPrim =
   (tip radius, 0.04 inside the nominal tip `r + ⅛`). The hub and the web cells of a gear
   yield **no** cylinder or box of their own inside the gear's slab — the disc stands for them
   (otherwise an 8-tooth gear's barrel, or a crank hole's, overlaps the partner's tip disc at
-  mesh distance). Their parts outside the slab (axial extensions) stay.
+  mesh distance). The axial extensions of hub and web **hole** cells (from `HC` to ½) are
+  dropped as well: they sit face to face with a meshing partner's tip hull and overlapped it
+  by 0.045 (measured: a driven 1:5 pair ran backwards on that contact). A web crank pin keeps
+  its rod outside the slab (radius 0.29, clear of partner tips).
 
 `HC < H` gives stacked liftarms a little real clearance so neighbouring layers do not rub.
 
@@ -685,6 +704,16 @@ and Jolt (excellent solver but a heavier, manual-memory API); noted in the READM
     `ω*·dt/k ≤ 0.08`; step **down** only when `ω*·dt/k′ ≤ 0.04` for the lower `k′` and no
     sooner than 0.1 s after the last step up. With no engaged mesh `k = 1` and the simulation
     is bit-identical to what it was.
+  - *Gear size.* Measured (review m8), the braking starts at a rotation per world step that
+    falls with gear size: 0.14 rad for 8 teeth, 0.096 for 16, 0.08 for 24, 0.06 for 40 —
+    constant (≈ 0.1) when weighted by `√r`. So `ω*` uses `|ω|·max(1, √r)` with `r` the largest
+    gear on that body with an engaged mesh (8 and 16 teeth are unchanged). Before this a driven
+    40+40 pair stalled at 29 rad/s with half its drive work lost.
+  - *Engaging at speed.* The fixed step is counted in eighths. When a mesh engages during a
+    fixed step, `k` may step **up** at once (same rule) and the engaged meshes are re-anchored
+    for the new step size before the world step runs. Before this the engaging step ran at
+    the stale `k` and two gears meeting at matched speed lost up to 98 % of their energy; now
+    they keep it, and a gear meeting one at rest ends at the plastic-impact speed.
   - A change of `k` rescales `world.timestep`, the solver iterations and every jointed body's
     additional iterations. Joint friction and the energy guard run **once per fixed step**
     (hold target `1/fixedDt`), the grab spring, mesh update, body removal and the speed cap
@@ -861,7 +890,14 @@ Like printed building instructions: clean flat-ish colour, smooth lit curves, da
   it, the silhouette) but not its creases, so an edge-on gear shows quiet shaded flutes rather
   than a barcode of two lines per tooth. Where a tooth pitch is under about 6 device pixels
   the contours *inside* a soft patch fade out (to nothing at 3 px) so that a small or distant
-  gear keeps its silhouette, faces, holes and index instead of a black fringe. The painted
+  gear keeps its silhouette, faces, holes and index instead of a black fringe. The crease
+  between the tooth band and the same part's flat faces is soft too where there is no depth
+  jump (else a far gear keeps a zigzag along its near face). Inside a soft patch the depth
+  test is its own: each side extrapolates with the smaller of its two nearest slopes, the
+  threshold is half the ordinary tolerance, and a residual down to a quarter still draws when
+  it connects along the contour (within 32 texels) to one above the half — without this the
+  tooth-over-root contours came out dashed at oblique views (review m8); a few short breaks
+  remain at some angles. The painted
   index tooth (and the face groove for `r ≥ 1`) shows rotation: the teeth alone strobe (a
   40-tooth gear looks frozen at 9.4 rad/s on a 60 Hz display).
 - **Ground** (§2.6, when on): shown the same way in **both** modes, by a **contact shadow** and
@@ -970,9 +1006,15 @@ Left toolbar; keyboard shortcut in brackets.
   is the toothed disc at the new size. Invalid steps are red with the reason (§2.7: "gear teeth
   would hit part 3", "the teeth would clash with the gear of part 5", "largest gear has 40
   teeth", "gears grow from pin holes and axle holes", "would cut into the teeth of this part's
-  gear"); when the next size is invalid but a later one is valid the reason says so ("… ·
-  24 teeth would fit"). Status: "Gear · part 3 · 24 teeth (radius 1.5)", and when the result
-  meshes: "… · meshes with part 5 (40 teeth, 3:5)". Each click is one undo step.
+  gear"); when the next size is invalid but a later one in the same direction is valid, the
+  click **goes to that size** and the status names what it skipped and why ("… 40 teeth
+  (radius 2.5) · skips 8, 16, 24: …" — the middle hole of a long beam can only be a 40, whose
+  web holds the beam's cells; review m8 found the old "24 teeth would fit" hint named a size
+  no click could reach). Status: "Gear · part 3 · 24 teeth (radius 1.5)", and when the result
+  meshes: "… · meshes with part 5 (40 teeth, 3:5)"; a parallel gear in the layer whose pitch
+  circle is less than 1 away and that does not mesh is named with the reason ("does not mesh
+  with part 1 (16 teeth): a 16 meshes only with another 16, in line at distance 2"). The `?`
+  help has a Gears section with the pair table. Each click is one undo step.
 - **Erase** `[E]`: click a cell to remove that sub-part (hovered cell highlighted red). Parts
   split if they fall apart. On a hub that has a rim, or anywhere on its disc outside the part's
   own cells, Erase removes **the outer half-unit of the rim** instead (highlighting that ring);
@@ -1083,6 +1125,41 @@ New parts take the current palette colour (or the kind default, §6.1).
   glyph at its pitch point (two short interlocking ticks). Hovering a gear with Select says
   "Part 3 · gear 24 teeth ∥ Z · meshes with part 5 (40 teeth)"; the inspector shows a selected
   gear's tooth count and its meshes with their ratios.
+- **Show colliders** toggle `[C]` (both modes; beside Show kinematics; a view preference, not
+  saved in the file): draws **what the simulation collides with instead of what the parts look
+  like** — owner's request ("a visualization of the collider meshes/primitives as a mode just
+  like the constraints/joints visualization"). It exists to answer "why did that catch / sink /
+  pass through?" and to show how coarse the physics shapes are.
+  - *One source.* `colliderSpecs(part, segments)` in `src/physics/shapes.ts` (pure, no Rapier)
+    lists every collider the simulation creates for a part, built from the same `partShapes`
+    the simulation consumes: `{ role, shape }` with `shape` a convex point set (`hull`), a
+    `box`, or a native `cylinder`, in edit-time world coordinates. A unit test builds a
+    `Simulation` for every example and for random parts and checks the list against Rapier's
+    own colliders (count per body, shape type, collision group ↔ role, and every hull's vertex
+    set / box extents / cylinder radius, half-length and axis, to 1e-5). The view draws that
+    list and nothing else, so the picture cannot drift from the physics.
+  - *Roles* (the collision groups of §5.1, which decide what meets what):
+    `part` — the bevelled prisms and boxes of ordinary cells (meet parts, hulls and the floor);
+    `round` — a wheel's or gear's native cylinder (meets only the floor and other rounds);
+    `hull` — a wheel's or gear's 64 wedge pieces (meet only parts);
+    `guard` — a wheel's ground guard (meets only the floor; present only with a ground).
+    Gears use their tip-radius shapes. The floor is a half-space: it stays shown by its contact
+    shadow only.
+  - *Look.* While the toggle is on the part solids step back (a faint ghost, no outlines) and
+    the colliders are drawn over them: each primitive with its own crisp edges, so that the
+    individual pieces — one stadium prism per liftarm run, the 16-gon barrels, the 0.01 bevels,
+    the 64 wedges of a wheel — can be counted; roles told apart by colour, with a small legend
+    (role, what it meets, how many) shown while the toggle is on. Edges hidden behind other
+    colliders stay visible but fainter (a wheel's round cylinder and guard sit inside its
+    hull). Still a tool, not a game: flat fills, no shadows of its own.
+  - *Simulate mode.* Each part's colliders follow that part's body transform exactly as its
+    solid does (a collider never moves relative to its part); removed bodies' colliders
+    disappear with them. Picking, hover, grab, tools, selection and Show kinematics work
+    unchanged and can be combined with it.
+  - *Cost.* Built once per part signature and cached like the solids; toggling off restores
+    the ordinary picture pixel for pixel.
+  - Test hook: `setShowColliders(on)`, `colliderInfo()` → `{ on, parts: [{ partId, part, round,
+    hull, guard }] }`.
 - **Model settings** (edit mode only; saved in the file; each change is one undo step): a
   **Ground** toggle `[G]` and a **Fix root** toggle, in a small always-visible "Model" block of
   the inspector panel (not the top bar, which is full). Fix root is checked and disabled while
@@ -1133,8 +1210,10 @@ smooth `pin`s for moving joints.
    arm on a smooth pin that falls and swings at Play, so the cart visibly rolls back and forth
    under it before friction brings it to rest. Wheel radius ≥ 1.5.
 10. **Gear train** — a fixed frame carrying a 40-tooth gear with an off-balance arm, meshing an
-    8-tooth pinion whose axle carries a light pointer, and from that axle a second mesh
-    (8 → 24) to a third pointer; no ground. At Play the arm falls and swings, the pointers turn
+    8-tooth pinion with a light pointer, and from a second 8 on the pinion a second mesh
+    (8 → 24) to a third pointer; no ground. (As built: the 40 carries a 7-hole arm with a 3×3
+    weight; the pinion is straight above it and turns on its pointer's middle hole; the 24
+    turns on a long pin from the frame.) At Play the arm falls and swings, the pointers turn
     five times as fast the other way and 5/3 as fast the same way. Friction pins or axle holes
     as needed so that each gear turns with its pointer.
 

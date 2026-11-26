@@ -5,7 +5,11 @@ import {
   axisLabel,
   cellsAt,
   discCells,
+  fineDiscCells,
+  gearTeeth,
   hasRim,
+  isGear,
+  isHole,
   kindLabel,
   makeCell,
   validateModel,
@@ -16,9 +20,12 @@ import {
   rotatePart,
   rotateVec,
   shareResult,
+  tipRadius,
 } from '../core';
 import type { Axis, Cell, Model, Vec3i } from '../core';
 import type { Vec3 } from './picking';
+import { meshPartners } from './tools';
+import type { MeshPartner } from './tools';
 
 export type OpResult =
   | { ok: true; model: Model; message?: string; /** part to select afterwards */ partId?: number }
@@ -148,7 +155,7 @@ export function moveSelection(m: Model, partId: number, delta: Vec3i): OpResult 
   if (!part) return { ok: false, message: `No part ${partId}` };
   const r = movePart(m, partId, delta);
   if (r) return { ok: true, model: r, partId, message: `Moved part ${partId} ${fmtDelta(delta)}` };
-  const moved = part.cells.map((c) => makeCell(c.x + delta[0], c.y + delta[1], c.z + delta[2], c.kind, c.axis, c.rim));
+  const moved = part.cells.map((c) => makeCell(c.x + delta[0], c.y + delta[1], c.z + delta[2], c.kind, c.axis, c.rim, c.teeth));
   const why = placementConflict(m, moved, partId) ?? rawConflict(m, partId, moved) ?? 'the result would be invalid';
   return { ok: false, message: `Can't move part ${partId} ${fmtDelta(delta)}: ${why}` };
 }
@@ -179,7 +186,7 @@ export function rotateSelection(m: Model, partId: number, cam: CameraBasis, key:
   const k = ((quarterTurns % 4) + 4) % 4;
   const rotated = part.cells.map((c) => {
     const [x, y, z] = rotateVec([c.x - c0.x, c.y - c0.y, c.z - c0.z], axis, k);
-    return makeCell(x + c0.x, y + c0.y, z + c0.z, c.kind, rotateAxis(c.axis, axis, k), c.rim);
+    return makeCell(x + c0.x, y + c0.y, z + c0.z, c.kind, rotateAxis(c.axis, axis, k), c.rim, c.teeth);
   });
   const why = placementConflict(m, rotated, partId) ?? rawConflict(m, partId, rotated) ?? 'the result would be invalid';
   return { ok: false, message: `Can't rotate part ${partId} about ${axisLabel(axis)}: ${why}` };
@@ -206,7 +213,7 @@ export function duplicateOffsets(radius: number): Vec3i[] {
 const offsetCache = new Map<number, Vec3i[]>();
 
 /**
- * Copy a part (same colour, wheels included) to the nearest offset where every copied cell lands
+ * Copy a part (same colour, wheels and gears included) to the nearest offset where every copied cell lands
  * on an empty position (no sharing at all, so the copy never mates by accident) and its wheel
  * discs hit nothing (§2.6). Fails if none within `radius`. The result's partId is the copy.
  */
@@ -221,13 +228,16 @@ export function duplicateSelection(m: Model, partId: number, radius = DUPLICATE_
   // Cells the part's discs overlap (its footprint beyond its cells): a cheap pre-filter, so a wheel's
   // copy does not try every overlapping offset with the full rules.
   const disc: Vec3i[] = [];
-  for (const c of part.cells) if (hasRim(c)) disc.push(...discCells([c.x, c.y, c.z], c.axis, c.rim));
+  // (a gear by its tip disc, §2.7)
+  for (const c of part.cells)
+    if (isGear(c)) disc.push(...fineDiscCells([c.x, c.y, c.z], c.axis, tipRadius(c.rim)));
+    else if (hasRim(c)) disc.push(...discCells([c.x, c.y, c.z], c.axis, c.rim));
   const own = new Set(part.cells.map((c) => `${c.x},${c.y},${c.z}`));
   const footprint = new Set([...own, ...disc.map((q) => `${q[0]},${q[1]},${q[2]}`)]);
   for (const d of offsets) {
     if (part.cells.some((c) => cellsAt(m, [c.x + d[0], c.y + d[1], c.z + d[2]]).length > 0)) continue;
     if (disc.length && [...footprint].some((k) => footprint.has(shiftKey(k, d)))) continue;
-    const cells = part.cells.map((c) => makeCell(c.x + d[0], c.y + d[1], c.z + d[2], c.kind, c.axis, c.rim));
+    const cells = part.cells.map((c) => makeCell(c.x + d[0], c.y + d[1], c.z + d[2], c.kind, c.axis, c.rim, c.teeth));
     let r: { model: Model; partId: number };
     try {
       r = addPart(m, cells, part.color);
@@ -257,8 +267,10 @@ export interface PartInfo {
   isRoot: boolean;
   /** Counts per kind, e.g. { pinHole: 5 }. */
   kinds: Partial<Record<Cell['kind'], number>>;
-  /** Wheel radii of the part's rims (§2.6), in cell order; absent when it has none. */
+  /** Wheel radii of the part's plain rims (§2.6), in cell order; absent when it has none. */
   wheels?: number[];
+  /** The part's gears (§2.7), in cell order, with their meshes (§7.4); absent when it has none. */
+  gears?: { teeth: number; r: number; meshes: MeshPartner[] }[];
 }
 
 /** Inspector data for a part (§7.2), or null if it does not exist. `rootId` = effectiveRootId(m). */
@@ -267,8 +279,12 @@ export function partInfo(m: Model, partId: number, rootId: number | null): PartI
   if (!p) return null;
   const kinds: PartInfo['kinds'] = {};
   for (const c of p.cells) kinds[c.kind] = (kinds[c.kind] ?? 0) + 1;
-  const wheels = p.cells.filter(hasRim).map((c) => c.rim);
+  const wheels = p.cells.filter((c) => hasRim(c) && !isGear(c)).map((c) => c.rim!);
+  const gears = p.cells
+    .filter((c) => isGear(c) && isHole(c.kind))
+    .map((c) => ({ teeth: gearTeeth(c.rim!), r: c.rim!, meshes: meshPartners(m, p.id, [c.x, c.y, c.z]) }));
   const info: PartInfo = { id: p.id, cellCount: p.cells.length, color: p.color, isRoot: p.id === rootId, kinds };
   if (wheels.length) info.wheels = wheels;
+  if (gears.length) info.gears = gears;
   return info;
 }

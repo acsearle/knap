@@ -78,6 +78,13 @@
 //                                   magenta with a white halo, drawn on top of everything. A glyph
 //                                   follows the transform of followPartId (first part of body B), so
 //                                   glyphs may stay on while simulating (or hide them).
+//   setMeshGlyphs(glyphs | null)    MeshGlyph = { hubA, hubB, rA, rB, axis, followA?, followB? }; build
+//                                   them with meshGlyphsFromModel(model) (one per core gearMeshes
+//                                   pair). Two short interlocking ticks at the pitch point in the
+//                                   gears' plane, drawn with the joint glyphs (same colour, halo,
+//                                   setGlyphsVisible); they follow both gears' transforms.
+//   setOutlineDebug({ ink?, softFade? }), softFade()   test diagnostics only (e2e ink measures);
+//                                   the canvas carries the viewport as canvas.__knapViewport for them.
 //   setViewCubeVisible(bool)
 //
 // CAMERA  (CameraState = { target: [x,y,z], yaw, pitch, height }: radians; yaw 0 looks from +Z
@@ -152,7 +159,11 @@
 //   angle, never speckle on curved surfaces or in bores, and never smear at grazing angles.
 //   Lines are reconstructed as a polyline through the boundary-segment midpoints and drawn with a
 //   1-px anti-aliasing ramp at a uniform width (1.25 CSS px × DPR); the ID buffer is rendered at 2×
-//   (see `supersample`).
+//   (see `supersample`). Gears (§6.1): a gear's tooth band is one SOFT patch (MeshData.patchHint /
+//   softPatches → patches.ts meshPatches): no crease lines inside it, only its true contours, and
+//   those (and its boundary with the gear's faces) fade out between 6 and 3 device px per tooth
+//   pitch (softContourFade) so a small gear reads as a disc with a clean rim. Its index tooth is
+//   painted in the mark colour (geometry indexToothWeights), its face groove (r ≥ 1) like a wheel's.
 //
 // Pure helpers (no WebGL; unit-tested in tests/view): see ./math (camera basis, named views, fit,
 // pick ray, projection, orbit/pan/zoom steps, snap interpolation).
@@ -171,7 +182,8 @@ export type {
   ViewportOptions,
   ViewportPointerEvent,
 } from './viewport';
-export { jointGlyphsFromGraph } from './glyphs';
+export { jointGlyphsFromGraph, meshGlyphsFromModel } from './glyphs';
+export { SOFT_FULL_PX, SOFT_GONE_PX, TOOTH_PITCH, softContourFade } from './patches';
 export { FLOOR_EDGE_Y, FLOOR_TINT, SHADOW_COLOR, floorEdgeAlpha } from './floor';
 export {
   SHADOW_BLUR,
@@ -186,7 +198,7 @@ export {
 } from './shadowmath';
 export type { ShadowFrame } from './shadowmath';
 export type { FloorState } from './floor';
-export type { JointGlyph } from './glyphs';
+export type { JointGlyph, MeshGlyph } from './glyphs';
 export {
   VIEW_DIRS,
   VIEW_NAMES,

@@ -32,7 +32,7 @@
 // [N]:      toolState = setNewPart(toolState, !toolState.newPart).
 // [B]:      toolState = setBackSide(toolState, !toolState.backSide). Alt/Option held = withModifiers'
 //           alt (per event, like Shift for New part; altHeld never latches either).
-// [1]-[5], [V], [E], Esc: toolState = selectTool(toolState, TOOL_KEYS[key.toLowerCase()]).
+// [1]-[5], [V], [W], [T], [E], Esc: toolState = selectTool(toolState, TOOL_KEYS[key.toLowerCase()]).
 // Palette swatch: toolState = pickColor(toolState, '#rrggbb').
 //
 // In Simulate mode (grabbing): pickCell(model, ray, { transform: (id) => sim.partTransform(id) })
@@ -173,6 +173,16 @@
 //
 // resolveErase(model, pick) → { baseModel, valid, partId, cellIndex, cell, highlight, description,
 //   pieces, apply(current) → Model } — pieces 0 = part removed, 1 = shrinks, ≥2 = splits.
+// resolveWheel(model, pick, shrink) → WheelProposal (grow / shrink by ½; on a gear `convert`: a plain
+//   wheel of the same radius). resolveGear(model, pick, down) → GearProposal (bare → 8 → 16 → 24 → 40
+//   teeth, Shift down; on a plain wheel the largest gear not above its radius; ghost / ring /
+//   description incl. "· meshes with part 5 (40 teeth, 3:5)" and "· 24 teeth would fit"). Both
+//   target the hub for a disc hit, and for a bare hole that a disc of its own part overlaps (a
+//   plain wheel's disc or a gear's tip disc; nearest hub). Erase on a gear steps it down one size.
+// Gears in picking: a gear is picked over its tip disc (r + 3/32); its teeth are a tread; build
+//   tools on its face extend the part only in the web (gearWebRefusal says why not elsewhere).
+// countsText(model, graph) = kinematicsSummary + " · N meshes" when there are any (status bar);
+// meshPartners / meshText / gearRatio for the hover text and the inspector (partInfo.gears).
 // resolveSelect(model, pick) → { partId | null, description }.
 // describeHover(model, pick, grid) → "Part 3 · pin hole ∥ Z at (1, 0, 0) · holds pin (part 4)" /
 //   "Grid (2, 0, -1)" / ''.

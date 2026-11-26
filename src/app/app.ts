@@ -24,6 +24,8 @@ import {
   History,
   TOOL_KEYS,
   autosave,
+  countsText,
+  meshGlyphSpecs,
   cycleOrientation,
   deleteSelection,
   describeHover,
@@ -31,7 +33,6 @@ import {
   duplicateSelection,
   initialToolState,
   isBuildTool,
-  kinematicsSummary,
   modelFileText,
   moveDelta,
   moveKeyOf,
@@ -44,6 +45,7 @@ import {
   pickGrid,
   resolveBuild,
   resolveErase,
+  resolveGear,
   resolveSelect,
   resolveWheel,
   restoreAutosave,
@@ -54,7 +56,7 @@ import {
   suggestFileName,
   withModifiers,
 } from '../editor';
-import type { CameraBasis, OpResult, Proposal, StorageLike, Tool, ToolState, WheelProposal } from '../editor';
+import type { CameraBasis, GearProposal, OpResult, Proposal, StorageLike, Tool, ToolState, WheelProposal } from '../editor';
 import { DEFAULT_FRICTION_LEVEL, JOINT_FRICTION } from '../physics';
 import type { FrictionLevel } from '../physics';
 import { groundPlane } from '../physics/shapes';
@@ -120,6 +122,7 @@ const ALT_BUILD_CODES: Readonly<Record<string, string>> = {
   KeyV: 'v',
   KeyE: 'e',
   KeyW: 'w',
+  KeyT: 't',
   KeyG: 'g',
   Digit1: '1',
   Digit2: '2',
@@ -162,6 +165,8 @@ export class App {
   private proposal: Proposal | null = null;
   /** The Wheel-tool proposal currently shown. */
   private wheelProposal: WheelProposal | null = null;
+  /** The Gear-tool proposal currently shown. */
+  private gearProposal: GearProposal | null = null;
   private graphCache: { model: Model; graph: KinematicGraph } | null = null;
   private autosaveTimer = 0;
   private autosaveFailed = false;
@@ -367,7 +372,7 @@ export class App {
     this.vp.setRootMarkerVisible(rootIsFixed(m));
     this.updateFloor();
     this.updateKinematicsOverlay();
-    this.status.setCounts(kinematicsSummary(m, this.graph()));
+    this.status.setCounts(countsText(m, this.graph()));
     this.scheduleAutosave();
     this.refreshUI();
     this.refreshHover();
@@ -463,6 +468,7 @@ export class App {
       const g = this.graph();
       this.vp.setPartColors(partTints(g));
       this.vp.setJointGlyphs(jointGlyphsFromGraph(g));
+      this.vp.setMeshGlyphs(meshGlyphSpecs(this.history.current));
       this.vp.setGlyphsVisible(true);
     } else {
       this.vp.setPartColors(null);
@@ -477,6 +483,7 @@ export class App {
     this.vp.setHoverRing(null);
     this.proposal = null;
     this.wheelProposal = null;
+    this.gearProposal = null;
   }
 
   /** Re-resolve what the pointer is over (pointer move, model / tool / Shift / camera change). */
@@ -512,6 +519,7 @@ export class App {
       this.vp.setHoverFace(null);
       this.proposal = null;
       this.wheelProposal = null;
+      this.gearProposal = null;
       const ep = resolveErase(m, hit);
       // On a wheel the click removes the rim's outer half-unit: highlight that band, not the cell.
       this.vp.setHoverRing(ep.valid && ep.ring ? { ...ep.ring, over } : null);
@@ -520,13 +528,22 @@ export class App {
     } else if (t === 'wheel') {
       this.vp.setHoverCell(null);
       this.proposal = null;
+      this.gearProposal = null;
       const wp = resolveWheel(m, hit, this.shiftDown);
       this.wheelProposal = wp;
       this.showWheelProposal(wp, !!hit, over);
+    } else if (t === 'gear') {
+      this.vp.setHoverCell(null);
+      this.proposal = null;
+      this.wheelProposal = null;
+      const gp = resolveGear(m, hit, this.shiftDown);
+      this.gearProposal = gp;
+      this.showGearProposal(gp, !!hit, over);
     } else {
       this.vp.setHoverCell(null);
       this.vp.setHoverRing(null);
       this.wheelProposal = null;
+      this.gearProposal = null;
       // Back side (§7.3): the back face under the cursor (pickBack); grid only with nothing there.
       const st = this.buildState(this.shiftDown, this.altDown);
       const bp = buildPick(m, ray, st, hit);
@@ -561,8 +578,21 @@ export class App {
       this.status.setHint(this.idleHint(), false, onPart ? '' : 'Shift: shrink');
       return;
     }
-    const aux = wp.mode === 'grow' ? 'Shift: shrink' : 'release Shift: grow';
+    const aux = wp.convert ? '' : wp.mode === 'grow' ? 'Shift: shrink' : 'release Shift: grow';
     this.status.setHint(wp.description, !wp.valid, aux);
+  }
+
+  /** Gear tool hover (§7.2): the toothed ghost at the new size, or the band Shift+click removes. */
+  private showGearProposal(gp: GearProposal, onPart: boolean, over?: string): void {
+    this.vp.setGhost(gp.ghost ? { cell: gp.ghost, valid: gp.valid, over } : null);
+    this.vp.setHoverRing(gp.ring ? { ...gp.ring, over } : null);
+    this.vp.setHoverFace(!gp.valid && !gp.ghost && gp.highlight ? { cell: gp.highlight.pos, dir: gp.highlight.dir, color: RED, over } : null);
+    if (!gp.description) {
+      this.status.setHint(this.idleHint(), false, onPart ? '' : 'Shift: one size down');
+      return;
+    }
+    const aux = gp.mode === 'up' ? 'Shift: one size down' : 'release Shift: one size up';
+    this.status.setHint(gp.description, !gp.valid, aux);
   }
 
   private lastOrientationHint = '';
@@ -582,6 +612,8 @@ export class App {
         return 'Click a sub-part to erase it';
       case 'wheel':
         return 'Point at a pin hole, an axle hole or a wheel: click grows it by half a unit';
+      case 'gear':
+        return 'Point at a pin hole, an axle hole or a gear: click makes a gear or steps it up (8, 16, 24, 40 teeth) · gears mesh in line at the sum of their radii (? lists the pairs)';
       default:
         return 'Point at a part’s face, or at the grid to start a new part';
     }
@@ -608,7 +640,7 @@ export class App {
   private setShift(on: boolean): void {
     if (this.shiftDown === on) return;
     this.shiftDown = on;
-    if (this.mode === 'edit' && (isBuildTool(this.tool.tool) || this.tool.tool === 'wheel')) this.refreshHover();
+    if (this.mode === 'edit' && (isBuildTool(this.tool.tool) || this.tool.tool === 'wheel' || this.tool.tool === 'gear')) this.refreshHover();
   }
 
   /** Alt/Option is held (momentary Back side). */
@@ -672,11 +704,22 @@ export class App {
       const wp = resolveWheel(m, hit, e.shiftKey);
       if (!wp.description) return;
       if (!wp.valid) {
-        this.error(`Can’t ${wp.mode} the wheel: ${wp.reason ?? 'not possible'}`);
+        this.error(`Can’t ${wp.convert ? 'make a plain wheel' : `${wp.mode} the wheel`}: ${wp.reason ?? 'not possible'}`);
         return;
       }
       this.history.push(wp.apply(m));
       this.info(wp.description.replace(/^Grow wheel/, 'Grew wheel').replace(/^Shrink wheel/, 'Shrank wheel'));
+      return;
+    }
+    if (t === 'gear') {
+      const gp = resolveGear(m, hit, e.shiftKey);
+      if (!gp.description) return;
+      if (!gp.valid) {
+        this.error(`Can’t ${gp.mode === 'up' ? 'make that gear' : 'step the gear down'}: ${gp.reason ?? 'not possible'}`);
+        return;
+      }
+      this.history.push(gp.apply(m));
+      this.info(gp.description);
       return;
     }
     const st = this.buildState(e.shiftKey, e.altKey);

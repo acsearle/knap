@@ -1,7 +1,7 @@
 // Collision primitives (DESIGN.md §4.3). Pure: no WASM, no three.
 // Every primitive is in the part-local frame of topology.partOrigin (same frame as solid.ts).
-import { DIRS, axisOfDir, isMale } from '../core';
-import type { Axis, Dir, Part } from '../core';
+import { DIRS, GEAR_GROUND_EXTRA, axisOfDir, isGear, isMale, isWebCell } from '../core';
+import type { Axis, Cell, Dir, Part } from '../core';
 import { HC, RIM_COLL_INSET, R_COLL_ROD } from './dims';
 import { analyzeCells, isHub, localCenter, minusDir, partOrigin, plusDir, rodExtent } from './topology';
 import type { Vec3 } from './topology';
@@ -33,7 +33,18 @@ export interface DiscPrim {
   innerRadius: number;
   cell: number;
   male: false;
+  /**
+   * Present on a gear (§2.7, §4.3): `pitch` = the pitch radius r (cell.rim). A gear's disc has
+   * `radius` = r + GEAR_COLL_EXTRA (the tip radius, 0.04 inside the nominal tip r + ⅛) and
+   * `innerRadius` 0: it stands for the hub and the web cells too, which yield no primitives of
+   * their own inside the gear's slab (§4.3). Its mass (§5.1 "Gears") is a solid disc of the pitch
+   * radius, set by the physics layer.
+   */
+  gear?: { pitch: number };
 }
+
+/** A gear's collider radius is r + GEAR_COLL_EXTRA = r + ⅛ − (½ − HC) = r + 0.085 (§4.3). */
+export const GEAR_COLL_EXTRA = GEAR_GROUND_EXTRA - RIM_COLL_INSET;
 
 export type ColliderPrim =
   | { shape: 'cylinder'; center: Vec3; axis: Axis; radius: number; halfLength: number; cell: number; male: boolean }
@@ -47,22 +58,40 @@ export type ColliderPrim =
  *   (half-extent ¼ along the normal, HC transversally). Holes are solid.
  * - male cell → cylinder radius R_COLL_ROD along its axis with the visual rod's extents.
  * - rim (§2.6) → additionally one DiscPrim (see its JSDoc), after the hub's own primitives.
+ * - gear (§2.7, §4.3) → one DiscPrim with `gear` (see DiscPrim.gear); the hub and the web hole cells
+ *   of the gear (isWebCell) yield no primitive of their own (not even their axial extensions, see
+ *   below), and a web crank pin only the parts of its rod outside the slab ±HC about the gear's layer.
  * `cell` is the index into part.cells.
  */
 export function partColliders(part: Part): ColliderPrim[] {
   const origin = partOrigin(part);
   const out: ColliderPrim[] = [];
+  const gears = part.cells.filter((c) => isGear(c) && !isMale(c.kind));
+  // Cells inside a gear's slab (§4.3): the hub and the web cells of each gear of this part.
+  const slabbed = (c: Cell): boolean => gears.some((g) => g === c || isWebCell(g, c));
   for (const t of analyzeCells(part)) {
     const c = t.cell;
     const ctr = localCenter(c, origin);
     const a = c.axis;
+    const inSlab = gears.length > 0 && slabbed(c);
     if (isMale(c.kind)) {
       const [lo, hi] = rodExtent(t);
-      out.push(cyl(ctr, a, R_COLL_ROD, lo, hi, t.index, true));
+      if (!inSlab) out.push(cyl(ctr, a, R_COLL_ROD, lo, hi, t.index, true));
+      else for (const [l, h] of outsideSlab(lo, hi)) out.push(cyl(ctr, a, R_COLL_ROD, l, h, t.index, true));
       continue;
     }
     const hi = t.faces[plusDir(a)]!.connected ? 0.5 : HC;
     const lo = t.faces[minusDir(a)]!.connected ? -0.5 : -HC;
+    if (inSlab) {
+      // No cylinder and no boxes: the disc stands for the cell. Its axial extensions (HC → ½) are
+      // dropped too (DEVIATIONS): they would sit face to face with a meshing partner's tip hull at
+      // the slab face (an 8's hub extension lies 0.045 inside its partner's tip radius) and that
+      // contact jammed a 1:5 pair. The axial neighbour's own barrel still reaches the cell face.
+      void lo;
+      void hi;
+      if (isGear(c)) out.push({ shape: 'disc', center: [ctr[0], ctr[1], ctr[2]], axis: a, radius: c.rim + GEAR_COLL_EXTRA, halfLength: HC, innerRadius: 0, cell: t.index, male: false, gear: { pitch: c.rim } });
+      continue;
+    }
     out.push(cyl(ctr, a, HC, lo, hi, t.index, false));
     for (let d = 0 as Dir; d < 6; d = (d + 1) as Dir) {
       if (axisOfDir(d) === a || !t.faces[d]!.connected) continue;
@@ -77,6 +106,14 @@ export function partColliders(part: Part): ColliderPrim[] {
       out.push({ shape: 'disc', center: [ctr[0], ctr[1], ctr[2]], axis: a, radius: c.rim - RIM_COLL_INSET, halfLength: HC, innerRadius: HC, cell: t.index, male: false });
     }
   }
+  return out;
+}
+
+/** The parts of the axial extent [lo, hi] (relative to a cell centre) outside the gear slab [−HC, HC]. */
+function outsideSlab(lo: number, hi: number): [number, number][] {
+  const out: [number, number][] = [];
+  if (lo < -HC) out.push([lo, Math.min(hi, -HC)]);
+  if (hi > HC) out.push([Math.max(lo, HC), hi]);
   return out;
 }
 

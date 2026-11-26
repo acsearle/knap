@@ -26,7 +26,7 @@ of the view cube to snap the view; Home (`Home`) gives the default isometric vie
 frames the selection or everything.
 
 **Building.** Pick a tool — Select `V`/`Esc`, Pin hole `1`, Axle hole `2`, Axle `3`, Pin `4`,
-Friction pin `5`, Wheel `W`, Erase `E`. A translucent ghost shows what a click would add and the status bar
+Friction pin `5`, Wheel `W`, Gear `T`, Erase `E`. A translucent ghost shows what a click would add and the status bar
 says it in words ("Extend part 3 · pin hole ∥ Z"); red means not possible, with the reason.
 - Click the grid to start a new part (its holes run along Z, so a beam stands upright). Click a
   face of a part to *extend* it; a pin tool on the mouth of an empty hole *inserts* a pin, pushing
@@ -55,6 +55,26 @@ says it in words ("Extend part 3 · pin hole ∥ Z"); red means not possible, wi
   *crank hole* to it, which a pin can then go into; a pin or axle tool there says "add a hole
   here first". The build tools do nothing on a wheel's tread (the status bar says to point at its
   flat face or a hole). Each wheel carries an index mark (a painted groove) so its rotation is visible.
+- **Gears.** A gear is a wheel with teeth: a pin hole or axle hole grown into a toothed disc of
+  8, 16, 24 or 40 teeth (pitch radius ½, 1, 1½, 2½ units; module 1 mm). With the Gear tool (`T`)
+  click a hole to make it an 8-tooth gear and click again to step up 8 → 16 → 24 → 40;
+  `Shift`+click steps down. When the next size does not fit but a larger one does (a long beam's
+  middle hole: its cells are the web of a 40), the click goes straight to that size. A gear needs
+  a layer of its own part to itself: sleeve a hole onto a pin, or extend a hole out of a beam along
+  its axis. On a plain wheel the Gear tool makes the largest gear that fits inside
+  it, and the Wheel tool turns a gear back into a plain wheel. Erase on a gear steps it down one
+  size. Two gears of different parts **mesh** when their axes are parallel, they are in the same
+  layer, their hubs are in a straight line along the grid and exactly the sum of the pitch radii
+  apart: 8+8 (1 apart), 8+24 and 16+16 (2), 8+40 and 24+24 (3), 24+40 (4), 40+40 (5). The ghost and
+  the status bar say when a gear would mesh, with the ratio ("meshes with part 2 (8 teeth, 5:1)"),
+  and when a gear close by would not, and why ("a 16 meshes only with another 16"); the `?` help
+  lists the pairs;
+  tips that would overlap without meshing are refused ("the teeth would clash"). Build a small gear
+  before a large one next to it (a bare hole inside a large gear's tips cannot become a gear). A
+  hole tool on a gear's flat face adds a crank hole within the web (24 and 40 only); the teeth are
+  a tread (nothing builds on them). While simulating, meshed gears turn at their exact ratio and
+  can come into and out of mesh (a gear sliding along an axle, or on a swinging arm). One tooth of
+  each gear (the *index tooth*) is painted, and gears of 16 teeth and up carry a face groove.
 - **Model settings** (the *Model* block at the top of the right-hand panel, edit mode only, saved
   in the file, undoable): **Ground** (`G`) puts a floor under the model at its lowest point (it
   follows the model as you edit; drawn the same way in edit and simulate mode, as a barely darker
@@ -79,14 +99,17 @@ says it in words ("Extend part 3 · pin hole ∥ Z"); red means not possible, wi
 **Files.** New, Open… (`⌘/Ctrl+O`, a `.knap.json` file), Save (`⌘/Ctrl+S`, downloads
 `.knap.json`). The model is autosaved in the browser and restored on the next visit; without an
 autosave knap starts with the four-bar example. A model that uses wheels, the ground or a free root
-is saved as file version 2; version 1 files open unchanged. The Examples menu has a pendulum, a triple
+is saved as file version 2, a model with gears as version 3; older files open unchanged. The Examples menu has a pendulum, a triple
 pendulum, a four-bar and a parallelogram linkage, a sliding axle, a weld test, a collision test, a
-crank wheel (a wheel on a fixed upright turned by a link hanging from a crank hole) and a cart
-(a free vehicle on the ground that rolls back and forth under a swinging arm).
+crank wheel (a wheel on a fixed upright turned by a link hanging from a crank hole), a cart
+(a free vehicle on the ground that rolls back and forth under a swinging arm) and a gear train (a
+40-tooth gear with a weighted arm driving an 8-tooth pinion 5:1, and from the pinion's second
+8-tooth gear a 24, each with a pointer).
 
 **Show kinematics** (`K`) tints each rigid body in its own colour and draws a glyph on every joint
-axis (ring = revolute, ring + double arrow = cylindrical, double arrow = prismatic), so you can see
-what is welded and what moves before pressing Play.
+axis (ring = revolute, ring + double arrow = cylindrical, double arrow = prismatic) and two short
+interlocking ticks at the pitch point of every gear mesh, so you can see what is welded, what moves
+and what drives what before pressing Play. The status bar counts the meshes too.
 
 **Simulating.** Play (`Space`) freezes the model and runs the physics; Pause (`Space`), Step
 (`.`, 1/60 s), and the speed buttons 1× ½× ¼× ⅒× (default ¼× so the motion is readable) control
@@ -126,6 +149,13 @@ cannot turn the mechanism (drag it instead).
   part or another part's wheel; a pin or axle of another part may go through its hub or a crank
   hole), but adds no joints. In the physics a wheel is a true cylinder against the ground (and
   against other wheels), so it rolls; against beams, pins and axles it is a 32-sided prism.
+- **Gears.** A gear's tip circle blocks other parts' cells; its own part may have crank holes and
+  pins in its web. A mesh is not a joint of the kinematic analysis: in the physics each pair of
+  gears that comes into mesh gets one constraint row that keeps their pitch circles rolling on each
+  other (exact ratio, the teeth stay interleaved), switched on and off as the gears move into and
+  out of mesh. There are no tooth colliders: against beams and the ground a gear is a smooth disc
+  at its tip radius. While a meshed gear turns fast the simulation takes up to 8 smaller steps per
+  step, so fast gear trains stay exact.
 
 ## Engines
 
@@ -188,8 +218,8 @@ From `docs/DEVIATIONS.md` §5 (physics):
 Wheels, ground and vehicles (`docs/DEVIATIONS.md` §5, §7):
 - Wheels roll properly only on the ground (and against other wheels). Against beams and other
   parts a wheel is a 32-sided polygon, so a wheel rolling along a beam bumps and slows quickly.
-- No gears yet (toothed rims that mesh), no tyres as separate parts, no sloped or uneven ground,
-  no motors: a vehicle moves only by gravity or by dragging it.
+- No tyres as separate parts, no sloped or uneven ground, no motors: a vehicle moves only by
+  gravity or by dragging it.
 - Wheels sink slightly into the floor (≈ 0.006 units at rest, up to ≈ 0.08 when rolling very fast,
   up to ≈ 0.17 when a wheel wobbles down onto its face); a resting cart creeps by ≈ 1e-5 units/s.
 - A wheel lying across a beam that lies on the floor sinks into the beam's edge (≈ 0.37 of the
@@ -205,9 +235,36 @@ Wheels, ground and vehicles (`docs/DEVIATIONS.md` §5, §7):
 - A free vehicle costs ≈ 0.4–0.5 s of physics per simulated second (the cart example), so at 1×
   it runs slower than real time; at the default ¼× it needs ≈ 0.1 s of physics per second.
 
+Gears (`docs/DESIGN.md` §2.7, §5.1, §10):
+- Gears mesh only in a straight line along a grid axis: two gears whose hubs are diagonal (a 40
+  and a 40 at (3, 4), which are exactly 5 apart) are refused, not meshed.
+- A 16-tooth gear meshes only with another 16 (with the other sizes the hub distance would be a
+  half unit, which the grid does not have).
+- No bevel, worm or crown gears, no racks, no ratchets (a pawl cannot hold against smooth tip
+  discs; a declared one-way mesh is not designed yet), and no friction in a mesh (only the pins and
+  axles have friction).
+- Gears that are not in mesh do not collide with each other: perpendicular gears, or one pushed
+  into another while simulating, pass through each other. Against beams, pins, axles and the
+  ground a gear is a smooth disc of its tip radius, so a beam resting on a gear does not catch in
+  the teeth.
+- Build order matters next to a gear: a bare hole that a gear's tips reach cannot become a gear,
+  so make the small gear first, or shrink the big one and grow it back. Two 8-tooth gears side by
+  side cannot be made with the Gear tool directly (each bare hole is inside the other's tips);
+  build one apart and move it next to the other.
+- An 8-tooth gear has no face groove, and its painted index tooth is edge-on when the gear is
+  seen face-on, so a bare 8 seen square-on does not show its rotation; give it a pointer. A loose
+  8-tooth gear rolling on the ground wanders sideways (it has too few tips to roll true).
+- Rapier's f32 solve of a mesh adds energy while gears spin (≈ 10 % of the kinetic energy per
+  second for a fast pair); the energy guard removes it, so with friction Off the Gear train swings
+  for ever within the guard's 1 % band (its arm reaches 0.6° above its start), and a spinning
+  engagement loses a little speed to the guard.
+- A meshed gear is limited to 300 rad/s, and a gearbox moving faster than 350 units/s lets its
+  gears go out of mesh (it would otherwise blow up at Rapier's speed clamp).
+
 Editor and app:
 - Picking is against cell cubes, so a part hidden behind another can only be reached by orbiting.
-  A wheel is picked as its nominal disc (radius r, one cell thick), not its exact mesh.
+  A wheel is picked as its nominal disc (radius r, one cell thick), not its exact mesh; a gear as
+  its tip disc.
 - The floor is unbounded: seen from above, in the orthographic view, its tint fills the whole
   background. The contact shadow is a soft blob under everything less than 3 units above the floor
   (darkest where a part touches it, with a broader soft skirt around), the same from every
@@ -244,8 +301,9 @@ npm run e2e -- app-build app-sim     # run some e2e scripts (E2E_NO_BUILD=1 reus
 ```
 
 The app e2e scripts (`e2e/app-*.e2e.mjs`) drive the real UI with Playwright mouse and keyboard
-events: building a pendulum from scratch, every example in edit and simulate mode (the crank wheel
-and the cart run to rest), building and growing wheels, undo/redo of every edit, files and
+events: building a pendulum from scratch, every example in edit and simulate mode (the crank wheel,
+the cart and the gear train run to rest), building and growing wheels, building gears and
+simulating them, undo/redo of every edit, files and
 autosave, grabbing in simulate mode, layout. They use the debug hook
 `window.__knap` (see `src/app/testhook.ts`) only to read state and find screen positions.
 Headless Chromium renders with SwiftShader (software WebGL), so frames are slow there (≈ 3–6 fps

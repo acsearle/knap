@@ -14,6 +14,10 @@
 //   - tread floor: normal ∥ +dir at s = r1 − depth, within the width;
 //   - side walls: normal ∥ the tangential axis at |t| = width/2, inside the groove's extent;
 //   - end wall: normal ∥ −dir at s = r0, within the width.
+//   - a gear's face groove (RimMark.gear, §4.2): also its inner end wall (normal +dir at s = r0)
+//     and its outer end wall (normal −dir at s = r1, the groove stops inside the root circle).
+//     (On a plain wheel the inner end wall's normal is +dir too, so the test above never matches
+//     it and that small wall stays unpainted; left as it was so wheels draw exactly as before.)
 // A mark the geometry left out (covered by other material of the part) has no such vertices, so
 // nothing is painted there either. Pure (no three.js): unit-tested in tests/view.
 import type { Part } from '../core';
@@ -50,8 +54,8 @@ export function markWeights(part: Part, positions: Float32Array, normals: Float3
       const inTread = mk.tread && s >= treadFloor - TOL;
       let on = false;
       if (Math.abs(na) > 0.9) on = Math.abs(Math.abs(ax) - floorAx) < TOL && inFace;
-      else if (ns > 0.9) on = inTread && Math.abs(s - treadFloor) < TOL;
-      else if (ns < -0.9) on = Math.abs(s - mk.r0) < TOL && inFace;
+      else if (ns > 0.9) on = (inTread && Math.abs(s - treadFloor) < TOL) || (!!mk.gear && Math.abs(s - mk.r0) < TOL && inFace);
+      else if (ns < -0.9) on = (Math.abs(s - mk.r0) < TOL || (!!mk.gear && Math.abs(s - mk.r1) < TOL)) && inFace;
       else if (Math.abs(nk) > 0.9) on = Math.abs(Math.abs(t) - hw) < TOL && (inFace || inTread);
       if (on) out[i] = 1;
     }

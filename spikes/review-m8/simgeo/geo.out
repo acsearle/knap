@@ -1,0 +1,36 @@
+random gear parts: 300 parts, 358 gears, 2 not closed/one-shell, 11 problems, 32 s
+  seed 54: gear 0 r 0.5 drawn max radius in slab 2.5143 vs tip 0.5938
+  seed 74: gear 0 r 0.5 drawn max radius in slab 2.5143 vs tip 0.5938
+  seed 83: gear 0 r 0.5 drawn max radius in slab 2.6435 vs tip 0.5938
+  seed 83: gear 7 r 1 drawn max radius in slab 2.5143 vs tip 1.0938
+  seed 107: gear 0 r 0.5 drawn max radius in slab 3.5386 vs tip 0.5938
+  seed 123: gear 1 r 0.5 drawn max radius in slab 2.0789 vs tip 0.5938
+  seed 143: edge problems 6 (edge 156>157 used 2×; edge 156>157 has no unique twin), shells 1 [{"x":0,"y":0,"z":0,"kind":"pinHole","axis":0,"rim":1.5,"teeth":true},{"x":0,"y":1,"z":0,"kind":"pin","axis":0},{"x":1,"y":0,"z":0,"kind":"pinHole","axis":0},{"x":1,"y":0,"z":-1,"kind":"axleHole","axis":0,"rim":1.5,"teeth":true},{"x":-1,"y":1,"z":0,"kind":"pinHole","axis":2}]
+  seed 158: edge problems 6 (edge 99>108 used 2×; edge 99>108 has no unique twin), shells 1 [{"x":0,"y":0,"z":0,"kind":"pinHole","axis":1,"rim":1.5,"teeth":true},{"x":1,"y":0,"z":0,"kind":"axleHole","axis":1},{"x":1,"y":-1,"z":0,"kind":"axleHole","axis":1,"rim":1,"teeth":true},{"x":1,"y":-2,"z":0,"kind":"pinHole","axis":0}]
+  seed 218: gear 5 r 1 drawn max radius in slab 2.5143 vs tip 1.0938
+  seed 255: gear 0 r 0.5 drawn max radius in slab 2.0789 vs tip 0.5938
+  seed 338: gear 7 r 0.5 drawn max radius in slab 3.5095 vs tip 0.5938
+pair 8+8 axis 2 spun at 40 rad/s: 1 meshed pairs, 480 fixed steps, min outline clearance 0.0187 at step 234 (negative = teeth intersect; ideal ≥ 0.0157)
+pair 8+8 axis 0 spun at 40 rad/s: 1 meshed pairs, 480 fixed steps, min outline clearance 0.0187 at step 432 (negative = teeth intersect; ideal ≥ 0.0157)
+pair 8+8 axis 1 spun at 40 rad/s: 1 meshed pairs, 480 fixed steps, min outline clearance 0.0187 at step 432 (negative = teeth intersect; ideal ≥ 0.0157)
+pair 8+24 axis 2 spun at 40 rad/s: 1 meshed pairs, 480 fixed steps, min outline clearance 0.0165 at step 413 (negative = teeth intersect; ideal ≥ 0.0157)
+pair 8+24 axis 0 spun at 40 rad/s: 1 meshed pairs, 480 fixed steps, min outline clearance 0.0165 at step 413 (negative = teeth intersect; ideal ≥ 0.0157)
+pair 8+24 axis 1 spun at 40 rad/s: 1 meshed pairs, 480 fixed steps, min outline clearance 0.0165 at step 413 (negative = teeth intersect; ideal ≥ 0.0157)
+pair 16+16 axis 2 spun at 40 rad/s: 1 meshed pairs, 480 fixed steps, min outline clearance 0.0235 at step 419 (negative = teeth intersect; ideal ≥ 0.0157)
+pair 16+16 axis 0 spun at 40 rad/s: 1 meshed pairs, 480 fixed steps, min outline clearance 0.0235 at step 69 (negative = teeth intersect; ideal ≥ 0.0157)
+pair 16+16 axis 1 spun at 40 rad/s: 1 meshed pairs, 480 fixed steps, min outline clearance 0.0235 at step 435 (negative = teeth intersect; ideal ≥ 0.0157)
+pair 8+40 axis 2 spun at 40 rad/s: 1 meshed pairs, 480 fixed steps, min outline clearance 0.0157 at step 216 (negative = teeth intersect; ideal ≥ 0.0157)
+pair 8+40 axis 0 spun at 40 rad/s: 1 meshed pairs, 480 fixed steps, min outline clearance 0.0157 at step 66 (negative = teeth intersect; ideal ≥ 0.0157)
+pair 8+40 axis 1 spun at 40 rad/s: 1 meshed pairs, 480 fixed steps, min outline clearance 0.0157 at step 160 (negative = teeth intersect; ideal ≥ 0.0157)
+pair 24+24 axis 2 spun at 40 rad/s: 1 meshed pairs, 480 fixed steps, min outline clearance 0.0235 at step 76 (negative = teeth intersect; ideal ≥ 0.0157)
+pair 24+24 axis 0 spun at 40 rad/s: 1 meshed pairs, 480 fixed steps, min outline clearance 0.0235 at step 76 (negative = teeth intersect; ideal ≥ 0.0157)
+pair 24+24 axis 1 spun at 40 rad/s: 1 meshed pairs, 480 fixed steps, min outline clearance 0.0235 at step 63 (negative = teeth intersect; ideal ≥ 0.0157)
+pair 24+40 axis 2 spun at 40 rad/s: 1 meshed pairs, 480 fixed steps, min outline clearance 0.0238 at step 1 (negative = teeth intersect; ideal ≥ 0.0157)
+pair 24+40 axis 0 spun at 40 rad/s: 1 meshed pairs, 480 fixed steps, min outline clearance 0.0238 at step 1 (negative = teeth intersect; ideal ≥ 0.0157)
+pair 24+40 axis 1 spun at 40 rad/s: 1 meshed pairs, 480 fixed steps, min outline clearance 0.0238 at step 1 (negative = teeth intersect; ideal ≥ 0.0157)
+pair 40+40 axis 2 spun at 40 rad/s: 1 meshed pairs, 480 fixed steps, min outline clearance 0.0235 at step 1 (negative = teeth intersect; ideal ≥ 0.0157)
+pair 40+40 axis 0 spun at 40 rad/s: 1 meshed pairs, 480 fixed steps, min outline clearance 0.0235 at step 1 (negative = teeth intersect; ideal ≥ 0.0157)
+pair 40+40 axis 1 spun at 40 rad/s: 1 meshed pairs, 480 fixed steps, min outline clearance 0.0235 at step 1 (negative = teeth intersect; ideal ≥ 0.0157)
+crane 1:5 drop: 1 meshed pairs, 1440 fixed steps, min outline clearance 0.0157 at step 1179 (negative = teeth intersect; ideal ≥ 0.0157)
+crane 1:25 drop: 2 meshed pairs, 1440 fixed steps, min outline clearance 0.0157 at step 53 (negative = teeth intersect; ideal ≥ 0.0157)
+gear-train example: 2 meshed pairs, 2400 fixed steps, min outline clearance 0.0157 at step 311 (negative = teeth intersect; ideal ≥ 0.0157)

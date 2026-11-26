@@ -297,6 +297,44 @@ function cartExample(): Model {
   return setFixRoot(setGround(b.root(chassis).build(), true), false);
 }
 
+/**
+ * 10. Gear train (§2.7): no ground, fixed root, every gear axis along Z.
+ * - Frame (fixed), all in layer −1 behind the mechanism: an upright x = 0 from a foot at y = −8
+ *   (x = −2…2) up to y = 3, and a top beam along y = 3 out to x = 2. Tall enough that the arm,
+ *   hanging at rest (lowest point y ≈ −7.2), stays inside the view fitted at load.
+ * - Arm (part 3): a 40-tooth gear at (0, 0, 1) on a smooth pin from the frame into the first hole
+ *   of a 7-hole arm in layer 0 that starts horizontal along −X, with a 3 × 3 weight at its end. The
+ *   arm only ever swings through the lower half (it cannot gain energy), clear of everything above
+ *   y = 1.5 (corner of the weight).
+ * - Pinion (part 2), on the line of centres straight above at (0, 3): a balanced 3-hole pointer in
+ *   layer 0 (its middle hole on a smooth pin from the frame), an 8-tooth gear in layer 1 (meshing
+ *   the 40) and a second 8-tooth gear in layer 2; the pinion turns on its pointer's hole. (Built
+ *   when §2.7 rule 1 still forbade a pin of another part in a meshing 8's hub; since review m8 that
+ *   is allowed — DEVIATIONS "Gears" — but the layout is kept.)
+ * - Output (part 4): a 24-tooth gear at (2, 3, 2) meshing the second 8, on a long pin from the
+ *   frame (a friction pin in the frame, smooth in the 24's hub), and a balanced 3-hole pointer in
+ *   layer 3 in front of it.
+ * 40 → 8 is 5:1 the other way, 8 → 24 is 1:3 the other way again: the pinion turns 5× as fast as
+ * the arm, opposite to it, and the output 5/3 as fast, the same way as the arm. Each gear and its
+ * pointer are one part. The pinion pointer's sweep (radius 1.47 about (0, 3), layer 0) clears the
+ * output pin (radius 0.29 at distance 2) by 0.24.
+ */
+function gearTrain(): Model {
+  const b = new ModelBuilder();
+  const frame = b.add([...beam([-2, -8, -1], [2, -8, -1]), ...beam([0, -7, -1], [0, 3, -1]), ...beam([1, 3, -1], [2, 3, -1])], C.frame);
+  // Pinion first (gears are checked as each part is added: the 8s go in before the larger gears
+  // whose tips reach their hubs).
+  b.add([...beam([-1, 3, 0], [1, 3, 0]), makeCell(0, 3, 1, 'pinHole', 2, 0.5, true), makeCell(0, 3, 2, 'pinHole', 2, 0.5, true)], C.blue);
+  const arm = [...beam([0, 0, 0], [-6, 0, 0]), makeCell(0, 0, 1, 'pinHole', 2, 2.5, true)];
+  for (const x of [-4, -5, -6]) for (const y of [-1, 1]) arm.push(cell([x, y, 0], 'pinHole', 2)); // weight
+  b.add(arm, C.red);
+  b.add([makeCell(2, 3, 2, 'pinHole', 2, 1.5, true), ...beam([2, 2, 3], [2, 4, 3])], C.yellow);
+  b.add(pin([0, 0, -1], [0, 0, 0])); // arm pivot
+  b.add(pin([0, 3, -1], [0, 3, 0])); // pinion pivot
+  b.add([makeCell(2, 3, -1, 'frictionPin', 2), ...pin([2, 3, 0], [2, 3, 2])]); // output pivot
+  return b.root(frame).build();
+}
+
 export interface Example {
   /** Stable identifier (used by loadExample and tests). */
   name: string;
@@ -359,6 +397,12 @@ export const EXAMPLES: readonly Example[] = [
     title: 'Cart',
     description: 'A free cart on the ground (nothing fixed): four wheels of radius 1.5 under a chassis with a weighted arm on a smooth pin. The arm falls and swings, and the cart rolls back and forth under it.',
     build: cartExample,
+  },
+  {
+    name: 'gear-train',
+    title: 'Gear train',
+    description: 'A 40-tooth gear with an off-balance arm drives an 8-tooth pinion (5:1), whose second 8-tooth gear drives a 24 (1:3). The arm falls and swings; the pinion pointer whirls five times as fast the other way, the third pointer turns 5/3 as fast the same way.',
+    build: gearTrain,
   },
 ];
 

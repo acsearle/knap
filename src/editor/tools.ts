@@ -1,9 +1,10 @@
-// Tool state and click resolution for Build / Wheel / Erase / Select (DESIGN.md §7.2, §7.3). Pure.
+// Tool state and click resolution for Build / Wheel / Gear / Erase / Select (DESIGN.md §7.2, §7.3). Pure.
 //
 // See the header of ./index.ts for the contract and the orientation-cycling rule.
 import {
   AXES,
   DIRS,
+  GEAR_RADII,
   RIM_MIN,
   RIM_STEP,
   addCell,
@@ -16,8 +17,15 @@ import {
   cellsAt,
   defaultColorFor,
   discOverlapsCell,
+  discRadiusOf,
+  fineDiscOverlapsCell,
+  gearMeshes,
+  gearTeeth,
+  gearsOf,
   hasRim,
+  isGear,
   isHole,
+  isWebCell,
   isMale,
   isValidRim,
   kindLabel,
@@ -25,17 +33,22 @@ import {
   mateType,
   partById,
   removeCell,
+  canSetGear,
+  setGear,
   setRim,
   shareResult,
+  tipRadius,
 } from '../core';
 import type { Axis, Cell, Dir, Kind, Model, Vec3i } from '../core';
+import type { KinematicGraph } from '../core/kinematics';
+import { kinematicsSummary } from './kinview';
 import { pickBack, pickCell } from './picking';
 import type { PickHit, Ray } from './picking';
 
 // ---------------------------------------------------------------------------------------------
 // Tools and tool state
 
-export type Tool = 'select' | 'erase' | 'wheel' | Kind;
+export type Tool = 'select' | 'erase' | 'wheel' | 'gear' | Kind;
 
 /** Keyboard shortcuts (§7.2), lower-case `KeyboardEvent.key` → tool. `Escape` also selects 'select'. */
 export const TOOL_KEYS: Readonly<Record<string, Tool>> = {
@@ -47,12 +60,13 @@ export const TOOL_KEYS: Readonly<Record<string, Tool>> = {
   '4': 'pin',
   '5': 'frictionPin',
   w: 'wheel',
+  t: 'gear',
   e: 'erase',
 };
 
-/** The five build tools (one per cell kind); not Select, Wheel or Erase. */
+/** The five build tools (one per cell kind); not Select, Wheel, Gear or Erase. */
 export function isBuildTool(t: Tool): t is Kind {
-  return t !== 'select' && t !== 'erase' && t !== 'wheel';
+  return t !== 'select' && t !== 'erase' && t !== 'wheel' && t !== 'gear';
 }
 
 export interface ToolState {
@@ -338,6 +352,8 @@ interface Attempt {
   throughParts?: number[];
   /** Extend into a virtual cell of a wheel (§7.3): the description says "in the wheel". */
   inWheel?: boolean;
+  /** … of a gear: "in the gear". */
+  inGear?: boolean;
 }
 
 function attempt(
@@ -379,7 +395,7 @@ function describe(a: Attempt, ctx: Ctx, axis: Axis): string {
   const what = `${kindLabel(ctx.kind)} ∥ ${axisLabel(axis)}`;
   switch (a.action) {
     case 'extend':
-      return `Extend part ${a.partId} · ${what}${a.inWheel ? ' in the wheel' : ''}`;
+      return `Extend part ${a.partId} · ${what}${a.inGear ? ' in the gear' : a.inWheel ? ' in the wheel' : ''}`;
     case 'insert':
       if (a.joins) return `Extend part ${a.partId} · insert ${what} into part ${ctx.hoverPartId}`;
       if (a.extra?.length) {
@@ -398,6 +414,18 @@ function describe(a: Attempt, ctx: Ctx, axis: Axis): string {
 }
 
 /**
+ * A build refusal "(3, 0, 1) is inside the gear of part 3" (§2.7 rule 1: no bare cell inside a tip
+ * disc) depends on build order: with the small gear's hole there first, the same final model is
+ * valid and meshes. Say so (review m8 ux: a new user building the Gear train by hand hit this and
+ * ended with no mesh).
+ */
+export function withGearOrderHint(reason: string): string {
+  const m = /is inside the gear of part (\d+)/.exec(reason);
+  if (!m) return reason;
+  return `${reason} · build this before part ${m[1]}'s gear grows over it, or shrink that gear first (Gear tool, Shift+click) and grow it back after`;
+}
+
+/**
  * @param optionsOverride the [R] options to show instead of a.valid (sleeve-or-extend hover, see
  *   resolveCellHover); must contain the chosen axis.
  */
@@ -406,7 +434,7 @@ function toProposal(a: Attempt, ctx: Ctx, optionsOverride?: readonly Axis[]): Pr
   const cell = makeCell(a.pos[0], a.pos[1], a.pos[2], ctx.kind, axis);
   const extraCells = (a.extra ?? []).map((q) => makeCell(q[0], q[1], q[2], ctx.kind, axis));
   const valid = a.valid.length > 0;
-  const reason = valid ? undefined : (a.reason ?? a.reasons.get(axis) ?? 'not possible here');
+  const reason = valid ? undefined : withGearOrderHint(a.reason ?? a.reasons.get(axis) ?? 'not possible here');
   const createsPart = a.partId === null;
   const color = createsPart ? newPartColor(ctx.state, ctx.kind) : null;
   const ghostColor = color ?? partById(ctx.m, a.partId!)?.color ?? newPartColor(ctx.state, ctx.kind);
@@ -488,8 +516,14 @@ export function resolveBuild(model: Model, pick: CellPick | null, grid: GridPick
     if (pick.tread) {
       const p = noProposal(model);
       p.hoverPartId = part.id;
-      p.reason = "point at the wheel's flat face or at a hole to build on a wheel";
-      p.description = `Part ${part.id} · wheel tread — ${p.reason}`;
+      if (isGear(C)) {
+        // Gears (§7.3 "Gears in picking"): the teeth are a tread.
+        p.reason = "point at the gear's flat face or at a hole to build on a gear";
+        p.description = `Part ${part.id} · gear teeth — ${p.reason}`;
+      } else {
+        p.reason = "point at the wheel's flat face or at a hole to build on a wheel";
+        p.description = `Part ${part.id} · wheel tread — ${p.reason}`;
+      }
       return p;
     }
     const G = pick.virtual;
@@ -559,28 +593,79 @@ function deepInsert(m: Model, kind: Kind, C: Cell, n: Vec3i): Attempt | null {
 }
 
 /**
- * Is G a virtual cell of the wheel with hub `hub` in `part` (§7.3): the hub carries a rim whose
- * disc overlaps G, and G is not one of the part's own cells?
+ * The disc a hole cell carries for the editor (§2.6, §2.7): its pitch radius `r`, whether it is a
+ * gear, and the radius it is picked and targeted by (`reach`: the tip radius r + 3/32 for a gear,
+ * r for a plain wheel). null for a bare cell, a male cell or a malformed rim.
  */
-export function isVirtualCellOf(part: { cells: readonly Cell[] }, hub: Cell, G: Vec3i): boolean {
-  if (!hasRim(hub) || !isHole(hub.kind) || !isValidRim(hub.rim)) return false;
-  if (part.cells.some((c) => c.x === G[0] && c.y === G[1] && c.z === G[2])) return false;
-  return discOverlapsCell([hub.x, hub.y, hub.z], hub.axis, hub.rim, G);
+export function editorDiscOf(c: Cell): { r: number; gear: boolean; reach: number } | null {
+  if (!isHole(c.kind)) return null;
+  const r = discRadiusOf(c);
+  if (r === null) return null;
+  const gear = isGear(c);
+  return { r, gear, reach: gear ? tipRadius(r) : r };
 }
 
 /**
- * Hover on a virtual cell G of the wheel whose hub is `hub` (part P), through its flat face `dir`
- * (§7.3): a hole tool extends P with a hole *at G* (a crank hole; ∥ the hub axis first, then the
- * other axes in [R] order); with New part it starts a new part at G + n; a male tool is invalid
- * ("add a hole here first": a pin goes into a crank hole).
+ * Does the disc of hub cell `hub` (a plain wheel's disc, or a gear's tip disc) overlap the cell at
+ * `pos` with positive volume (the exact core predicates; only in the hub's layer)? False for a
+ * cell without a disc.
+ */
+export function editorDiscOverlaps(hub: Cell, pos: Vec3i): boolean {
+  const d = editorDiscOf(hub);
+  if (!d) return false;
+  const h: Vec3i = [hub.x, hub.y, hub.z];
+  return d.gear ? fineDiscOverlapsCell(h, hub.axis, d.reach, pos) : discOverlapsCell(h, hub.axis, d.r, pos);
+}
+
+/**
+ * Is G a virtual cell of the wheel or gear with hub `hub` in `part` (§7.3): the hub carries a disc
+ * (a plain rim, or a gear's tip disc) that overlaps G, and G is not one of the part's own cells?
+ */
+export function isVirtualCellOf(part: { cells: readonly Cell[] }, hub: Cell, G: Vec3i): boolean {
+  if (!editorDiscOf(hub)) return false;
+  if (part.cells.some((c) => c.x === G[0] && c.y === G[1] && c.z === G[2])) return false;
+  return editorDiscOverlaps(hub, G);
+}
+
+/**
+ * Why a crank hole / crank pin cannot go at the virtual cell G of the gear `hub` (§7.3 "Gears in
+ * picking", §2.7 rule 5: only the web, du² + dv² ≤ (r − ½)², has room): null when G is in the web.
+ */
+export function gearWebRefusal(hub: Cell & { rim: number }, G: Vec3i): string | null {
+  if (isWebCell(hub, makeCell(G[0], G[1], G[2], hub.kind, hub.axis))) return null;
+  const T = gearTeeth(hub.rim);
+  const n = hub.rim - 0.5;
+  if (n < 1) return `${aTeeth(T)} gear has no room for crank holes`;
+  // The rule measures grid-cell centres; the cursor itself may be nearer the hub than N (review m8 ux).
+  return `too close to the teeth — crank holes go on grid cells centred within ${n} of the hub`;
+}
+
+/** "an 8-tooth", "a 16-tooth". */
+function aTeeth(T: number): string {
+  return `${T === 8 ? 'an' : 'a'} ${T}-tooth`;
+}
+
+/**
+ * Hover on a virtual cell G of the wheel or gear whose hub is `hub` (part P), through its flat
+ * face `dir` (§7.3): a hole tool extends P with a hole *at G* (a crank hole; ∥ the hub axis first,
+ * then the other axes in [R] order); with New part it starts a new part at G + n; on a plain wheel
+ * a male tool is invalid ("add a hole here first": a pin goes into a crank hole). On a gear, hole
+ * and male tools both extend P at G (a crank hole or a crank pin), but only in the web (§2.7 rule
+ * 5); elsewhere on the face they are refused with gearWebRefusal's reason.
  */
 function resolveVirtualHover(m: Model, kind: Kind, P: number, hub: Cell, G: Vec3i, dir: Dir, state: ToolState): Proposal {
   const ctx: Ctx = { m, kind, state, highlight: { pos: G, dir }, hoverPartId: P };
   const order = cyclicFrom(hub.axis);
-  if (isMale(kind)) return toProposal({ ...failed('extend', G, P, [hub.axis], 'add a hole here first'), inWheel: true }, ctx);
+  const gear = isGear(hub);
+  if (!gear && isMale(kind)) return toProposal({ ...failed('extend', G, P, [hub.axis], 'add a hole here first'), inWheel: true }, ctx);
   if (state.newPart) {
     const T = add3(G, DIRS[dir]!);
     return toProposal(attempt(m, 'newAdjacent', kind, T, null, preferFirst(order, occupantAxis(m, T, kind, null))), ctx);
+  }
+  if (gear) {
+    const why = gearWebRefusal(hub, G);
+    if (why) return toProposal({ ...failed('extend', G, P, [hub.axis], why), inWheel: true, inGear: true }, ctx);
+    return toProposal({ ...attempt(m, 'extend', kind, G, P, order), inWheel: true, inGear: true }, ctx);
   }
   return toProposal({ ...attempt(m, 'extend', kind, G, P, order), inWheel: true }, ctx);
 }
@@ -753,6 +838,8 @@ export interface WheelProposal {
   description: string;
   /** Parts the wheel's part becomes (1 normally; ≥ 2 when shrinking splits off cells held only by the disc). */
   pieces: number;
+  /** The hub is a gear: the click (either mode) makes it a plain wheel of the same radius (§7.2). */
+  convert?: true;
   apply(current: Model): Model;
 }
 
@@ -773,37 +860,36 @@ function noWheel(m: Model, mode: 'grow' | 'shrink'): WheelProposal {
 }
 
 /**
- * The hole cell a Wheel / Erase-on-rim hover acts on: the hub for a disc hit (virtual cell or
- * tread); the hovered hole cell; for a male cell sitting in a hole of another part (a pin or axle
+ * The hole cell a Wheel / Gear / Erase-on-rim hover acts on: the hub for a disc hit (virtual cell
+ * or tread); the hovered hole cell; for a male cell sitting in a hole of another part (a pin or axle
  * through a hub, picked through the hole's mouth), that hole. null for a stale pick; `male` when a
  * lone male cell is hovered.
+ *
+ * Crank holes (§7.2): a bare hole of the part, in a disc's layer, that the disc overlaps (the exact
+ * core disc × cell predicate: a plain wheel's disc, or a gear's tip disc — so a gear's web holes and
+ * any own bare hole its teeth reach) acts on that wheel or gear, not on itself: a second disc there
+ * would be hidden inside the first or poke out of it. With several such discs, the nearest hub
+ * (centre distance), then the lower cell index.
  */
 function wheelTarget(m: Model, pick: CellPick): { partId: number; cellIndex: number; cell: Cell } | { male: Cell; partId: number } | null {
   const part = partById(m, pick.partId);
   const cell = part?.cells[pick.cellIndex];
   if (!part || !cell) return null;
   if (pick.virtual || pick.tread) {
-    if (!hasRim(cell) || !isHole(cell.kind)) return null;
+    if (!editorDiscOf(cell)) return null;
     if (pick.virtual && !isVirtualCellOf(part, cell, pick.virtual)) return null;
     return { partId: part.id, cellIndex: pick.cellIndex, cell };
   }
   if (isHole(cell.kind)) {
-    // A bare hole whose centre lies inside (or on the rim of) a wheel of its own part, in that
-    // wheel's layer (a crank hole, including one bridged at the rim's edge, §7.2): the user is
-    // pointing at that wheel — a second disc there would be hidden inside the first or poke out of
-    // it (M7 review: (2,1) in r 2.5, (0,2) in r 2, (1,1) in r 1.5 still grew their own disc when
-    // only holes wholly inside the disc counted). Several such wheels: the nearest hub, then the
-    // lower cell index.
-    if (!hasRim(cell)) {
+    if (!hasRim(cell) && cell.teeth === undefined) {
+      const pos: Vec3i = [cell.x, cell.y, cell.z];
       let best = -1;
       let bestD = Infinity;
       for (let i = 0; i < part.cells.length; i++) {
         const h = part.cells[i]!;
-        if (!hasRim(h) || !isHole(h.kind) || !isValidRim(h.rim)) continue;
-        const a = h.axis;
-        if ((a === 0 ? h.x - cell.x : a === 1 ? h.y - cell.y : h.z - cell.z) !== 0) continue;
-        const d2 = (h.x - cell.x) ** 2 + (h.y - cell.y) ** 2 + (h.z - cell.z) ** 2; // (0 along the axis)
-        if (d2 <= h.rim! * h.rim! + 1e-9 && d2 < bestD) {
+        if (i === pick.cellIndex || !editorDiscOverlaps(h, pos)) continue;
+        const d2 = (h.x - cell.x) ** 2 + (h.y - cell.y) ** 2 + (h.z - cell.z) ** 2;
+        if (d2 < bestD) {
           best = i;
           bestD = d2;
         }
@@ -821,8 +907,9 @@ function wheelTarget(m: Model, pick: CellPick): { partId: number; cellIndex: num
  * What a Wheel-tool click would do (§7.2): grow the hovered wheel's rim by half a unit
  * (bare → 1 → 1.5 → … → 4), or with `shrink` (Shift) shrink it by half a unit (1 → bare). The
  * hover may be a hole cell, the disc of a wheel (virtual cell or tread: that wheel), a bare hole
- * whose centre lies inside a wheel of its own part (that wheel), or a male cell in another part's hole (that
- * hole). Each valid click is one setRim.
+ * that a disc of its own part overlaps (that wheel or gear, see wheelTarget), or a male cell in
+ * another part's hole (that hole). On a gear (either mode) it makes a plain wheel of the same
+ * radius, 1 for an 8-tooth gear (`convert`). Each valid click is one setRim.
  */
 export function resolveWheel(model: Model, pick: CellPick | null, shrink = false): WheelProposal {
   const mode = shrink ? 'shrink' : 'grow';
@@ -841,13 +928,15 @@ export function resolveWheel(model: Model, pick: CellPick | null, shrink = false
   const { partId, cellIndex, cell } = tg;
   const pos: Vec3i = [cell.x, cell.y, cell.z];
   const from = cell.rim;
-  const to = nextRim(from, shrink);
+  const gear = isGear(cell);
+  const to = gear ? Math.max(cell.rim, RIM_MIN) : nextRim(from, shrink);
   const base = noWheel(model, mode);
   base.partId = partId;
   base.cellIndex = cellIndex;
   base.hub = cell;
   if (from !== undefined) base.from = from;
   base.highlight = { pos: pick.virtual ?? pos, dir: pick.dir };
+  if (gear) base.convert = true;
   if (shrink && from === undefined) {
     base.reason = `this ${kindLabel(cell.kind)} has no wheel`;
     base.description = `${verb} · part ${partId} — ${base.reason}`;
@@ -856,8 +945,10 @@ export function resolveWheel(model: Model, pick: CellPick | null, shrink = false
   if (to !== undefined) base.to = to;
   const ok = canSetRim(model, partId, pos, to);
   const what = to === undefined ? `back to a bare ${kindLabel(cell.kind)}` : isValidRim(to) ? wheelSize(to) : '';
-  const head = `${verb} · part ${partId}${what ? ` · ${what}` : ''}`;
-  if (!shrink && to !== undefined && isValidRim(to)) base.ghost = makeCell(cell.x, cell.y, cell.z, cell.kind, cell.axis, to);
+  const head = gear
+    ? `Plain wheel · part ${partId} · ${wheelSize(to!)} instead of the ${gearTeeth(cell.rim)}-tooth gear`
+    : `${verb} · part ${partId}${what ? ` · ${what}` : ''}`;
+  if ((gear || !shrink) && to !== undefined && isValidRim(to)) base.ghost = makeCell(cell.x, cell.y, cell.z, cell.kind, cell.axis, to);
   if (!ok.ok) {
     base.reason = ok.reason;
     base.description = `${head} — ${ok.reason}`;
@@ -865,7 +956,7 @@ export function resolveWheel(model: Model, pick: CellPick | null, shrink = false
   }
   const result = setRim(model, partId, pos, to);
   const pieces = result.parts.length - model.parts.length + 1;
-  if (shrink) base.ring = { hub: pos, axis: cell.axis, r0: to ?? 0.5, r1: from! };
+  if (shrink && !gear) base.ring = { hub: pos, axis: cell.axis, r0: to ?? 0.5, r1: from! };
   base.valid = true;
   base.pieces = pieces;
   base.description = pieces > 1 ? `${head} · part ${partId} splits into ${pieces} parts` : head;
@@ -874,6 +965,275 @@ export function resolveWheel(model: Model, pick: CellPick | null, shrink = false
     return result;
   };
   return base;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Gears (§7.2 Gear tool, Erase on gears, §7.4 texts)
+
+/** Greatest common divisor of two positive integers. */
+function gcd(a: number, b: number): number {
+  while (b) [a, b] = [b, a % b];
+  return a;
+}
+
+/** A gear ratio reduced: gearRatio(24, 40) = "3:5". */
+export function gearRatio(teethA: number, teethB: number): string {
+  const g = gcd(teethA, teethB);
+  return `${teethA / g}:${teethB / g}`;
+}
+
+/** "24 teeth (radius 1.5)". */
+export function gearSize(r: number): string {
+  return `${gearTeeth(r)} teeth (radius ${r})`;
+}
+
+/** One mesh partner of a gear: its part, tooth count and the ratio this gear : partner (reduced). */
+export interface MeshPartner {
+  partId: number;
+  teeth: number;
+  ratio: string;
+}
+
+/**
+ * The meshes (gearMeshes, §2.7) of the gear whose hub is at `pos` (a hole cell of part `partId`):
+ * each partner's part, teeth and the ratio. [] when there is no gear there or it meshes with nothing.
+ */
+export function meshPartners(m: Model, partId: number, pos: Vec3i): MeshPartner[] {
+  const me = gearsOf(m).find((g) => g.partId === partId && g.hub[0] === pos[0] && g.hub[1] === pos[1] && g.hub[2] === pos[2]);
+  if (!me) return [];
+  const out: MeshPartner[] = [];
+  for (const k of gearMeshes(m)) {
+    const mine = k.a.partId === me.partId && k.a.index === me.index ? 'a' : k.b.partId === me.partId && k.b.index === me.index ? 'b' : null;
+    if (!mine) continue;
+    const other = mine === 'a' ? k.b : k.a;
+    const teeth = mine === 'a' ? k.teethB : k.teethA;
+    out.push({ partId: other.partId, teeth, ratio: gearRatio(me.teeth, teeth) });
+  }
+  return out;
+}
+
+/** "meshes with part 5 (40 teeth, 3:5), part 6 (8 teeth, 3:1)"; withRatio false drops the ratios. '' for none. */
+export function meshText(partners: readonly MeshPartner[], withRatio = true): string {
+  if (!partners.length) return '';
+  return `meshes with ${partners.map((q) => `part ${q.partId} (${q.teeth} teeth${withRatio ? `, ${q.ratio}` : ''})`).join(', ')}`;
+}
+
+/**
+ * Status-bar counts (§7.4): kinematicsSummary plus the gear meshes when there are any
+ * ("3 parts · 3 bodies (1 fixed) · 2 joints: 2 revolute · 1 mesh").
+ */
+export function countsText(model: Model, graph?: KinematicGraph): string {
+  const base = kinematicsSummary(model, graph);
+  const n = gearMeshes(model).length;
+  return n ? `${base} · ${n} ${n === 1 ? 'mesh' : 'meshes'}` : base;
+}
+
+export interface GearProposal {
+  /** The model this proposal was resolved against; apply() refuses any other. */
+  baseModel: Model;
+  /** Click = one size up, Shift+click = one size down (§7.2). */
+  mode: 'up' | 'down';
+  valid: boolean;
+  /** Why not (status bar, red ghost). Absent when valid or when nothing is hovered. */
+  reason?: string;
+  partId?: number;
+  cellIndex?: number;
+  hub?: Cell;
+  /** Pitch radius of the gear now (undefined: no gear — a bare hole or a plain wheel, see `wheel`). */
+  from?: number;
+  /** The plain wheel's radius when the hub is a plain wheel (it becomes a gear). */
+  wheel?: number;
+  /** Pitch radius after the click (undefined = a bare hole cell). */
+  to?: number;
+  /** The ghost: the hub cell as the gear at the new size (up, or a plain wheel made a gear); red when !valid. */
+  ghost: Cell | null;
+  /** Down: the band that would be removed (highlight it). */
+  ring: WheelRing | null;
+  highlight: Highlight | null;
+  /** The meshes the resulting gear would have (gearMeshes on the prospective model); [] when invalid. */
+  meshes: MeshPartner[];
+  /**
+   * "Gear · part 3 · 24 teeth (radius 1.5)", "… · meshes with part 5 (40 teeth, 3:5)",
+   * "Gear · part 3 · back to a bare pin hole", "… — reason". '' when nothing is hovered.
+   */
+  description: string;
+  /** Parts the gear's part becomes (1 normally; ≥ 2 when a smaller disc splits off web cells). */
+  pieces: number;
+  apply(current: Model): Model;
+}
+
+function noGear(m: Model, mode: 'up' | 'down'): GearProposal {
+  return {
+    baseModel: m,
+    mode,
+    valid: false,
+    ghost: null,
+    ring: null,
+    highlight: null,
+    meshes: [],
+    description: '',
+    pieces: 0,
+    apply(): Model {
+      throw new Error('no gear here');
+    },
+  };
+}
+
+/**
+ * The gear sizes a Gear click tries, in order (§7.2): the first is the step, the rest are the
+ * "… would fit" alternatives further on in the same direction. Up: bare → 8, a gear → the next size,
+ * a plain wheel of radius R → the largest gear not above R. Down: a gear → the previous size (8 →
+ * bare, `undefined`), a plain wheel → one size below the gear "up" would make (radius 2: 16
+ * teeth). [] when there is nothing (up from 40 teeth, down from a bare hole).
+ */
+function gearSteps(cell: Cell, down: boolean): (number | undefined)[] {
+  const R = GEAR_RADII;
+  if (isGear(cell)) {
+    const i = R.indexOf(cell.rim);
+    if (!down) return R.slice(i + 1);
+    return i === 0 ? [undefined] : R.slice(0, i).reverse();
+  }
+  if (cell.rim === undefined) return down ? [] : R.slice();
+  const below = R.filter((r) => r <= cell.rim!);
+  const first = below[below.length - 1]!; // plain wheels have r ≥ 1, so there is one
+  return down ? R.filter((r) => r < first).reverse() : [first, ...R.filter((r) => r > first)];
+}
+
+/**
+ * What a Gear-tool click would do (§7.2): make the hovered hole a gear or step it up one size
+ * (bare → 8 → 16 → 24 → 40 teeth), or with `down` (Shift) step it down (8 → bare). On a plain wheel
+ * it makes the gear of the largest size not above the wheel's radius (down: one size smaller).
+ * Targets as resolveWheel (a gear's virtual cell or teeth: that gear; a bare hole its tip disc
+ * reaches: that gear). An invalid step says when a later size would fit ("… · 24 teeth would fit").
+ * Each valid click is one setGear.
+ */
+export function resolveGear(model: Model, pick: CellPick | null, down = false): GearProposal {
+  const mode = down ? 'down' : 'up';
+  if (!pick) return noGear(model, mode);
+  const tg = wheelTarget(model, pick);
+  if (!tg) return noGear(model, mode);
+  if ('male' in tg) {
+    const p = noGear(model, mode);
+    p.reason = 'gears grow from pin holes and axle holes';
+    p.partId = tg.partId;
+    p.description = `Gear · part ${tg.partId} — ${p.reason}`;
+    p.highlight = { pos: [tg.male.x, tg.male.y, tg.male.z], dir: pick.dir };
+    return p;
+  }
+  const { partId, cellIndex, cell } = tg;
+  const pos: Vec3i = [cell.x, cell.y, cell.z];
+  const base = noGear(model, mode);
+  base.partId = partId;
+  base.cellIndex = cellIndex;
+  base.hub = cell;
+  base.highlight = { pos: pick.virtual ?? pos, dir: pick.dir };
+  const gear = isGear(cell);
+  if (gear) base.from = cell.rim;
+  else if (cell.rim !== undefined) base.wheel = cell.rim;
+  // A hovered crank hole acts on the disc around it (wheelTarget): say which (review m8 ux: on a
+  // 40's web hole the hint "largest gear has 40 teeth" read as unrelated to the hole).
+  const redirected = !pick.virtual && !pick.tread && pick.partId === partId && pick.cellIndex !== cellIndex;
+  const around = redirected
+    ? ` (the ${gear ? `${gearTeeth(cell.rim)}-tooth gear` : `wheel of radius ${cell.rim}`} around this hole, hub (${pos.join(', ')}))`
+    : '';
+  const who = `Gear · part ${partId}${around}`;
+  const steps = gearSteps(cell, down);
+  if (!steps.length) {
+    base.reason = down ? `this ${kindLabel(cell.kind)} has no gear` : `largest gear has ${gearTeeth(GEAR_RADII[GEAR_RADII.length - 1]!)} teeth`;
+    base.description = `${who} — ${base.reason}`;
+    return base;
+  }
+  // The click takes the first size that is valid (review m8 ux: on a long beam's middle hole the
+  // 8, 16 and 24 cut into the beam but the 40 has it all in its web, and a hint "40 teeth would fit"
+  // named a size no click could reach). The skipped sizes and why are in the text.
+  const first = canSetGear(model, partId, pos, steps[0]);
+  let k = 0;
+  if (!first.ok) {
+    const later = steps.findIndex((r, i) => i > 0 && r !== undefined && canSetGear(model, partId, pos, r).ok);
+    if (later > 0) k = later;
+  }
+  const to = steps[k];
+  if (to !== undefined) base.to = to;
+  const fromWheel = !gear && cell.rim !== undefined ? ` · from the wheel of radius ${cell.rim}` : '';
+  const head = `${who} · ${to === undefined ? `back to a bare ${kindLabel(cell.kind)}` : gearSize(to)}${fromWheel}`;
+  if (to !== undefined && (!down || !gear)) base.ghost = makeCell(cell.x, cell.y, cell.z, cell.kind, cell.axis, to, true);
+  if (!first.ok && k === 0) {
+    base.reason = down ? first.reason : withGearLayerHint(first.reason);
+    base.description = `${head} — ${base.reason}`;
+    return base;
+  }
+  const skipped =
+    k > 0
+      ? ` · skips ${steps
+          .slice(0, k)
+          .map((r) => (r === undefined ? 'bare' : String(gearTeeth(r))))
+          .join(', ')}: ${(first as { reason: string }).reason}`
+      : '';
+  const result = setGear(model, partId, pos, to);
+  const pieces = result.parts.length - model.parts.length + 1;
+  if (down) base.ring = { hub: pos, axis: cell.axis, r0: to !== undefined ? tipRadius(to) : 0.5, r1: gear ? tipRadius(cell.rim) : cell.rim! };
+  // The hub's part after a split: the piece that holds the hub cell.
+  const hubPart = result.parts.find((q) => q.cells.some((c) => c.x === pos[0] && c.y === pos[1] && c.z === pos[2] && isHole(c.kind)));
+  base.meshes = to !== undefined && hubPart ? meshPartners(result, hubPart.id, pos) : [];
+  const mesh = meshText(base.meshes);
+  const near = to !== undefined && hubPart ? nearMissText(result, hubPart.id, pos) : '';
+  base.valid = true;
+  base.pieces = pieces;
+  base.description = `${head}${skipped}${mesh ? ` · ${mesh}` : ''}${near ? ` · ${near}` : ''}${pieces > 1 ? ` · part ${partId} splits into ${pieces} parts` : ''}`;
+  base.apply = (current: Model): Model => {
+    if (current !== model) throw new Error(STALE_PROPOSAL);
+    return result;
+  };
+  return base;
+}
+
+/**
+ * The Gear tool's rule-5 refusal ("(1, 0, 0) would cut into the teeth of this part's gear") names a
+ * cell but not the way out: a gear needs a layer of its own part to itself (review m8 ux: a gear on
+ * a beam hole is the first thing a new user tries).
+ */
+export function withGearLayerHint(reason: string): string {
+  if (!reason.includes("would cut into the teeth of this part's gear")) return reason;
+  return `${reason} · a gear needs a layer to itself: sleeve a hole onto a pin, or extend a hole out of the beam along its axis`;
+}
+
+/** "an 8", "a 16". */
+function aNum(T: number): string {
+  return `${T === 8 ? 'an' : 'a'} ${T}`;
+}
+
+/**
+ * Gears near the gear at `pos` (part `partId`) that do not mesh with it (§2.7 Meshing), with why:
+ * parallel, same layer, pitch circles less than one unit apart (they look as if they engage). '' for
+ * none. "does not mesh with part 1 (16 teeth): a 16 meshes only with another 16, in line at
+ * distance 2" (review m8 ux: such pairs said nothing and then did not drive each other).
+ */
+export function nearMissText(m: Model, partId: number, pos: Vec3i): string {
+  const gs = gearsOf(m);
+  const me = gs.find((g) => g.partId === partId && g.hub[0] === pos[0] && g.hub[1] === pos[1] && g.hub[2] === pos[2]);
+  if (!me) return '';
+  const meshed = new Set<string>();
+  for (const k of gearMeshes(m)) {
+    meshed.add(`${k.a.partId}/${k.a.index}|${k.b.partId}/${k.b.index}`);
+    meshed.add(`${k.b.partId}/${k.b.index}|${k.a.partId}/${k.a.index}`);
+  }
+  const out: string[] = [];
+  for (const g of gs) {
+    if (g === me || g.axis !== me.axis || g.hub[me.axis] !== me.hub[me.axis]) continue;
+    if (meshed.has(`${me.partId}/${me.index}|${g.partId}/${g.index}`)) continue;
+    const off = [0, 1, 2].filter((i) => i !== me.axis).map((i) => g.hub[i]! - me.hub[i]!);
+    const d = Math.hypot(off[0]!, off[1]!);
+    const sum = me.r + g.r;
+    if (d >= sum + 1) continue;
+    const inLine = off[0] === 0 || off[1] === 0;
+    let why: string;
+    if (g.partId === me.partId) why = 'two gears of one part cannot mesh';
+    else if ((me.teeth === 16) !== (g.teeth === 16)) why = `a 16 meshes only with another 16, in line at distance 2`;
+    else if (!inLine) why = `gears mesh only in a straight line along the grid (${aNum(me.teeth)} and ${aNum(g.teeth)} at distance ${sum})`;
+    else why = `${aNum(me.teeth)} and ${aNum(g.teeth)} mesh at distance ${sum}, not ${d}`;
+    out.push(`does not mesh with part ${g.partId} (${g.teeth} teeth): ${why}`);
+  }
+  return out.join('; ');
 }
 
 export interface EraseProposal {
@@ -926,8 +1286,48 @@ export function resolveErase(model: Model, pick: CellPick | null): EraseProposal
   const cell = part?.cells[pick.cellIndex];
   if (!part || !cell) return noErase(model);
   const pos: Vec3i = [cell.x, cell.y, cell.z];
+  if (isGear(cell) && isHole(cell.kind)) {
+    // A gear (§7.2): step it down one size, 40 → 24 → 16 → 8 → bare.
+    if (pick.virtual && !isVirtualCellOf(part, cell, pick.virtual)) return noErase(model);
+    const i = GEAR_RADII.indexOf(cell.rim);
+    const to = i > 0 ? GEAR_RADII[i - 1] : undefined;
+    const T = gearTeeth(cell.rim);
+    let description = `Erase gear teeth · part ${part.id} · ${T} → ${to === undefined ? `bare ${kindLabel(cell.kind)}` : `${gearTeeth(to)} teeth`}`;
+    const highlight = { pos: pick.virtual ?? pos, dir: pick.dir };
+    const can = canSetGear(model, part.id, pos, to);
+    if (!can.ok) {
+      const p = noErase(model);
+      p.reason = can.reason;
+      p.partId = part.id;
+      p.cellIndex = pick.cellIndex;
+      p.cell = cell;
+      p.highlight = highlight;
+      p.description = `${description} — ${can.reason}`;
+      return p;
+    }
+    const result = setGear(model, part.id, pos, to);
+    const pieces = result.parts.length - model.parts.length + 1;
+    if (pieces > 1) description += ` · part ${part.id} splits into ${pieces} parts`;
+    return {
+      baseModel: model,
+      valid: true,
+      partId: part.id,
+      cellIndex: pick.cellIndex,
+      cell,
+      highlight,
+      // The band the click removes: from the smaller gear's tips to this gear's (review m8 look: a
+      // ring from the pitch radius read as "delete this wheel").
+      ring: { hub: pos, axis: cell.axis, r0: to !== undefined ? tipRadius(to) : 0.5, r1: tipRadius(cell.rim) },
+      description,
+      pieces,
+      apply(current: Model): Model {
+        if (current !== model) throw new Error(STALE_PROPOSAL);
+        return result;
+      },
+    };
+  }
   if (pick.virtual || pick.tread || (hasRim(cell) && isHole(cell.kind))) {
-    if (!hasRim(cell) || (pick.virtual && !isVirtualCellOf(part, cell, pick.virtual))) return noErase(model);
+    if (!hasRim(cell) || !isValidRim(cell.rim) || (pick.virtual && !isVirtualCellOf(part, cell, pick.virtual))) return noErase(model);
     const from = cell.rim;
     const to = nextRim(from, true);
     const result = setRim(model, part.id, pos, to);
@@ -1016,6 +1416,17 @@ export function describeHover(model: Model, pick: CellPick | null, grid: GridPic
     const part = partById(model, pick.partId);
     const c = part?.cells[pick.cellIndex];
     if (!part || !c) return '';
+    if (isGear(c) && isHole(c.kind)) {
+      // §7.4: "Part 3 · gear 24 teeth ∥ Z · meshes with part 5 (40 teeth)" (hub, face or teeth)
+      let s = `Part ${part.id} · gear ${gearTeeth(c.rim)} teeth ∥ ${axisLabel(c.axis)}`;
+      const mesh = meshText(meshPartners(model, part.id, [c.x, c.y, c.z]), false);
+      if (mesh) s += ` · ${mesh}`;
+      if (!pick.virtual && !pick.tread) {
+        const mate = cellsAt(model, [c.x, c.y, c.z]).find((e) => e.partId !== part.id);
+        if (mate) s += ` · holds ${kindLabel(mate.cell.kind)} (part ${mate.partId})`;
+      }
+      return s;
+    }
     if ((pick.virtual || pick.tread) && hasRim(c)) {
       const wheel = `wheel radius ${c.rim} ∥ ${axisLabel(c.axis)}, hub ${fmt(c)}`;
       return pick.virtual ? `Part ${part.id} · ${wheel} · at ${fmt(pick.virtual)}` : `Part ${part.id} · ${wheel} · tread`;

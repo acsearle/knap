@@ -3,9 +3,9 @@
 import * as THREE from 'three';
 import { DIRS, effectiveRootId } from '../core';
 import type { Cell, Dir, Model, Part } from '../core';
-import { buildPartMesh, geometryReady, initGeometry, partOrigin, partSignature } from '../geometry';
-import { glyphSegments } from './glyphs';
-import type { JointGlyph, RigidTransform } from './glyphs';
+import { buildPartMesh, geometryReady, indexToothWeights, initGeometry, partOrigin, partSignature } from '../geometry';
+import { glyphSegments, meshGlyphSegments } from './glyphs';
+import type { JointGlyph, MeshGlyph, RigidTransform } from './glyphs';
 import { Floor, floorEdgeAlpha } from './floor';
 import type { FloorState } from './floor';
 import { Grid } from './grid';
@@ -35,7 +35,7 @@ import type { Box3, CameraState, Ray, Vec3, ViewDir } from './math';
 import { DEFAULT_OUTLINE, OutlinePass, createIdMaterial } from './outline';
 import type { OutlineParams } from './outline';
 import { markColor, markWeights } from './markpaint';
-import { vertexPatches } from './patches';
+import { meshPatches, softContourFade } from './patches';
 import { ContactShadow } from './shadow';
 import type { CasterBox, ShadowFrame } from './shadowmath';
 import { MARK, placeMark, rootAnchorIndex } from './rootmarker';
@@ -160,6 +160,12 @@ export interface CameraAnimOptions {
 /** Floor draw order: before the grid (−100) when it is below the grid, after it when above. */
 const FLOOR_UNDER_GRID_ORDER = -110;
 const FLOOR_OVER_GRID_ORDER = -90;
+
+/**
+ * Paint weight of a gear's index tooth (0…1 of the mark colour, markpaint.ts): the same visual
+ * language as the wheel's painted groove, a little quieter since it covers a whole tooth.
+ */
+const INDEX_TOOTH_PAINT = 0.75;
 
 /** Hover face fill opacity; seen through the part (Back side) it is drawn on top, a bit lighter. */
 const HOVER_FACE_OPACITY = 0.28;
@@ -359,7 +365,11 @@ export class Viewport {
   private readonly glyphHalo: FatLines;
   private readonly glyphLines: FatLines;
   private glyphs: JointGlyph[] = [];
+  private meshGlyphs: MeshGlyph[] = [];
   private glyphsVisible = true;
+  /** Test diagnostics (setOutlineDebug): draw the ink at all; force the soft-contour strength. */
+  private debugInk = true;
+  private debugSoftFade: number | null = null;
   private readonly rootHalo: FatLines;
   private readonly rootLines: FatLines;
   private rootMarkerVisible = true;
@@ -439,6 +449,8 @@ export class Viewport {
     this.canvas.classList.add('kv-canvas');
     this.canvas.tabIndex = 0;
     container.append(this.canvas);
+    // Test diagnostics: e2e scripts reach the viewport from its canvas (setOutlineDebug, softFade).
+    Object.defineProperty(this.canvas, '__knapViewport', { value: this, configurable: true });
 
     // scenes
     this.colorScene.add(this.floor, this.grid);
@@ -877,6 +889,31 @@ export class Viewport {
     this.requestRender();
   }
 
+  /**
+   * Gear-mesh glyphs (see meshGlyphsFromModel); [] or null clears. Drawn with the joint glyphs (same
+   * colour, halo and visibility: setGlyphsVisible), on top of everything.
+   */
+  setMeshGlyphs(glyphs: readonly MeshGlyph[] | null): void {
+    this.meshGlyphs = glyphs ? [...glyphs] : [];
+    this.requestRender();
+  }
+
+  /**
+   * Test diagnostics only (e2e ink measurements): `ink: false` skips the outline composite (the
+   * shaded image alone); `softFade` forces the strength of the lines inside soft patches (null:
+   * from the zoom, the default). Not for the app.
+   */
+  setOutlineDebug(d: { ink?: boolean; softFade?: number | null }): void {
+    if (d.ink !== undefined) this.debugInk = d.ink;
+    if (d.softFade !== undefined) this.debugSoftFade = d.softFade;
+    this.requestRender();
+  }
+
+  /** The current strength of the contours inside soft patches (0…1; see softContourFade). */
+  softFade(): number {
+    return this.debugSoftFade ?? softContourFade((this.cssH * this.dpr) / this.cam.height);
+  }
+
   setGlyphsVisible(on: boolean): void {
     this.glyphsVisible = on;
     this.requestRender();
@@ -1122,10 +1159,16 @@ export class Viewport {
       const g = new THREE.BufferGeometry();
       g.setAttribute('position', new THREE.BufferAttribute(md.positions, 3));
       g.setAttribute('normal', new THREE.BufferAttribute(md.normals, 3));
-      const { patch } = vertexPatches(md.positions.length / 3, md.indices);
-      g.setAttribute('surfacePatch', new THREE.BufferAttribute(new Float32Array(patch), 1));
-      // Wheels' index mark: painted groove (markpaint.ts); all zero for parts without a rim.
-      g.setAttribute('aMark', new THREE.BufferAttribute(markWeights(part, md.positions, md.normals), 1));
+      // Smooth patches (patches.ts); a gear's tooth band is one soft patch (negative number).
+      g.setAttribute('surfacePatch', new THREE.BufferAttribute(meshPatches(md.positions.length / 3, md.indices, md.patchHint, md.softPatches), 1));
+      // Wheels' index mark: painted groove (markpaint.ts); all zero for parts without a rim. A gear
+      // also gets its index tooth painted, a little lighter than the groove (INDEX_TOOTH_PAINT).
+      const mark = markWeights(part, md.positions, md.normals);
+      if (md.patchHint) {
+        const tooth = indexToothWeights(part, md.positions, md.normals);
+        for (let i = 0; i < mark.length; i++) mark[i] = Math.max(mark[i]!, INDEX_TOOTH_PAINT * tooth[i]!);
+      }
+      g.setAttribute('aMark', new THREE.BufferAttribute(mark, 1));
       g.setIndex(new THREE.BufferAttribute(md.indices, 1));
       g.computeBoundingBox();
       g.computeBoundingSphere();
@@ -1431,6 +1474,8 @@ export class Viewport {
       ...this.outlineParams,
       inkWidth: this.opts.outlineWidth * dpr,
       selWidth: this.opts.selectionWidth * dpr,
+      // Contours inside soft patches (gear teeth) fade out below ~6 device px per tooth pitch.
+      softFade: this.debugSoftFade ?? softContourFade((this.cssH * dpr) / this.cam.height),
     };
     if (this.floatTargets) this.outline.renderEdges(r, this.idScene, this.camera, params, wpt);
 
@@ -1450,7 +1495,7 @@ export class Viewport {
     r.render(this.colorScene, this.camera);
 
     // 4: lines
-    if (this.floatTargets) this.outline.composite(r, params, this.visibleSelection().length > 0);
+    if (this.floatTargets && this.debugInk) this.outline.composite(r, params, this.visibleSelection().length > 0);
 
     // 5: overlays in the scene (hover, ghost, root marker, glyphs on top)
     // Bold (overlayStyle: over a part of the overlay's own colour): the line at double width, the
@@ -1517,12 +1562,14 @@ export class Viewport {
   }
 
   private updateGlyphs(dpr: number): void {
-    const on = this.glyphsVisible && this.glyphs.length > 0;
+    const on = this.glyphsVisible && (this.glyphs.length > 0 || this.meshGlyphs.length > 0);
     this.glyphHalo.visible = on;
     this.glyphLines.visible = on;
     if (!on) return;
     const { back } = cameraBasis(this.cam.yaw, this.cam.pitch);
-    const segs = glyphSegments(this.glyphs, back, (id) => this.transforms.get(id) ?? null);
+    const tf = (id: number) => this.transforms.get(id) ?? null;
+    const segs = glyphSegments(this.glyphs, back, tf);
+    if (this.meshGlyphs.length) segs.push(...meshGlyphSegments(this.meshGlyphs, tf));
     const ends = new Float32Array(segs.length * 6);
     segs.forEach(([a, b], i) => ends.set([...a, ...b], i * 6));
     this.glyphHalo.setSegments(ends, [1, 1, 1, 0.9]);

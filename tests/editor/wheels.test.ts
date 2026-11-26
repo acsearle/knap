@@ -229,15 +229,19 @@ describe('resolveWheel (§7.2 Wheel tool)', () => {
     expect(partById(after, 1)!.cells.map((q) => q.rim)).toEqual([3, undefined]);
     const shrink = resolveWheel(m, hubPick(1, 1), true);
     expect(shrink).toMatchObject({ valid: true, mode: 'shrink', cellIndex: 0, from: 2.5, to: 2 });
-    // a hole whose centre lies outside the disc keeps its own wheel (was: (1,0) in r 1, "partly
-    // inside"; its centre is on the rim, which now counts as inside — DESIGN §7.2 after M7 review)
+    // M8 rule (DESIGN §7.2): every bare hole of the part in the wheel's layer that the disc
+    // overlaps (the core disc × cell predicate, not the centre distance) acts on the wheel. (1,1) in
+    // r 1 (the disc reaches the cell's corner) used to keep its own wheel; now it acts on the wheel.
     const m2 = wheel(1, 2, [0, 0, 0], [c(1, 1, 0, 'pinHole', 2)]);
-    expect(resolveWheel(m2, hubPick(1, 1))).toMatchObject({ valid: true, cellIndex: 1, to: 1 });
-    // (2,2) in r 2.5: the disc reaches into the hole's cell (rule 1 of §2.6 joins them) but the
-    // hole's centre is 2.83 from the hub, outside the disc: by §7.2's rule it keeps its own wheel
+    expect(resolveWheel(m2, hubPick(1, 1))).toMatchObject({ valid: true, cellIndex: 0, from: 1, to: 1.5 });
+    // (2,2) in r 2.5: the disc reaches into the hole's cell (rule 1 of §2.6 joins them), centre 2.83
+    // from the hub: it acts on the wheel now (was: kept its own wheel)
     const m3 = wheel(2.5, 2, [0, 0, 0], [c(2, 2, 0, 'pinHole', 2)]);
     expect(validateModel(m3)).toEqual([]);
-    expect(resolveWheel(m3, hubPick(1, 1))).toMatchObject({ cellIndex: 1 });
+    expect(resolveWheel(m3, hubPick(1, 1))).toMatchObject({ cellIndex: 0, from: 2.5 });
+    // a hole the disc does not reach keeps its own wheel: (2,0) in r 1 (touching the cell's face)
+    const m5 = wheel(1, 2, [0, 0, 0], [c(1, 0, 0, 'pinHole', 2), c(2, 0, 0, 'pinHole', 2)]);
+    expect(resolveWheel(m5, hubPick(1, 2))).toMatchObject({ cellIndex: 2, to: 1 });
     // … and so does one in another layer, even straight over the disc
     const m4 = wheel(2.5, 2, [0, 0, 0], [c(1, 0, 1, 'pinHole', 2), c(0, 0, 1, 'pinHole', 2)]);
     expect(resolveWheel(m4, hubPick(1, 1))).toMatchObject({ cellIndex: 1 });
